@@ -1,0 +1,13 @@
+apiVersion: 1
+ 
+providers:
+  - name: 'Blackbox Exporter'
+    orgId: 1
+    folder: 'Alerts'
+    type: file
+    disableDeletion: false
+    updateIntervalSeconds: 10
+    allowUiUpdates: true
+    options:
+      path: /etc/grafana/provisioning/dashboards/json
+      foldersFromFilesStructure: true

@@ -1,0 +1,13 @@
+apiVersion: 1
+
+# NOTIFICATION CONTACTS
+contactPoints:
+  - orgId: 1
+    name: grafana-default-email
+    receivers:
+      - uid: begcbwa87905cf
+        type: email
+        settings:
+          addresses: ${GRAFANA_NOTIFICATION_ADDRESSES}
+          singleEmail: false
+        disableResolveMessage: false
