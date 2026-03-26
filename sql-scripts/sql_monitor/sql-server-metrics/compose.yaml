@@ -1,6 +1,0 @@
-services:
-  otel:
-    image: grafana/otel-lgtm
-    ports:
-      - 3000:3000
-      - 4317:4317

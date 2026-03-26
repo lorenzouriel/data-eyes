@@ -1,5 +1,5 @@
 <div align="center">
-  <img src="monitor/docs/logos.png" alt="logo">
+  <img src="monitor/docs/logos.png" alt="logo" width="250">
 </div>
 
 # SQL Server Monitoring, Performance & Maintenance Toolkit
