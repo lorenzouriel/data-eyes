@@ -620,19 +620,24 @@ When you invoke `/performance`, the skill immediately reads all 16 DMV scripts a
 
 | Your words | Methodology step | Scripts used |
 |---|---|---|
-| slow queries, high CPU, scheduler | Step 6 | `04_Top_Waits` + `06_Top_Queries_By_CPU` |
-| slow reads, IO, full scans | Step 7 | `04_Top_Waits` + `05_IO_Latency_by_File` + `08_Missing_Indexes` |
+| slow queries, not sure where to start, general degradation | Step 1 | `04_Top_Waits` — start here always |
+| slow queries, high CPU, scheduler, SOS_SCHEDULER_YIELD | Step 6 | `04_Top_Waits` + `06_Top_Queries_By_CPU` |
+| workload, heavy queries, resource consumers | Step 2 | `06_Top_Queries_By_CPU` + `07_Top_Queries_By_Reads` |
+| slow reads, IO, full scans, PAGEIOLATCH | Step 7 | `04_Top_Waits` + `05_IO_Latency_by_File` + `08_Missing_Indexes` |
+| log, WRITELOG, log growth, log file | Step 7 | `03_DB_Files_And_Autogrowth` + `05_IO_Latency_by_File` |
 | blocking, deadlock, lock, sessions | Step 3 | `11_Active_Requests_Blocking` + `15_RCSI_Check` |
 | deadlock graph, XE, extended events | Step 3 | `12_Deadlocks_XE` |
 | memory, PLE, buffer pool, grants pending | Step 5 | `04_Top_Waits` (RESOURCE_SEMAPHORE) |
 | tempdb, pagelatch, 2:1:1 | Step 4 | `16_Tempdb_Contention_Check` |
 | plan regression, query store, force plan | Step 2 | `13_Enable_Query_Store` + `14_Query_Store_Top` |
+| enable query store | Step 0 | `13_Enable_Query_Store` (**write — confirm before running**) |
 | missing indexes, index candidates | Step 2 | `08_Missing_Indexes` |
 | unused indexes, write overhead, cleanup | Step 2 | `09_Index_Usage` |
 | fragmentation, rebuild, reorganize | Step 2 | `10_Index_Fragmentation` |
 | config, MAXDOP, memory settings, cost threshold | Step 8 | `02_Instance_Config` |
 | autogrowth, file size, log growth | Step 7 | `03_DB_Files_And_Autogrowth` |
 | inventory, version, edition, NUMA | Step 0 | `01_Server_Inventory` |
+| verify, after fix, before/after, improvement | Step 9 | re-run `04_Top_Waits` + relevant baseline scripts |
 | step N (any number) | directly | script(s) for that step |
 
 If the symptom is ambiguous, the skill asks a clarifying question rather than guessing. It always tells you which step and which script it is using and why.
