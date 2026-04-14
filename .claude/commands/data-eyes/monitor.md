@@ -1,11 +1,11 @@
 ---
 name: monitor
-description: Grafana + Prometheus SQL Server monitoring stack — diagnose issues, explain dashboards, configure alerts
+description: Grafana SQL Server monitoring stack — diagnose issues, explain dashboards, configure alerts
 ---
 
 # /monitor Command
 
-> Diagnose and configure the Grafana + Prometheus SQL Server monitoring stack
+> Diagnose and configure the Grafana SQL Server monitoring stack
 
 ## Usage
 

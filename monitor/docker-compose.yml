@@ -21,17 +21,7 @@ services:
       - GRAFANA_SMTP_PASSWORD=${GRAFANA_SMTP_PASSWORD}
       - GRAFANA_SMTP_FROM_ADDRESS=${GRAFANA_SMTP_FROM_ADDRESS}
       - GRAFANA_SMTP_FROM_NAME=${GRAFANA_SMTP_FROM_NAME}
-    depends_on:
-      - prometheus
-    restart: always
-
-  prometheus:
-    image: prom/prometheus:latest
-    container_name: prometheus
-    volumes:
-      - prometheus_data:/prometheus
     restart: always
 
 volumes:
   grafana_data:
-  prometheus_data:

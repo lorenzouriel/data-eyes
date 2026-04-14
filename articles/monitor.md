@@ -1,4 +1,4 @@
-# Real-Time SQL Server Monitoring with Grafana and Prometheus
+# Real-Time SQL Server Monitoring with Grafana
 
 You cannot fix what you cannot see.
 
@@ -6,7 +6,7 @@ Most SQL Server problems — slow queries, memory pressure, failed jobs, growing
 
 The solution is visibility: a monitoring stack that watches your SQL Server continuously, surfaces problems before they become incidents, and gives you historical data to understand trends.
 
-This article walks through a complete, containerized SQL Server monitoring solution built with **Grafana** and **Prometheus** — deployable in minutes, providing 45+ metrics out of the box, and configurable for email alerting.
+This article walks through a complete, containerized SQL Server monitoring solution built with **Grafana** — deployable in minutes, providing 45+ metrics out of the box, and configurable for email alerting.
 
 ---
 
@@ -17,23 +17,21 @@ This article walks through a complete, containerized SQL Server monitoring solut
 │              Monitoring Solution                     │
 └─────────────────────────────────────────────────────┘
                          │
-     ┌───────────────────┼───────────────────┐
-     │                   │                   │
- ┌───▼────┐         ┌───▼────┐        ┌────▼─────┐
- │ Grafana│         │  MSSQL │        │Prometheus│
- │ :3000  │◄────────┤Database│        │  Backend │
- └────────┘         └────────┘        └──────────┘
-     │
-     ▼
- Email Alerts
- (SMTP/Gmail)
+              ┌──────────┴──────────┐
+              │                     │
+          ┌───▼────┐           ┌────▼─────┐
+          │ Grafana│◄──────────┤  MSSQL   │
+          │ :3000  │           │ Database │
+          └────────┘           └──────────┘
+              │
+              ▼
+          Email Alerts
+          (SMTP/Gmail)
 ```
 
 **Grafana** is the visualization layer. It connects directly to SQL Server as a data source and executes T-SQL queries to populate dashboard panels. It also handles alerting.
 
-**Prometheus** is the time-series backend. It stores historical metric data so you can look at trends over time — not just the current state.
-
-**Docker Compose** orchestrates both containers, manages volumes for data persistence, and wires together the configuration from environment variables.
+**Docker Compose** orchestrates the container, manages volumes for data persistence, and wires together the configuration from environment variables.
 
 There is no custom exporter to install, no agent on the SQL Server host, no middleware. Grafana queries SQL Server directly.
 
@@ -47,7 +45,7 @@ monitor/
 ├── .env                              # Credentials (not committed to git)
 ├── grafana/
 │   ├── grafana.ini                   # Grafana instance configuration
-│   ├── datasources.yml               # SQL Server + Prometheus connections
+│   ├── datasources.yml               # SQL Server connection
 │   ├── alerts-and-notifiers.yml      # Email alert routing
 │   ├── dashboard-provider.yml        # Dashboard auto-provisioning
 │   └── dashboards/
@@ -93,8 +91,6 @@ GRAFANA_SMTP_FROM_ADDRESS=alerts@yourdomain.com
 GRAFANA_SMTP_FROM_NAME=SQL Monitor
 GRAFANA_NOTIFICATION_ADDRESSES=dba-team@yourdomain.com
 
-# Internal service URLs
-PROMETHEUS_URL=http://prometheus:9090
 DS_MSSQL=SQLServer
 ```
 
@@ -116,13 +112,13 @@ cd monitor/
 docker-compose up -d
 ```
 
-Docker Compose pulls the Grafana and Prometheus images, creates persistent volumes, and starts both containers. Grafana reads the `grafana/` directory for its provisioned configuration — datasources, dashboards, and alert channels are all loaded automatically.
+Docker Compose pulls the Grafana image, creates a persistent volume, and starts the container. Grafana reads the `grafana/` directory for its provisioned configuration — datasources, dashboards, and alert channels are all loaded automatically.
 
 ### Step 3: Verify
 
 Open `http://localhost:3000` and log in with your admin credentials.
 
-1. Navigate to **Configuration → Data Sources** — both SQLServer and Prometheus should show a green checkmark
+1. Navigate to **Configuration → Data Sources** — SQLServer should show a green checkmark
 2. Go to **Dashboards** and open the SQL Server dashboard
 3. Confirm panels are displaying data
 

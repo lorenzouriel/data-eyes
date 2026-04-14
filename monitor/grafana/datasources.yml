@@ -1,15 +1,6 @@
 apiVersion: 1
- 
-datasources:
-  - name: prometheus
-    type: prometheus
-    uid: befn4bj036x34e  # Specific UID you want to use
-    access: proxy
-    url: ${PROMETHEUS_URL}
-    isDefault: false
-    version: 1
-    editable: false
 
+datasources:
   - name: ${DS_MSSQL}
     type: mssql
     uid: sqlserver_ds    
