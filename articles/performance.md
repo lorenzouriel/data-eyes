@@ -560,6 +560,95 @@ Running the scripts is the easy part. Reading the output, understanding what the
 
 The `/performance` skill bridges that gap. It reads the actual scripts the moment you invoke it, maps your symptom to the right methodology step, and walks you through the analysis — from "I think something is slow" to "here is the exact query to run and here is what the results mean."
 
+---
+
+### Why Not Just Open the Script?
+
+You could open `04_Top_Waits`, run it in SSMS, and stare at the output. But that raises immediate questions:
+
+- Which wait types are signal and which are background noise?
+- Is `CXPACKET` at 35% a problem or expected for this workload?
+- Wait stats point to I/O pressure — do I run `08_Missing_Indexes` or `05_IO_Latency_by_File` next?
+- What should PLE look like on a server with 256 GB of RAM?
+- My `10_Index_Fragmentation` shows 42% fragmentation on 12 tables — do I rebuild all of them right now?
+
+The Waits Guide and reference tables answer these questions — but you have to know to look there, cross-reference the script output, and synthesize a recommendation. That chain of steps is what the skill collapses into a single conversation.
+
+---
+
+### A Real Scenario
+
+It is Monday morning. Users report the application felt slow over the weekend. You do not know where to start.
+
+```
+/performance "queries slowed down after the weekend, users are complaining about slow reports"
+```
+
+The skill reads `04_Top_Waits`, `06_Top_Queries_By_CPU`, `07_Top_Queries_By_Reads`, and the Waits Guide. It responds:
+
+> **Step 1 → Step 2 — Baseline then Workload**
+>
+> Weekend degradation after normal weekday performance usually points to one of three things: a plan regression after auto-statistics updates on tables that grew over the week, missing indexes on a table that crossed a size threshold, or a batch job that ran overnight and left locks or fragmentation behind.
+>
+> Start with wait stats to confirm the bottleneck category. Run `04_Top_Waits`:
+>
+> **What to look for in the results:**
+> - `SOS_SCHEDULER_YIELD` high → CPU saturation. Queries are burning cycles. Go to `06_Top_Queries_By_CPU`.
+> - `PAGEIOLATCH_SH` high → data file reads are slow. Check `05_IO_Latency_by_File`, then `08_Missing_Indexes`.
+> - `LCK_M_*` high → blocking. A batch job may have left an open transaction. Run `11_Active_Requests_Blocking`.
+> - `WRITELOG` high → log I/O bottleneck. Check log file size and growth settings with `03_DB_Files_And_Autogrowth`.
+>
+> Want me to run this against your server? (yes/no)
+
+You type `yes`. The skill runs `04_Top_Waits` via `sqlcmd`, gets the output, and continues:
+
+> **Results: `SOS_SCHEDULER_YIELD` is 38% of total resource waits. `PAGEIOLATCH_SH` is 29%.**
+>
+> Both CPU and I/O pressure are present. The most common cause of this combination after a weekend is a plan regression — statistics were auto-updated on a large table Friday night, and the query optimizer chose a different (worse) plan that now does full scans instead of index seeks. This explains both the CPU spike (more work per query) and the I/O increase (more pages read).
+>
+> Next step: find the top CPU and read-heavy queries. Run `06_Top_Queries_By_CPU` and `07_Top_Queries_By_Reads`. Look at `avg_cpu_ms` and `avg_logical_reads` — a large gap between average and total divided by execution count means the plan changed recently for some executions.
+>
+> Also check `08_Missing_Indexes` — if a table grew significantly over the weekend, the optimizer may now be recommending a new index it was not recommending before.
+
+In ten minutes you have gone from "something is slow" to a ranked list of suspect queries and index candidates, with the methodology behind each recommendation explained.
+
+---
+
+### How It Works Under the Hood
+
+When you invoke `/performance`, the skill immediately reads all 16 DMV scripts and maps your symptom against the 10-step routing table:
+
+| Your words | Methodology step | Scripts used |
+|---|---|---|
+| slow queries, high CPU, scheduler | Step 6 | `04_Top_Waits` + `06_Top_Queries_By_CPU` |
+| slow reads, IO, full scans | Step 7 | `04_Top_Waits` + `05_IO_Latency_by_File` + `08_Missing_Indexes` |
+| blocking, deadlock, lock, sessions | Step 3 | `11_Active_Requests_Blocking` + `15_RCSI_Check` |
+| deadlock graph, XE, extended events | Step 3 | `12_Deadlocks_XE` |
+| memory, PLE, buffer pool, grants pending | Step 5 | `04_Top_Waits` (RESOURCE_SEMAPHORE) |
+| tempdb, pagelatch, 2:1:1 | Step 4 | `16_Tempdb_Contention_Check` |
+| plan regression, query store, force plan | Step 2 | `13_Enable_Query_Store` + `14_Query_Store_Top` |
+| missing indexes, index candidates | Step 2 | `08_Missing_Indexes` |
+| unused indexes, write overhead, cleanup | Step 2 | `09_Index_Usage` |
+| fragmentation, rebuild, reorganize | Step 2 | `10_Index_Fragmentation` |
+| config, MAXDOP, memory settings, cost threshold | Step 8 | `02_Instance_Config` |
+| autogrowth, file size, log growth | Step 7 | `03_DB_Files_And_Autogrowth` |
+| inventory, version, edition, NUMA | Step 0 | `01_Server_Inventory` |
+| step N (any number) | directly | script(s) for that step |
+
+If the symptom is ambiguous, the skill asks a clarifying question rather than guessing. It always tells you which step and which script it is using and why.
+
+---
+
+### What This Changes
+
+**Before the skill:** You open `04_Top_Waits`, run it, get output, look up wait type names in documentation, make a judgement call, open the next script, repeat. Each step requires you to hold context from the last step in your head.
+
+**After the skill:** You describe what you are seeing in plain language. The skill reads the scripts, connects your symptom to the right step, presents the relevant query with column-by-column explanation, runs it if you want, and tells you what to do next — including which script to run after, and why.
+
+The methodology does not change. The scripts do not change. What changes is how much cognitive overhead you carry between "something is slow" and "here is the problem and here is the fix."
+
+---
+
 ### Invocation Examples
 
 ```
@@ -571,9 +660,12 @@ The `/performance` skill bridges that gap. It reads the actual scripts the momen
 /performance "a query regressed after the statistics update last night"
 /performance "PLE dropped from 4000 to 200 this morning, what happened?"
 /performance "I want to find unused indexes I can safely drop"
+/performance "run the full baseline — steps 0 through 1"
+/performance "tempdb is hot, PAGELATCH waits on 2:1:1"
+/performance "what MAXDOP and cost threshold should I set for an OLTP workload?"
 ```
 
-All performance scripts are **read-only diagnostics** — they query DMVs and system catalogs and change nothing on your server. The skill can execute them via `sqlcmd` when you confirm, and it will interpret the output inline rather than leaving you to figure out what the numbers mean.
+All diagnostic scripts (01–11, 13–16) are **read-only** — they query DMVs and system catalogs and change nothing on your server. Script `12_Deadlocks_XE` creates an Extended Events session and will always ask for explicit confirmation before running.
 
 ---
 
