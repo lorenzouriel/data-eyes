@@ -212,26 +212,19 @@ To create a new alert rule, go to **Alerting → Alert rules → New alert rule*
 
 ### Step 1 — Name
 
-Give the rule a name that describes what it detects, not what it does. `PLE drops below 300 for 5 minutes` is useful. `Alert rule 1` is not.
+Give the rule a name that describes what it detects, not what it does. `SQL Server unreachable` is useful. `Alert rule 1` is not.
 
 ### Step 2 — Query and condition
 
-Select **SQLServer** as the data source. Write the T-SQL query that returns the metric you want to alert on. For PLE:
+Select **SQLServer** as the data source. Write the T-SQL query that returns the metric you want to alert on. For server availability, use a heartbeat query — the simplest possible statement that only succeeds if the connection is alive:
 
 ```sql
-SELECT cntr_value AS PLE
-FROM sys.dm_os_performance_counters
-WHERE counter_name = 'Page life expectancy'
-  AND object_name LIKE '%Buffer Manager%';
+SELECT 1 AS alive;
 ```
 
-Set the time range to `10m to now` and format to `Table`. After clicking **Run query**, Grafana displays the result as a single row labeled `Series 1` with the current metric value — this confirms the query is returning data the alert engine can evaluate.
+Set the time range to `10m to now` and format to `Table`. After clicking **Run query**, Grafana displays the result as a single row labeled `Series 1` with the value `1` — this confirms the connection is working and the alert engine has data to evaluate.
 
-For the alert condition, set **WHEN Last OF QUERY** and choose the comparison:
-- `Is below` → fires when the metric drops under a threshold (PLE, buffer hit rate, free space)
-- `Is above` → fires when the metric exceeds a threshold (wait times, lock counts, active transactions)
-
-Set the threshold value. For PLE, use `300`.
+For the alert condition, set **WHEN Last OF QUERY Is above 0**. While the server is up, the query returns `1`, which is above `0` — the condition evaluates to `Normal`. When the server goes down, the query returns no data. Under **Configure no data and error handling** (collapsed at the bottom of Step 2), set **No data** to `Alerting` — this is what actually triggers the alert when the connection is lost.
 
 The **Preview alert rule condition** section at the bottom of Step 2 shows the current evaluation result:
 
@@ -241,7 +234,7 @@ Series 1    [current value]
 Series 1    0    Normal
 ```
 
-`Series 1 = 0 / Normal` means the condition is not currently met — the alert would not fire right now. If the metric were breaching the threshold, it would show `Firing` instead. Use this preview to verify the query and condition are wired up correctly before saving.
+`Series 1 = 0 / Normal` means the condition is not currently met — the alert would not fire right now. If the server were unreachable, the preview would show no data and the rule would enter `Alerting` state based on the no-data handling configured above.
 
 ### Step 3 — Folder and labels
 
@@ -251,7 +244,7 @@ Create a folder to organize your alert rules — one folder per category works w
 
 **Evaluation group** controls how often Grafana checks the condition. Create one group per category (e.g., `server-health`) and set the interval to `1m` for critical metrics, `5m` for slower-moving ones like space usage.
 
-**Pending period** is the most important setting here. It defines how long the condition must be continuously met before the alert fires. Set it to `5m` for PLE — a brief dip during a backup does not warrant a page. Set it to `None` only for conditions where any breach is immediately actionable (e.g., a job failure).
+**Pending period** is the most important setting here. It defines how long the condition must be continuously met before the alert fires. For a server-down alert, set it to `None` — if the server is unreachable, you want to know immediately without waiting through a pending window.
 
 **Keep firing for** controls the recovery delay. Leave it at `0s` unless you want to suppress flapping alerts that briefly clear and re-trigger.
 
@@ -262,10 +255,10 @@ Under **Contact point**, select the contact point configured in `alerts-and-noti
 ### Step 6 — Notification message
 
 **Summary** appears in the email subject line — keep it short and specific:
-> PLE on {{ $labels.instance }} dropped below 300
+> SQL Server {{ $labels.instance }} is unreachable
 
-**Description** appears in the email body — use it to explain what the metric means and what to check first:
-> Page Life Expectancy measures how long pages survive in the buffer pool. A sustained drop below 300 seconds indicates memory pressure. Check for new long-running queries, increased workload, or a recent change to `max server memory`.
+**Description** appears in the email body — use it to explain what to check first:
+> Grafana lost connection to SQL Server. The datasource query returned no data. Check that SQL Server is running, port 1433 is reachable from the Docker network, and the monitoring user credentials are valid.
 
 **Runbook URL** is optional but valuable for on-call engineers who may not know the response steps.
 
