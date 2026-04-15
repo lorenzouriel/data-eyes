@@ -29,7 +29,6 @@ This monitoring stack provides enterprise-grade SQL Server observability with:
 ### Technologies Used
 
 - **Grafana** (Latest) - Visualization and monitoring platform
-- **Prometheus** (Latest) - Time-series metrics storage
 - **Microsoft SQL Server** - Primary data source
 - **Docker & Docker Compose** - Container orchestration
 
@@ -40,24 +39,23 @@ This monitoring stack provides enterprise-grade SQL Server observability with:
 │              Monitoring Solution                     │
 └─────────────────────────────────────────────────────┘
                          │
-     ┌───────────────────┼───────────────────┐
-     │                   │                   │
- ┌───▼────┐         ┌───▼────┐        ┌────▼─────┐
- │ Grafana│         │  MSSQL │        │Prometheus│
- │ :3000  │◄────────┤Database│        │  Backend │
- └────────┘         └────────┘        └──────────┘
-     │
-     ▼
- Email Alerts
- (SMTP/Gmail)
+              ┌──────────┴──────────┐
+              │                     │
+          ┌───▼────┐           ┌────▼─────┐
+          │ Grafana│◄──────────┤  MSSQL   │
+          │ :3000  │           │ Database │
+          └────────┘           └──────────┘
+              │
+              ▼
+          Email Alerts
+          (SMTP/Gmail)
 ```
 
 ### Component Interaction
 
 1. **Grafana** connects directly to SQL Server to execute monitoring queries
-2. **Prometheus** stores time-series metrics data
-3. **Alert Manager** sends email notifications based on defined thresholds
-4. **Docker Compose** orchestrates all services with persistent volumes
+2. **Alert Manager** sends email notifications based on defined thresholds
+3. **Docker Compose** orchestrates all services with persistent volumes
 
 ## Features
 
@@ -135,7 +133,7 @@ Login with credentials from `.env` file (default: admin/admin)
 
 ### 5. Verify Setup
 1. Navigate to **Configuration → Data Sources**
-2. Verify both **Prometheus** and **SQLServer** show green status
+2. Verify **SQLServer** shows green status
 3. Go to **Dashboards** and select a pre-provisioned dashboard
 4. Confirm metrics are displaying
 
