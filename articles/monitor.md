@@ -136,14 +136,31 @@ Active sessions doing nothing still hold connections and may hold locks. A serve
 
 ### Query Performance
 
-This section is where you spend most of your time during performance investigations:
+This section is where you spend most of your time during performance investigations.
 
-- **Top 10 slowest queries** by average execution time
-- **Query cache hit rate** — should be > 98% for OLTP workloads; a low rate means plans are being compiled too often
-- **Queries per second** — your throughput baseline
-- **Execution plan performance** — plan count and compilation rate
+**Top 10 Slowest Queries:** Ranked by average execution time, drawn from `sys.dm_exec_query_stats` and `sys.dm_exec_sql_text`. The panel shows actual query text alongside execution count and average duration — so you can distinguish a query that is slow every run from one that only occasionally misbehaves. A query with a high execution count and a moderate duration often has more total impact than a single slow outlier.
 
-The underlying SQL queries read from `sys.dm_exec_query_stats` and `sys.dm_exec_sql_text`, giving you the actual query text alongside the performance numbers.
+**Query Cache Hit Rate:** The percentage of cached query plans that are actually being reused. For OLTP workloads this should stay above 98%. A low hit rate means SQL Server is recompiling plans on every execution, wasting CPU and adding latency. The usual cause is ad-hoc queries with literal values instead of parameters — each distinct value generates a separate plan, inflating the cache and reducing reuse. The fix is parameterization, or enabling *Optimize for Ad Hoc Workloads*.
+
+**Query Latency:** Average execution time across queries currently tracked in the plan cache. Use this as a before/after signal when deploying indexes or query changes. A small percentage drop in average latency across the workload is often more meaningful than optimizing a single query in isolation.
+
+**Query Plan Cache Efficiency:** Plan count and compilation rate together tell you whether the plan cache is growing unbounded. Rising plan count alongside a low hit rate is the signature of plan cache pollution — memory filling up with one-off plans that are never reused. Left unchecked, this can flush useful plans out of the cache and cause recompilation cascades under load.
+
+### Server Performance
+
+Overall server state during peak activity — what is running, what is waiting, and what is being blocked.
+
+**Active Transactions:** Count of open transactions in the system. Long-running transactions hold locks and prevent log truncation — a single uncommitted transaction can block dozens of other queries and cause the transaction log to grow without bound. Any transaction open for more than a few minutes in an OLTP system deserves investigation.
+
+**Overall Wait Times:** Cumulative wait time by wait type, excluding background and idle waits. This is your fastest path to identifying systemic bottlenecks: `PAGEIOLATCH_*` points to disk pressure, `LCK_M_*` points to locking contention, `SOS_SCHEDULER_YIELD` points to CPU saturation. The pattern of wait types tells you more about the root cause than any individual slow query.
+
+**Table Locks:** Active lock requests across sessions, showing lock mode and grant status. Locks in `WAIT` state are being blocked by another session holding an incompatible lock. A cluster of waiting locks on the same object is a blocking chain — find the head blocker and you find the root cause.
+
+**Running Threads:** The number of requests currently executing. During normal operation this tracks your active connection count. Sustained high thread counts relative to logical CPU cores indicate CPU pressure or poorly parallelized queries generating excessive parallelism.
+
+**Open File Limits (Pending I/O):** Pending disk I/O operations waiting to complete. A high count reflects slow storage, I/O saturation, or large sequential scans. This metric spikes during backup operations and bulk loads — a spike during normal OLTP activity is a warning sign worth tracing to the responsible queries.
+
+**Temp Tables Created on Disk:** Session space usage split between user objects and internal objects. A rising internal object page count means queries are spilling sorts or hash joins to tempdb — SQL Server needed more memory than it was granted. The usual causes are stale statistics, parameter sniffing, or `max server memory` set too low for the workload.
 
 ### Buffer and Index Management
 
@@ -191,18 +208,70 @@ Shows the last backup time for each database by type (FULL, DIFFERENTIAL, LOG). 
 
 Alerts are defined in `grafana/alerts-and-notifiers.yml`. The contact point is already configured to use the SMTP settings from your `.env` file.
 
-To add an alert to a panel:
+To create a new alert rule, go to **Alerting → Alert rules → New alert rule** in the Grafana sidebar. The form has six sections.
 
-1. Open a dashboard and click **Edit** on any panel
-2. Go to the **Alert** tab
-3. Define the condition (e.g., "PLE drops below 300 for 5 minutes")
-4. Set the evaluation interval (e.g., every 1 minute)
-5. Select the email contact point
-6. Save the dashboard
+### Step 1 — Name
 
-The alert will fire an email when the condition is met and resolve (send a recovery email) when it clears.
+Give the rule a name that describes what it detects, not what it does. `PLE drops below 300 for 5 minutes` is useful. `Alert rule 1` is not.
 
-For persistent alerts, you can also edit `alerts-and-notifiers.yml` directly and restart the Grafana container:
+### Step 2 — Query and condition
+
+Select **SQLServer** as the data source. Write the T-SQL query that returns the metric you want to alert on. For PLE:
+
+```sql
+SELECT cntr_value AS PLE
+FROM sys.dm_os_performance_counters
+WHERE counter_name = 'Page life expectancy'
+  AND object_name LIKE '%Buffer Manager%';
+```
+
+Set the time range to `10m to now` and format to `Table`. After clicking **Run query**, Grafana displays the result as a single row labeled `Series 1` with the current metric value — this confirms the query is returning data the alert engine can evaluate.
+
+For the alert condition, set **WHEN Last OF QUERY** and choose the comparison:
+- `Is below` → fires when the metric drops under a threshold (PLE, buffer hit rate, free space)
+- `Is above` → fires when the metric exceeds a threshold (wait times, lock counts, active transactions)
+
+Set the threshold value. For PLE, use `300`.
+
+The **Preview alert rule condition** section at the bottom of Step 2 shows the current evaluation result:
+
+```
+Series 1    [current value]
+─────────────────────────────
+Series 1    0    Normal
+```
+
+`Series 1 = 0 / Normal` means the condition is not currently met — the alert would not fire right now. If the metric were breaching the threshold, it would show `Firing` instead. Use this preview to verify the query and condition are wired up correctly before saving.
+
+### Step 3 — Folder and labels
+
+Create a folder to organize your alert rules — one folder per category works well (`Query Performance`, `Server Health`, `Space`). Labels are optional but useful if you later want to route different alerts to different notification channels.
+
+### Step 4 — Evaluation behavior
+
+**Evaluation group** controls how often Grafana checks the condition. Create one group per category (e.g., `server-health`) and set the interval to `1m` for critical metrics, `5m` for slower-moving ones like space usage.
+
+**Pending period** is the most important setting here. It defines how long the condition must be continuously met before the alert fires. Set it to `5m` for PLE — a brief dip during a backup does not warrant a page. Set it to `None` only for conditions where any breach is immediately actionable (e.g., a job failure).
+
+**Keep firing for** controls the recovery delay. Leave it at `0s` unless you want to suppress flapping alerts that briefly clear and re-trigger.
+
+### Step 5 — Notifications
+
+Under **Contact point**, select the contact point configured in `alerts-and-notifiers.yml`. This is the email channel wired to your `GRAFANA_NOTIFICATION_ADDRESSES` from `.env`. The alert will fire an email when the condition is met and send a recovery email when it clears.
+
+### Step 6 — Notification message
+
+**Summary** appears in the email subject line — keep it short and specific:
+> PLE on {{ $labels.instance }} dropped below 300
+
+**Description** appears in the email body — use it to explain what the metric means and what to check first:
+> Page Life Expectancy measures how long pages survive in the buffer pool. A sustained drop below 300 seconds indicates memory pressure. Check for new long-running queries, increased workload, or a recent change to `max server memory`.
+
+**Runbook URL** is optional but valuable for on-call engineers who may not know the response steps.
+
+---
+
+Click **Save**. The rule is active immediately — no container restart required. For changes to the contact point or SMTP routing, edit `alerts-and-notifiers.yml` directly and restart Grafana:
 
 ```bash
 docker-compose restart grafana
