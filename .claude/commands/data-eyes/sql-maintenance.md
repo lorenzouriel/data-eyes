@@ -1,5 +1,5 @@
 ---
-name: maintenance
+name: sql-maintenance
 description: SQL Server maintenance assistant — backup, integrity, index, and stats using Ola Hallengren scripts
 ---
 

@@ -1,5 +1,5 @@
 ---
-name: performance
+name: sql-performance
 description: SQL Server performance tuning guide — maps symptoms to the 10-step methodology and runs diagnostic scripts
 ---
 

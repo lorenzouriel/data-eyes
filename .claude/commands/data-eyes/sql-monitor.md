@@ -1,5 +1,5 @@
 ---
-name: monitor
+name: sql-monitor
 description: Grafana SQL Server monitoring stack — diagnose issues, explain dashboards, configure alerts
 ---
 

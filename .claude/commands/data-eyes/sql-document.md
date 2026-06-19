@@ -1,5 +1,5 @@
 ---
-name: document
+name: sql-document
 description: SQL Server database documentation generator — produces structured markdown docs from system catalog queries
 ---
 
