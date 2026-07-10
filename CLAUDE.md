@@ -8,7 +8,7 @@ data-eyes/
 ├── monitor/              Grafana + Prometheus monitoring stack (Docker)
 │   ├── docker-compose.yml
 │   ├── grafana/          dashboards, datasources, alerts, config
-│   └── docs/             panel documentation (7 topic files)
+│   └── docs/             panel documentation (8 topic files)
 ├── performance/          10-step performance tuning methodology
 │   ├── performance_tuning_workbook.xlsx
 │   └── additional_queries/   4 diagnostic SQL scripts + docs

@@ -3,12 +3,65 @@ apiVersion: 1
 datasources:
   - name: ${DS_MSSQL}
     type: mssql
-    uid: sqlserver_ds    
+    uid: sqlserver_ds
     access: proxy
     url: ${DB_HOST}
     user: ${DB_USER}
     secureJsonData:
       password: ${DB_PASSWORD}
-    database: ${DB_NAME}  
+    database: ${DB_NAME}
+    isDefault: false
+    editable: true
+
+  # ============================================================
+  # Fleet instances — consumed by the "Fleet Overview" dashboard
+  # (grafana/dashboards/fleet_overview.json). Add one block per
+  # monitored instance following this pattern.
+  # ============================================================
+  - name: SQL Server - Dev
+    type: mssql
+    uid: sqlserver_dev
+    access: proxy
+    url: ${DB_HOST_DEV}
+    user: ${DB_USER_DEV}
+    secureJsonData:
+      password: ${DB_PASSWORD_DEV}
+    database: ${DB_NAME_DEV}
+    isDefault: false
+    editable: true
+
+  - name: SQL Server - Staging
+    type: mssql
+    uid: sqlserver_staging
+    access: proxy
+    url: ${DB_HOST_STAGING}
+    user: ${DB_USER_STAGING}
+    secureJsonData:
+      password: ${DB_PASSWORD_STAGING}
+    database: ${DB_NAME_STAGING}
+    isDefault: false
+    editable: true
+
+  - name: SQL Server - Prod 1 (AG)
+    type: mssql
+    uid: sqlserver_prod1
+    access: proxy
+    url: ${DB_HOST_PROD1}
+    user: ${DB_USER_PROD1}
+    secureJsonData:
+      password: ${DB_PASSWORD_PROD1}
+    database: ${DB_NAME_PROD1}
+    isDefault: false
+    editable: true
+
+  - name: SQL Server - Prod 2 (AG)
+    type: mssql
+    uid: sqlserver_prod2
+    access: proxy
+    url: ${DB_HOST_PROD2}
+    user: ${DB_USER_PROD2}
+    secureJsonData:
+      password: ${DB_PASSWORD_PROD2}
+    database: ${DB_NAME_PROD2}
     isDefault: false
     editable: true

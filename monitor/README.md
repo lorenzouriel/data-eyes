@@ -119,6 +119,27 @@ DB_PASSWORD=your_password
 # Service URLs
 PROMETHEUS_URL=http://prometheus:9090
 DS_MSSQL=SQLServer
+
+# Fleet instances (Fleet Overview dashboard — one block per monitored instance)
+DB_HOST_DEV=your_dev_server,1433
+DB_USER_DEV=your_username
+DB_PASSWORD_DEV=your_password
+DB_NAME_DEV=your_database
+
+DB_HOST_STAGING=your_staging_server,1433
+DB_USER_STAGING=your_username
+DB_PASSWORD_STAGING=your_password
+DB_NAME_STAGING=your_database
+
+DB_HOST_PROD1=your_prod1_server,1433
+DB_USER_PROD1=your_username
+DB_PASSWORD_PROD1=your_password
+DB_NAME_PROD1=your_database
+
+DB_HOST_PROD2=your_prod2_server,1433
+DB_USER_PROD2=your_username
+DB_PASSWORD_PROD2=your_password
+DB_NAME_PROD2=your_database
 ```
 
 ### 3. Launch Services
@@ -153,15 +174,17 @@ monitor/
 │   ├── database_space_usage.md    # Storage, I/O, file management
 │   ├── jobs_monitoring.md         # SQL Agent job tracking
 │   ├── buffer_index_management.md # Memory, buffer pool, indexes
-│   └── other_metrics.md           # Backups, availability, alerts
+│   ├── other_metrics.md           # Backups, availability, alerts
+│   └── availability_groups.md     # AG role, sync health, read replicas
 └── grafana/
     ├── grafana.ini                # Grafana configuration
-    ├── datasources.yml            # Data source definitions
+    ├── datasources.yml            # Data source definitions (incl. fleet instances)
     ├── alerts-and-notifiers.yml   # Alert routing
     ├── dashboard-provider.yml     # Dashboard provisioning
     └── dashboards/
         ├── sqlserver.json         # Comprehensive dashboard
-        └── sql_server_simplified.json # Simplified dashboard
+        ├── sql_server_simplified.json # Simplified dashboard
+        └── fleet_overview.json    # All instances, AG role & read-replica validation
 ```
 
 ### Key Configuration Files
@@ -211,6 +234,19 @@ Streamlined view with essential metrics:
 - Critical space and job metrics
 
 **Panels:** 30+ visualizations
+
+### 3. Fleet Overview
+
+**File:** [grafana/dashboards/fleet_overview.json](grafana/dashboards/fleet_overview.json)
+
+A single dashboard showing **every registered instance side by side**, driven by a `datasource`-type template variable (`$instance`) — every panel repeats once per instance, so adding a new instance to `datasources.yml` extends the dashboard automatically with no JSON edits.
+
+**Sections (per instance):**
+- **Instance Health** — server name, current AG role, uptime, active sessions
+- **AG & Replica Detail** — is it in an Availability Group? what's its role (PRIMARY/SECONDARY/STANDALONE)? is it a **read replica** (secondary with `READ_ONLY`/`ALL` connections allowed)?
+- **Per-Database Sync State** — synchronization state/health for each database in the AG
+
+See [docs/availability_groups.md](docs/availability_groups.md) for the full query breakdown and interpretation guide, including how to test this against the `dba-lab` AlwaysOn topology.
 
 ### Dashboard Features
 
@@ -322,6 +358,7 @@ Detailed SQL queries and metric explanations are available in the `docs/` direct
 | [jobs_monitoring.md](docs/jobs_monitoring.md) | SQL Agent job tracking and history |
 | [buffer_index_management.md](docs/buffer_index_management.md) | Memory, buffer pool, index usage |
 | [other_metrics.md](docs/other_metrics.md) | Backups, availability, alerts |
+| [availability_groups.md](docs/availability_groups.md) | AG role, replica sync health, read-replica validation (Fleet Overview) |
 
 Each document includes:
 - Metric description and purpose
