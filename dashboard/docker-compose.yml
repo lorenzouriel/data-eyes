@@ -1,0 +1,43 @@
+# Data Eyes dashboard — replaces monitor/'s Grafana stack.
+#
+# Joins the shared data-eyes-net network so the backend can reach each
+# instance's data-eyes-mcp server by service name (see
+# mcp/docker-compose.fleet.yml, which must be created and running first):
+#   docker network create data-eyes-net
+#   docker compose -f mcp/docker-compose.fleet.yml up -d
+#   docker compose -f dashboard/docker-compose.yml up -d
+
+services:
+  dashboard-backend:
+    build: ./backend
+    image: data-eyes-dashboard-backend
+    container_name: data-eyes-dashboard-backend
+    env_file:
+      - ./backend/.env
+    ports:
+      - "8090:8090"
+    networks:
+      - data-eyes-net
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8090/api/health')"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+
+  dashboard-frontend:
+    build: ./frontend
+    image: data-eyes-dashboard-frontend
+    container_name: data-eyes-dashboard-frontend
+    ports:
+      - "8091:80"
+    networks:
+      - data-eyes-net
+    depends_on:
+      - dashboard-backend
+    restart: unless-stopped
+
+networks:
+  data-eyes-net:
+    external: true

@@ -1,0 +1,364 @@
+/*
+  Palette: reused verbatim from the dataviz skill's validated reference
+  palette (references/palette.md) rather than inventing new hex values —
+  --eyes-primary is its categorical slot 7 (violet), --eyes-accent is slot 3
+  (aqua); both already pass the skill's CVD/contrast checks. Status colors
+  are its fixed status palette (good/warning/critical), never reused for
+  anything else. Chrome/ink tokens are its chart chrome & ink table.
+*/
+:root {
+  color-scheme: light;
+  --surface-page: #f9f9f7;
+  --surface-card: #fcfcfb;
+  --text-primary: #0b0b0b;
+  --text-secondary: #52514e;
+  --text-muted: #898781;
+  --border: rgba(11, 11, 11, 0.1);
+  --gridline: #e1e0d9;
+
+  --eyes-primary: #4a3aa7;
+  --eyes-accent: #1baf7a;
+
+  --status-ok: #0ca30c;
+  --status-warning: #fab219;
+  --status-critical: #d03b3b;
+  --status-unknown: #898781;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
+    --surface-page: #0d0d0d;
+    --surface-card: #1a1a19;
+    --text-primary: #ffffff;
+    --text-secondary: #c3c2b7;
+    --text-muted: #898781;
+    --border: rgba(255, 255, 255, 0.1);
+    --gridline: #2c2c2a;
+
+    --eyes-primary: #9085e9;
+    --eyes-accent: #199e70;
+  }
+}
+
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --surface-page: #0d0d0d;
+  --surface-card: #1a1a19;
+  --text-primary: #ffffff;
+  --text-secondary: #c3c2b7;
+  --text-muted: #898781;
+  --border: rgba(255, 255, 255, 0.1);
+  --gridline: #2c2c2a;
+
+  --eyes-primary: #9085e9;
+  --eyes-accent: #199e70;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+  background: var(--surface-page);
+  color: var(--text-primary);
+}
+
+/* --- Brand mark --- */
+.brand-mark {
+  width: 28px;
+  height: 28px;
+  border-radius: 8px;
+  background: linear-gradient(135deg, var(--eyes-primary), var(--eyes-accent));
+  flex-shrink: 0;
+}
+
+/* --- Auth --- */
+.auth-shell {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--surface-page);
+}
+
+.auth-card {
+  width: 320px;
+  padding: 32px;
+  background: var(--surface-card);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  display: flex;
+  flex-direction: column;
+}
+
+.auth-card h1 {
+  margin: 12px 0 0;
+  font-size: 22px;
+}
+
+.auth-subtitle {
+  margin: 0 0 20px;
+  color: var(--text-secondary);
+  font-size: 14px;
+}
+
+.auth-card label {
+  font-size: 12px;
+  color: var(--text-secondary);
+  margin-top: 12px;
+}
+
+.auth-card input {
+  margin-top: 6px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: var(--surface-page);
+  color: var(--text-primary);
+  font-size: 14px;
+}
+
+.auth-card input:focus {
+  outline: 2px solid var(--eyes-accent);
+  outline-offset: 1px;
+}
+
+.auth-error {
+  margin-top: 12px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--status-critical) 15%, transparent);
+  color: var(--status-critical);
+  font-size: 13px;
+}
+
+.auth-card button {
+  margin-top: 20px;
+  padding: 10px;
+  border-radius: 8px;
+  border: none;
+  background: var(--eyes-primary);
+  color: #ffffff;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.auth-card button:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
+/* --- Layout --- */
+.page {
+  min-height: 100vh;
+}
+
+.topbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 24px;
+  border-bottom: 1px solid var(--border);
+  background: var(--surface-card);
+}
+
+.topbar-brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.brand-name {
+  font-weight: 700;
+  font-size: 16px;
+}
+
+.topbar-right {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.topbar-user {
+  color: var(--text-secondary);
+  font-size: 13px;
+}
+
+.btn-ghost {
+  padding: 6px 12px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: transparent;
+  color: var(--text-primary);
+  cursor: pointer;
+  font-size: 13px;
+}
+
+.btn-ghost:hover {
+  border-color: var(--eyes-accent);
+}
+
+.main-content {
+  padding: 24px;
+  max-width: 1200px;
+  margin: 0 auto;
+}
+
+.main-heading {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  margin-bottom: 20px;
+}
+
+.main-heading h1 {
+  font-size: 20px;
+  margin: 0;
+}
+
+.last-updated {
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.page-loading,
+.empty-state {
+  color: var(--text-secondary);
+  font-size: 14px;
+  padding: 40px 0;
+  text-align: center;
+}
+
+.banner-error {
+  padding: 10px 14px;
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--status-critical) 12%, transparent);
+  color: var(--status-critical);
+  font-size: 13px;
+  margin-bottom: 16px;
+}
+
+/* --- Fleet grid --- */
+.instance-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 16px;
+}
+
+.instance-card {
+  background: var(--surface-card);
+  border: 1px solid var(--border);
+  border-left: 4px solid var(--status-unknown);
+  border-radius: 10px;
+  padding: 16px;
+}
+
+.instance-card--ok {
+  border-left-color: var(--status-ok);
+}
+.instance-card--warning {
+  border-left-color: var(--status-warning);
+}
+.instance-card--critical {
+  border-left-color: var(--status-critical);
+}
+.instance-card--unknown {
+  border-left-color: var(--status-unknown);
+}
+
+.instance-card-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  margin-bottom: 8px;
+  gap: 8px;
+}
+
+.instance-card-header h2 {
+  font-size: 15px;
+  margin: 0;
+}
+
+.instance-env {
+  display: block;
+  font-size: 11px;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  margin-top: 2px;
+}
+
+.instance-meta {
+  font-size: 12px;
+  color: var(--text-secondary);
+  margin-bottom: 8px;
+}
+
+.instance-error {
+  font-size: 12px;
+  color: var(--status-critical);
+}
+
+.category-list {
+  list-style: none;
+  margin: 8px 0 0;
+  padding: 0;
+  border-top: 1px solid var(--gridline);
+}
+
+.category-list li {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 6px 0;
+  border-bottom: 1px solid var(--gridline);
+  font-size: 12px;
+}
+
+.category-name {
+  color: var(--text-secondary);
+}
+
+/* --- Status badge: icon + label, never color alone --- */
+.status-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  font-weight: 600;
+  padding: 3px 8px;
+  border-radius: 999px;
+  background: var(--surface-page);
+  border: 1px solid var(--border);
+  white-space: nowrap;
+}
+
+.status-badge-icon {
+  font-size: 10px;
+  line-height: 1;
+}
+
+.status-ok .status-badge-icon {
+  color: var(--status-ok);
+}
+.status-warning .status-badge-icon {
+  color: var(--status-warning);
+}
+.status-critical .status-badge-icon {
+  color: var(--status-critical);
+}
+.status-unknown .status-badge-icon {
+  color: var(--status-unknown);
+}
+
+.status-badge-text {
+  color: var(--text-primary);
+}
+
+.status-unknown .status-badge-text {
+  color: var(--text-secondary);
+}

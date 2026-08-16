@@ -1,0 +1,34 @@
+[build-system]
+requires = ["setuptools>=65.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "data-eyes-dashboard-backend"
+version = "0.1.0"
+description = "FastAPI backend for the Data Eyes dashboard — replaces monitor/'s Grafana stack"
+requires-python = ">=3.10"
+license = { text = "MIT" }
+authors = [
+    { name = "Lorenzo", email = "lorenzouriel394@gmail.com" }
+]
+
+dependencies = [
+    "fastapi>=0.110.0",
+    "uvicorn[standard]>=0.27.0",
+    "pydantic>=2.0.0",
+    "pydantic-settings>=2.0.0",
+    "pyyaml>=6.0",
+    "mcp>=1.28,<2",
+    "httpx>=0.27.0",
+    "itsdangerous>=2.1.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.4.0",
+    "pytest-asyncio>=0.21.0",
+    "httpx>=0.27.0",
+]
+
+[tool.setuptools]
+packages = ["app"]

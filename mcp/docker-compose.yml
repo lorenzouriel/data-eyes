@@ -1,0 +1,18 @@
+services:
+  data-eyes-mcp:
+    build: .
+    image: data-eyes-mcp
+    container_name: data-eyes-mcp-server
+    # The image defaults to stdio transport; run HTTP for a networked container.
+    command: ["python", "-m", "data_eyes_mcp.cli", "--transport", "http", "--bind", "0.0.0.0:8080"]
+    ports:
+      - "8080:8080"
+    env_file:
+      - .env
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s

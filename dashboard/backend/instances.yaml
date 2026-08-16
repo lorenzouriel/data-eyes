@@ -1,0 +1,32 @@
+# Data Eyes dashboard — fleet registry.
+#
+# The dashboard's equivalent of monitor/grafana/datasources.yml: one entry
+# per monitored SQL Server instance, each backed by its own data-eyes-mcp
+# server rather than a direct SQL connection (see
+# mcp/docker-compose.fleet.yml for the matching per-instance MCP topology).
+#
+# mcp_url uses the internal Docker network port (8080) and service name of
+# each mcp/docker-compose.fleet.yml service — not the host-mapped port
+# (8081-8084), since the backend reaches these over the shared data-eyes-net
+# Docker network, not via the host.
+#
+# Names/labels below mirror the Dev/Staging/Prod1-AG/Prod2-AG topology that
+# monitor/'s Grafana datasources already used — same fleet, new transport.
+
+instances:
+  - name: dev
+    label: "Dev"
+    mcp_url: "http://data-eyes-mcp-dev:8080/mcp"
+    environment: development
+  - name: staging
+    label: "Staging"
+    mcp_url: "http://data-eyes-mcp-staging:8080/mcp"
+    environment: staging
+  - name: prod1
+    label: "Prod 1 (AG Primary)"
+    mcp_url: "http://data-eyes-mcp-prod1:8080/mcp"
+    environment: production
+  - name: prod2
+    label: "Prod 2 (AG Secondary)"
+    mcp_url: "http://data-eyes-mcp-prod2:8080/mcp"
+    environment: production
