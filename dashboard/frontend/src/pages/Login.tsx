@@ -2,6 +2,7 @@ import { useState, type FormEvent } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../auth/AuthContext";
 import { ApiError } from "../api";
+import Logo from "../components/Logo";
 
 export default function Login() {
   const { login } = useAuth();
@@ -28,7 +29,7 @@ export default function Login() {
   return (
     <div className="auth-shell">
       <form className="auth-card" onSubmit={handleSubmit}>
-        <div className="brand-mark" aria-hidden="true" />
+        <Logo className="brand-mark brand-mark--lg" />
         <h1>Data Eyes</h1>
         <p className="auth-subtitle">Sign in to view your fleet</p>
 

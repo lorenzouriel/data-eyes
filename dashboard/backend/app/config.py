@@ -37,6 +37,23 @@ class Settings(BaseSettings):
     # string, e.g. ["http://localhost:5173"]. Empty = same-origin only.
     CORS_ALLOW_ORIGINS: List[str] = []
 
+    # Trend-history repository (app/repository.py, app/collector.py) — a
+    # dedicated database, never a monitored SQL Server. Optional: if unset,
+    # the collector simply never starts and the dashboard runs exactly as it
+    # did in Phase 2/3 (current-state views only, no trend strips).
+    REPOSITORY_DSN: Optional[str] = None
+    COLLECTOR_INTERVAL_SECONDS: int = 60
+    TREND_RETENTION_DAYS: int = 30
+
+    # Embedded insights agent (app/insights_agent.py, app/insights_sweep.py) —
+    # optional: if unset, every insight endpoint degrades to "no insight"
+    # rather than erroring, and the background sweep never starts. Model
+    # tiering matches the approved plan: a fast/cheap model for routine
+    # commentary, a stronger model only for on-demand deep explanations.
+    ANTHROPIC_API_KEY: Optional[str] = None
+    INSIGHTS_SWEEP_INTERVAL_SECONDS: int = 600  # 10 min (plan's 5-15 min range)
+    INSIGHTS_FEED_MAX_SIZE: int = 50
+
     HOST: str = "0.0.0.0"
     PORT: int = 8090
 

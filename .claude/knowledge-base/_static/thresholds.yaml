@@ -83,3 +83,19 @@ availability_groups:
   log_send_queue_kb:
     warning: 51200
     critical: 512000
+
+query_performance:
+  # avg elapsed time per execution — the warning tier is heuristic, the
+  # critical tier deliberately matches monitor/docs/other_metrics.md's
+  # existing "Slow Query Alerts (> 30s)" language rather than inventing a
+  # new number.
+  avg_duration_ms:
+    warning: 5000
+    critical: 30000
+
+storage:
+  # heuristic — drive free space remaining; wildly environment-dependent
+  # (a 100GB drive and a 10TB SAN LUN need different alarms), tune per host.
+  drive_free_space_gb:
+    warning: 20
+    critical: 5

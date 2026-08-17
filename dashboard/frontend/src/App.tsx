@@ -3,6 +3,8 @@ import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { AuthProvider, useAuth } from "./auth/AuthContext";
 import Login from "./pages/Login";
 import MainPage from "./pages/MainPage";
+import InstanceDetail from "./pages/InstanceDetail";
+import DatabaseDrillDown from "./pages/DatabaseDrillDown";
 
 function ProtectedRoute({ children }: { children: JSX.Element }) {
   const { username, loading } = useAuth();
@@ -22,6 +24,22 @@ export default function App() {
             element={
               <ProtectedRoute>
                 <MainPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/instances/:instanceName"
+            element={
+              <ProtectedRoute>
+                <InstanceDetail />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/instances/:instanceName/db/:databaseName/:tab?"
+            element={
+              <ProtectedRoute>
+                <DatabaseDrillDown />
               </ProtectedRoute>
             }
           />

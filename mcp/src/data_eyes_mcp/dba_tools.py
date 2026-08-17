@@ -22,7 +22,7 @@ for the known drift risk and its mitigation options.
 """
 
 import logging
-from typing import Optional, List, Tuple, Any
+from typing import Optional, List, Tuple, Any, Dict
 
 from mcp.server.fastmcp import Context
 
@@ -88,6 +88,35 @@ def _worst_severity(columns: List[str], rows: List[Tuple[Any, ...]], default: st
         if _severity_rank(sev) < _severity_rank(worst):
             worst = sev
     return worst
+
+
+def _extract_metric(
+    columns: List[str], rows: List[Tuple[Any, ...]], column: str, agg: str = "max"
+) -> Optional[float]:
+    """Pull one representative numeric headline metric out of a diagnostic
+    tool's rows — e.g. the worst FullBackupAgeHours across all databases.
+    Used only for trend-history snapshots (dashboard/backend/app/collector.py);
+    severity remains the authority for health status, this is supplementary
+    context for charting a number over time alongside it."""
+    if column not in columns or not rows:
+        return None
+    idx = columns.index(column)
+    values = []
+    for row in rows:
+        v = row[idx]
+        if v is None:
+            continue
+        try:
+            values.append(float(v))
+        except (TypeError, ValueError):
+            continue
+    if not values:
+        return None
+    if agg == "min":
+        return min(values)
+    if agg == "count":
+        return float(len(values))
+    return max(values)
 
 
 # ---------------------------------------------------------------------------
@@ -237,6 +266,58 @@ def _sql_index_fragmentation(min_frag_pct: float, top_n: int) -> str:
         AND ps.page_count > 1000
         AND ps.index_id > 0
     ORDER BY ps.avg_fragmentation_in_percent DESC
+    """
+
+
+def _sql_top_queries(top_n: int) -> str:
+    top_n = max(1, min(top_n, 200))
+    return f"""
+    SELECT TOP {top_n}
+        DB_NAME(st.dbid) AS DatabaseName,
+        qs.execution_count AS ExecutionCount,
+        qs.total_elapsed_time / qs.execution_count / 1000.0 AS AvgElapsedTimeMs,
+        qs.total_worker_time / qs.execution_count / 1000.0 AS AvgCpuTimeMs,
+        qs.total_logical_reads / qs.execution_count AS AvgLogicalReads,
+        qs.max_elapsed_time / 1000.0 AS MaxElapsedTimeMs,
+        qs.last_execution_time AS LastExecutionTime,
+        SUBSTRING(st.text, (qs.statement_start_offset / 2) + 1,
+            ((CASE qs.statement_end_offset
+                WHEN -1 THEN DATALENGTH(st.text)
+                ELSE qs.statement_end_offset END
+                - qs.statement_start_offset) / 2) + 1) AS QueryText,
+        CASE
+            WHEN qs.total_elapsed_time / qs.execution_count / 1000.0 >= 30000 THEN 'CRITICAL'
+            WHEN qs.total_elapsed_time / qs.execution_count / 1000.0 >= 5000 THEN 'WARNING'
+            ELSE 'OK'
+        END AS severity
+    FROM sys.dm_exec_query_stats qs
+    CROSS APPLY sys.dm_exec_sql_text(qs.sql_handle) st
+    WHERE st.dbid IS NOT NULL
+    ORDER BY AvgElapsedTimeMs DESC
+    """
+
+
+def _sql_db_space() -> str:
+    return """
+    SELECT
+        db.name AS DatabaseName,
+        mf.name AS FileName,
+        mf.type_desc AS FileType,
+        CAST(mf.size * 8.0 / 1024 AS DECIMAL(18, 2)) AS FileSizeMB,
+        CAST((mf.size - FILEPROPERTY(mf.name, 'SpaceUsed')) * 8.0 / 1024 AS DECIMAL(18, 2)) AS FreeSpaceMB,
+        CAST(100.0 * (mf.size - FILEPROPERTY(mf.name, 'SpaceUsed')) / NULLIF(mf.size, 0) AS DECIMAL(5, 2)) AS FreeSpacePct,
+        CAST(vs.total_bytes / 1024.0 / 1024 / 1024 AS DECIMAL(18, 2)) AS DriveSizeGB,
+        CAST(vs.available_bytes / 1024.0 / 1024 / 1024 AS DECIMAL(18, 2)) AS DriveFreeSpaceGB,
+        CASE
+            WHEN vs.available_bytes / 1024.0 / 1024 / 1024 < 5 THEN 'CRITICAL'
+            WHEN vs.available_bytes / 1024.0 / 1024 / 1024 < 20 THEN 'WARNING'
+            ELSE 'OK'
+        END AS severity
+    FROM sys.master_files mf
+    INNER JOIN sys.databases db ON db.database_id = mf.database_id
+    CROSS APPLY sys.dm_os_volume_stats(mf.database_id, mf.file_id) vs
+    WHERE db.database_id > 4 AND db.state_desc = 'ONLINE'
+    ORDER BY DriveFreeSpaceGB ASC
     """
 
 
@@ -412,12 +493,23 @@ async def _run(sql: str, database: Optional[str], ctx: Optional[Context]) -> Que
 
 def _filter_by_database(sql: str, database: Optional[str]) -> str:
     """Append an exact-name filter to the shared WHERE clause anchor used by
-    _sql_backup_health / _sql_checkdb_health (both scan all user databases by
-    default; this narrows to one when the caller passes `database`)."""
+    _sql_backup_health / _sql_checkdb_health / _sql_db_space (all scan every
+    user database by default; this narrows to one when the caller passes
+    `database`)."""
     if not database:
         return sql
     anchor = "WHERE d.database_id > 4 AND d.state_desc = 'ONLINE'"
     return sql.replace(anchor, f"{anchor} AND d.name = {escape_sql_string(database)}")
+
+
+def _filter_top_queries_by_database(sql: str, database: Optional[str]) -> str:
+    """Same idea as _filter_by_database, scoped to _sql_top_queries' own
+    WHERE clause anchor (a different shape since it filters plan-cache
+    entries by dbid, not sys.databases rows)."""
+    if not database:
+        return sql
+    anchor = "WHERE st.dbid IS NOT NULL"
+    return sql.replace(anchor, f"{anchor} AND DB_NAME(st.dbid) = {escape_sql_string(database)}")
 
 
 # ---------------------------------------------------------------------------
@@ -577,6 +669,67 @@ async def index_fragmentation(
 
 
 @mcp.tool()
+async def top_queries(database: Optional[str] = None, top_n: int = 25, ctx: Optional[Context] = None) -> str:
+    """
+    Rank queries by average elapsed time per execution — the "Top SQL"
+    DPA-style category. Mirrors performance/additional_queries/top_queries.json.sql,
+    which closed a gap where this logic previously only existed as inline
+    Grafana panel SQL.
+
+    Args:
+        database: Restrict to queries whose plan is attributed to this
+            database (defaults to all databases in the plan cache).
+        top_n: Max rows to return (default 25, max 200).
+
+    Returns:
+        JSON rows: DatabaseName, ExecutionCount, AvgElapsedTimeMs,
+        AvgCpuTimeMs, AvgLogicalReads, MaxElapsedTimeMs, LastExecutionTime,
+        QueryText, severity.
+    """
+    with MetricsContext("top_queries") as metrics:
+        try:
+            sql = _filter_top_queries_by_database(_sql_top_queries(top_n), database)
+            res = await _run(sql, None, ctx)
+            metrics.set_rows(len(res.rows))
+            if not res.rows:
+                return "No query stats found in the plan cache."
+            return format_json(res.columns, res.rows)
+        except Exception as e:
+            logger.exception("top_queries failed")
+            return f"ERROR: {type(e).__name__}: {str(e)}"
+
+
+@mcp.tool()
+async def db_space(database: Optional[str] = None, ctx: Optional[Context] = None) -> str:
+    """
+    Per-file size/free-space plus underlying drive free space — the
+    "Storage" DPA-style category. A database can have plenty of free space
+    inside its own files while the disk hosting it is nearly full; severity
+    is driven by drive free space, the actual outage risk. Mirrors
+    maintenance/diagnostics/db_space_check.sql, which closed a gap where
+    this logic previously only existed as inline Grafana panel SQL.
+
+    Args:
+        database: Restrict to a single database (defaults to all user databases).
+
+    Returns:
+        JSON rows: DatabaseName, FileName, FileType, FileSizeMB,
+        FreeSpaceMB, FreeSpacePct, DriveSizeGB, DriveFreeSpaceGB, severity.
+    """
+    with MetricsContext("db_space") as metrics:
+        try:
+            sql = _filter_by_database(_sql_db_space(), database)
+            res = await _run(sql, None, ctx)
+            metrics.set_rows(len(res.rows))
+            if not res.rows:
+                return "No user databases found."
+            return format_json(res.columns, res.rows)
+        except Exception as e:
+            logger.exception("db_space failed")
+            return f"ERROR: {type(e).__name__}: {str(e)}"
+
+
+@mcp.tool()
 async def backup_health(database: Optional[str] = None, ctx: Optional[Context] = None) -> str:
     """
     Backup health per user database: last FULL/DIFF/LOG backup and staleness.
@@ -713,26 +866,51 @@ async def job_health(ctx: Optional[Context] = None) -> str:
 async def fleet_health_score(ctx: Optional[Context] = None) -> str:
     """
     Aggregate worst-severity rollup across every diagnostic category for THIS
-    instance (wait stats, index fragmentation, backup, CHECKDB, blocking, AG,
-    jobs). True fleet-wide (multi-instance) aggregation happens one level up,
-    in the caller (e.g. the dashboard backend fanning out across multiple MCP
-    instances) — this tool only ever sees the single instance it's connected to.
+    instance (wait stats, index fragmentation, disk space, backup, CHECKDB,
+    blocking, AG, jobs). True fleet-wide (multi-instance) aggregation happens
+    one level up, in the caller (e.g. the dashboard backend fanning out
+    across multiple MCP instances) — this tool only ever sees the single
+    instance it's connected to. top_queries is deliberately excluded: slow
+    queries are an analysis category, not an operational-risk gate the way
+    disk exhaustion or a missed backup is.
+
+    Also returns one representative numeric "headline metric" per category
+    where one exists (e.g. backup_health's worst FullBackupAgeHours, db_space's
+    lowest DriveFreeSpaceGB) — supplementary to severity, used by the
+    dashboard's trend-history collector (dashboard/backend/app/collector.py)
+    to chart a number over time, not just a status color.
 
     Returns:
-        JSON object: {"overall_severity": ..., "categories": {name: severity, ...}}
+        JSON object: {"overall_severity": ..., "categories": {name: severity, ...},
+        "metrics": {"category.column": value, ...}} (metrics omitted where no
+        representative numeric column applies or no rows were returned).
     """
-    with MetricsContext("fleet_health_score") as metrics:
+    with MetricsContext("fleet_health_score") as metrics_ctx:
         try:
             categories = {
                 "wait_stats": _sql_wait_stats(25),
                 "index_fragmentation": _sql_index_fragmentation(5.0, 50),
+                "db_space": _sql_db_space(),
                 "backup_health": _sql_backup_health(),
                 "checkdb_health": _sql_checkdb_health(),
                 "blocking": _sql_blocking_snapshot(),
                 "ag_health": _sql_ag_health(),
                 "job_health": _sql_job_health(),
             }
+            # (column, aggregation) for each category's headline metric.
+            metric_specs = {
+                "wait_stats": ("Percentage_WaitTime", "max"),
+                "index_fragmentation": ("FragmentationPct", "max"),
+                "db_space": ("DriveFreeSpaceGB", "min"),
+                "backup_health": ("FullBackupAgeHours", "max"),
+                "checkdb_health": ("DaysSinceLastCheckDB", "max"),
+                "blocking": ("WaitTimeSeconds", "max"),
+                "ag_health": ("RedoQueueKB", "max"),
+                "job_health": ("FailuresLast7Days", "max"),
+            }
+
             results = {}
+            headline_metrics: Dict[str, float] = {}
             for name, sql in categories.items():
                 try:
                     res = await _run(sql, None, ctx)
@@ -740,6 +918,13 @@ async def fleet_health_score(ctx: Optional[Context] = None) -> str:
                     # that's OK, not unknown, so it doesn't drag the rollup down.
                     default = "OK"
                     results[name] = _worst_severity(res.columns, res.rows, default=default)
+
+                    spec = metric_specs.get(name)
+                    if spec:
+                        column, agg = spec
+                        value = _extract_metric(res.columns, res.rows, column, agg)
+                        if value is not None:
+                            headline_metrics[f"{name}.{column}"] = value
                 except Exception:
                     logger.exception("fleet_health_score: category %s failed", name)
                     results[name] = "UNKNOWN"
@@ -747,9 +932,12 @@ async def fleet_health_score(ctx: Optional[Context] = None) -> str:
             rank_order = {"CRITICAL": 0, "WARNING": 1, "OK": 2, "UNKNOWN": 3}
             overall = min(results.values(), key=lambda s: rank_order.get(s, 3)) if results else "UNKNOWN"
 
-            metrics.set_rows(len(results))
+            metrics_ctx.set_rows(len(results))
             import json as _json
-            return _json.dumps({"overall_severity": overall, "categories": results}, indent=2)
+            return _json.dumps(
+                {"overall_severity": overall, "categories": results, "metrics": headline_metrics},
+                indent=2,
+            )
         except Exception as e:
             logger.exception("fleet_health_score failed")
             return f"ERROR: {type(e).__name__}: {str(e)}"

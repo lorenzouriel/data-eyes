@@ -66,13 +66,17 @@ body {
   color: var(--text-primary);
 }
 
-/* --- Brand mark --- */
+/* --- Brand mark: the Logo component's own <svg> paths carry the shape and
+   gradient (see components/Logo.tsx) — this just sizes it per context. --- */
 .brand-mark {
   width: 28px;
   height: 28px;
-  border-radius: 8px;
-  background: linear-gradient(135deg, var(--eyes-primary), var(--eyes-accent));
   flex-shrink: 0;
+}
+
+.brand-mark--lg {
+  width: 44px;
+  height: 44px;
 }
 
 /* --- Auth --- */
@@ -250,11 +254,19 @@ body {
 }
 
 .instance-card {
+  display: block;
   background: var(--surface-card);
   border: 1px solid var(--border);
   border-left: 4px solid var(--status-unknown);
   border-radius: 10px;
   padding: 16px;
+  color: inherit;
+  text-decoration: none;
+  transition: border-color 0.15s ease;
+}
+
+.instance-card:hover {
+  border-color: var(--eyes-accent);
 }
 
 .instance-card--ok {
@@ -361,4 +373,389 @@ body {
 
 .status-unknown .status-badge-text {
   color: var(--text-secondary);
+}
+
+/* --- Instance detail: database picker --- */
+.heading-sub {
+  font-size: 14px;
+  font-weight: 400;
+  color: var(--text-muted);
+}
+
+.database-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.database-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 16px;
+  background: var(--surface-card);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  color: inherit;
+  text-decoration: none;
+  transition: border-color 0.15s ease;
+}
+
+.database-row:hover {
+  border-color: var(--eyes-accent);
+}
+
+.database-name {
+  font-weight: 600;
+  font-size: 14px;
+}
+
+.database-state {
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+/* --- Per-database drill-down tabs --- */
+.tab-nav {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  border-bottom: 1px solid var(--border);
+  margin-bottom: 20px;
+}
+
+.tab-link {
+  padding: 8px 14px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  text-decoration: none;
+  border-bottom: 2px solid transparent;
+  margin-bottom: -1px;
+}
+
+.tab-link:hover {
+  color: var(--text-primary);
+}
+
+.tab-link--active {
+  color: var(--eyes-primary);
+  border-bottom-color: var(--eyes-primary);
+}
+
+.tab-body {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+}
+
+.tab-section h3 {
+  font-size: 14px;
+  margin: 0 0 10px;
+}
+
+/* --- Data table (per-tab diagnostic rows) --- */
+.table-scroll {
+  overflow-x: auto;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+
+.data-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.data-table th {
+  text-align: left;
+  padding: 8px 12px;
+  background: var(--surface-page);
+  color: var(--text-secondary);
+  font-weight: 600;
+  border-bottom: 1px solid var(--border);
+  position: sticky;
+  top: 0;
+}
+
+.data-table td {
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--gridline);
+  color: var(--text-primary);
+  max-width: 420px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.data-table tr:last-child td {
+  border-bottom: none;
+}
+
+.table-empty {
+  padding: 16px;
+  color: var(--text-secondary);
+  font-size: 13px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  text-align: center;
+}
+
+/* --- Trend strip (Phase 4): a compact severity-over-time timeline, not a
+   full line chart — see components/TrendStrip.tsx for why. --- */
+.trend-strip {
+  margin: 12px 0 20px;
+}
+
+.trend-strip-title {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  margin-bottom: 6px;
+}
+
+.trend-strip-bar {
+  display: flex;
+  gap: 1px;
+  height: 20px;
+  border-radius: 4px;
+  overflow: hidden;
+  background: var(--surface-page);
+  border: 1px solid var(--border);
+}
+
+.trend-strip-segment {
+  flex: 1 0 auto;
+  min-width: 2px;
+  height: 100%;
+}
+
+.trend-strip-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: 4px;
+}
+
+.trend-strip-legend {
+  display: flex;
+  gap: 10px;
+  font-size: 10px;
+  color: var(--text-muted);
+}
+
+.trend-strip-legend-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+}
+
+.trend-strip-range {
+  font-size: 10px;
+  color: var(--text-muted);
+}
+
+.trend-strip-empty {
+  font-size: 12px;
+  color: var(--text-muted);
+  padding: 8px 0;
+}
+
+/* --- Shared button variant used outside .auth-card/.btn-ghost contexts --- */
+.btn-primary {
+  padding: 8px 14px;
+  border-radius: 8px;
+  border: none;
+  background: var(--eyes-primary);
+  color: #ffffff;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.btn-primary:hover {
+  filter: brightness(1.08);
+}
+
+.btn-primary:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
+/* --- Embedded insights agent (Phase 5) --- */
+
+/* PageInsight: the streaming callout that appears on page load / tab switch.
+   The accent-tinted left rule + diamond icon distinguish it from the plain
+   .banner-error / .trend-strip widgets it sits alongside. */
+.page-insight {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+  margin: 0 0 20px;
+  padding: 12px 14px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--eyes-accent);
+  background: color-mix(in srgb, var(--eyes-accent) 6%, var(--surface-card));
+}
+
+.page-insight-icon {
+  color: var(--eyes-accent);
+  font-size: 14px;
+  line-height: 1.4;
+}
+
+.page-insight-body {
+  flex: 1;
+  min-width: 0;
+}
+
+.page-insight-label {
+  display: block;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--eyes-accent);
+  margin-bottom: 2px;
+}
+
+.page-insight-text {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--text-primary);
+  white-space: pre-wrap;
+}
+
+.page-insight-cursor {
+  display: inline-block;
+  width: 6px;
+  height: 12px;
+  margin-left: 2px;
+  background: var(--eyes-accent);
+  vertical-align: text-bottom;
+  animation: page-insight-blink 1s step-start infinite;
+}
+
+@keyframes page-insight-blink {
+  50% {
+    opacity: 0;
+  }
+}
+
+/* InsightsFeed: Main Page history list of severity-change commentary. */
+.insights-feed {
+  margin-bottom: 24px;
+}
+
+.insights-feed-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  margin: 0 0 10px;
+}
+
+.insights-feed-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.insights-feed-item {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface-card);
+}
+
+.insights-feed-item-body {
+  flex: 1;
+  min-width: 0;
+}
+
+.insights-feed-item-meta {
+  display: flex;
+  gap: 8px;
+  align-items: baseline;
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+.insights-feed-item-instance {
+  font-weight: 700;
+  color: var(--text-secondary);
+}
+
+.insights-feed-item-message {
+  margin: 4px 0 0;
+  font-size: 13px;
+  color: var(--text-primary);
+}
+
+/* ExplainPanel: on-demand deep explanation, gated behind a button. */
+.explain-panel-row {
+  display: flex;
+  justify-content: flex-end;
+  margin: -8px 0 12px;
+}
+
+.explain-toggle {
+  align-self: flex-end;
+}
+
+.explain-panel {
+  margin: 0 0 16px;
+  padding: 14px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: var(--surface-card);
+}
+
+.explain-panel-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 10px;
+}
+
+.explain-panel-title {
+  font-weight: 700;
+  font-size: 13px;
+}
+
+.explain-panel-form {
+  display: flex;
+  gap: 8px;
+}
+
+.explain-panel-input {
+  flex: 1;
+  padding: 8px 10px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: var(--surface-page);
+  color: var(--text-primary);
+  font-size: 13px;
+}
+
+.explain-panel-input:focus {
+  outline: 2px solid var(--eyes-accent);
+  outline-offset: 1px;
+}
+
+.explain-panel-text {
+  margin: 12px 0 0;
+  font-size: 13px;
+  line-height: 1.6;
+  color: var(--text-primary);
+  white-space: pre-wrap;
 }

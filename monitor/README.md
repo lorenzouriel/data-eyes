@@ -1,4 +1,10 @@
-# Monitor
+# Monitor (Deprecated)
+
+> **⚠️ Deprecated.** This Grafana stack is superseded by [`dashboard/`](../dashboard/) — a custom Data Eyes dashboard app with a fleet-wide Main Page, DPA-style per-database drill-down, trend history, and an embedded real-time insights agent, backed by the [`mcp/`](../mcp/) `data-eyes-mcp` servers instead of direct SQL Server connections. Every panel category this stack covers has a live equivalent there (see `.claude/knowledge-base/_static/taxonomy.md` for the full mapping) plus real alerting logic this stack never had (Grafana's "alerting" here was only a provisioned SMTP contact point with zero actual alert rules).
+>
+> `monitor/` still works and is not being deleted in this pass — it stays available through a burn-in period while `dashboard/` proves itself in production, then gets removed in a later cleanup PR. New monitoring work should target `dashboard/`, not this stack. Use `/sql-monitor` or the `dashboard-app` agent for anything dashboard-related going forward; this stack's own troubleshooting docs below are frozen as historical reference.
+
+---
 
 A comprehensive, production-ready monitoring solution for Microsoft SQL Server using Grafana and Prometheus. This solution provides real-time performance tracking, alerting, and historical analysis through pre-built dashboards and automated notifications.
 

@@ -8,6 +8,28 @@
 #   docker compose -f dashboard/docker-compose.yml up -d
 
 services:
+  # Dedicated trend-history repository — never a monitored SQL Server (see
+  # dashboard/repository/init.sql). The backend's collector writes here;
+  # nothing else in the fleet ever does.
+  dashboard-repo:
+    image: postgres:16-alpine
+    container_name: data-eyes-dashboard-repo
+    environment:
+      POSTGRES_DB: data_eyes_dashboard
+      POSTGRES_USER: data_eyes
+      POSTGRES_PASSWORD: ${DASHBOARD_REPO_PASSWORD:-change-me}
+    volumes:
+      - dashboard-repo-data:/var/lib/postgresql/data
+      - ./repository/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    networks:
+      - data-eyes-net
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U data_eyes -d data_eyes_dashboard"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
   dashboard-backend:
     build: ./backend
     image: data-eyes-dashboard-backend
@@ -18,6 +40,9 @@ services:
       - "8090:8090"
     networks:
       - data-eyes-net
+    depends_on:
+      dashboard-repo:
+        condition: service_healthy
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8090/api/health')"]
@@ -41,3 +66,6 @@ services:
 networks:
   data-eyes-net:
     external: true
+
+volumes:
+  dashboard-repo-data:

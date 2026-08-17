@@ -1,6 +1,6 @@
 ---
 name: sql-visual-report
-description: Generate a self-contained HTML report visualizing SQL Server performance tuning, maintenance operations, and index changes with SQL Server red (#CC2927) and Grafana orange (#F46800) brand colors
+description: Generate a self-contained HTML report visualizing SQL Server performance tuning, maintenance operations, and index changes with Data Eyes violet (#4a3aa7) and aqua (#1baf7a) brand colors
 ---
 
 # /sql-visual-report Command
@@ -39,19 +39,19 @@ description: Generate a self-contained HTML report visualizing SQL Server perfor
 
 ## Brand Colors
 
-The report uses SQL Server and Grafana brand colors throughout:
+The report uses the Data Eyes brand palette throughout — reused verbatim from `dashboard/frontend/src/styles.css` (itself the dataviz skill's validated reference palette), not invented separately:
 
 ```css
 :root {
-    /* SQL Server — primary accent */
-    --sql-red: #CC2927;
-    --sql-red-light: #F5E6E6;
-    --sql-red-dark: #8B1A19;
+    /* Data Eyes — primary accent (violet) */
+    --eyes-primary: #4a3aa7;
+    --eyes-primary-light: #ECE9F9;
+    --eyes-primary-dark: #332875;
 
-    /* Grafana — secondary accent */
-    --grafana-orange: #F46800;
-    --grafana-orange-light: #FFF0E5;
-    --grafana-orange-dark: #B34E00;
+    /* Data Eyes — secondary accent (aqua) */
+    --eyes-accent: #1baf7a;
+    --eyes-accent-light: #E3F7EE;
+    --eyes-accent-dark: #12805A;
 
     /* Neutrals */
     --bg-primary: #FAFAFA;
@@ -61,17 +61,17 @@ The report uses SQL Server and Grafana brand colors throughout:
     --text-secondary: #666666;
     --border: #E0E0E0;
 
-    /* Status colors */
-    --status-good: #2E7D32;
-    --status-warn: #F9A825;
-    --status-critical: #CC2927;
+    /* Status colors — match dashboard/frontend's fixed status palette */
+    --status-good: #0CA30C;
+    --status-warn: #FAB219;
+    --status-critical: #D03B3B;
     --status-info: #1565C0;
 
     /* Before/After */
-    --before-bg: #FFF0E5;
-    --before-border: #F46800;
-    --after-bg: #E8F5E9;
-    --after-border: #2E7D32;
+    --before-bg: #ECE9F9;
+    --before-border: #4a3aa7;
+    --after-bg: #E3F7EE;
+    --after-border: #1baf7a;
 }
 ```
 
@@ -110,10 +110,10 @@ Group all collected changes into these categories:
 
 | Category | Icon | Color | What to include |
 |----------|------|-------|-----------------|
-| Performance Diagnosis | `🔍` | `--sql-red` | Wait stats findings, bottleneck identification, methodology step |
-| Configuration Changes | `⚙️` | `--grafana-orange` | MAXDOP, cost threshold, max memory, Query Store, compat level |
-| Index Operations | `📊` | `--sql-red` | CREATE/DROP/REBUILD with table volume, ONLINE/RESUMABLE status |
-| Maintenance Setup | `🔧` | `--grafana-orange` | Ola Hallengren jobs, schedules, backup paths, retention |
+| Performance Diagnosis | `🔍` | `--eyes-primary` | Wait stats findings, bottleneck identification, methodology step |
+| Configuration Changes | `⚙️` | `--eyes-accent` | MAXDOP, cost threshold, max memory, Query Store, compat level |
+| Index Operations | `📊` | `--eyes-primary` | CREATE/DROP/REBUILD with table volume, ONLINE/RESUMABLE status |
+| Maintenance Setup | `🔧` | `--eyes-accent` | Ola Hallengren jobs, schedules, backup paths, retention |
 | Schema Changes | `📋` | `--status-info` | ALTER TABLE, new columns, constraints, type changes |
 | Query Fixes | `⚡` | `--status-good` | Before/after SQL with explanation of improvement |
 
@@ -127,13 +127,13 @@ Generate a self-contained HTML page with these sections:
 
 ### 1. Header Banner
 
-SQL Server red gradient header with:
+Data Eyes violet-to-aqua gradient header with:
 - Report title (from user description or auto-generated)
 - Date and server/database name (from KB if available)
 - SQL Server version and edition badge (from KB header)
 
 ```html
-<header style="background: linear-gradient(135deg, #CC2927 0%, #8B1A19 100%); color: white;">
+<header style="background: linear-gradient(135deg, #4a3aa7 0%, #1baf7a 100%); color: white;">
     <h1>SQL Server Performance Report</h1>
     <div class="badges">
         <span class="badge edition">Enterprise</span>
@@ -145,7 +145,7 @@ SQL Server red gradient header with:
 
 ### 2. Executive Summary
 
-One paragraph: what was done, why, and the outcome. Use Grafana orange accent for key metrics.
+One paragraph: what was done, why, and the outcome. Use the aqua accent (`--eyes-accent`) for key metrics.
 
 ### 3. KPI Dashboard
 
@@ -153,8 +153,8 @@ Large hero numbers in a card grid:
 
 | KPI | Source | Visual |
 |-----|--------|--------|
-| Tables Affected | Count from changes | SQL red card |
-| Indexes Changed | CREATE + DROP + REBUILD count | Grafana orange card |
+| Tables Affected | Count from changes | Violet (`--eyes-primary`) card |
+| Indexes Changed | CREATE + DROP + REBUILD count | Aqua (`--eyes-accent`) card |
 | Config Changes | Parameter count | Neutral card |
 | Risk Level | From `/sql-pr-review` scoring | Color-coded badge |
 | Estimated Impact | From missing index improvement scores | Green/amber card |
@@ -177,7 +177,7 @@ Large hero numbers in a card grid:
 **Table for each index operation:**
 
 ```html
-<div class="index-card" style="border-left: 4px solid var(--sql-red);">
+<div class="index-card" style="border-left: 4px solid var(--eyes-primary);">
     <h4>CREATE INDEX [nix_delivery_status]</h4>
     <div class="table-badge critical">delivery — 36M rows — HIGH</div>
     <div class="details">
@@ -197,7 +197,7 @@ For DROP operations, show the usage stats that justified removal.
 
 ### 6. Configuration Changes (if applicable)
 
-Before/after table with Grafana orange accent:
+Before/after table with an aqua (`--eyes-accent`) accent:
 
 ```html
 <table class="config-diff">
@@ -233,14 +233,14 @@ Visual timeline/calendar showing the 7 Ola Hallengren jobs:
 └──────────┴───────────────────────────────────────┘
 ```
 
-Built with CSS grid, SQL red for critical jobs, Grafana orange for optimization jobs.
+Built with CSS grid, violet (`--eyes-primary`) for critical jobs, aqua (`--eyes-accent`) for optimization jobs.
 
 ### 8. SQL Changes (if applicable)
 
 Before/after SQL blocks with syntax highlighting (pure CSS):
 - SQL keywords: bold
 - Strings: green
-- Numbers: Grafana orange
+- Numbers: aqua (`--eyes-accent`)
 - Comments: gray
 - Changed lines: highlighted background
 
@@ -269,7 +269,7 @@ Styled cards with severity indicators:
 - **No JavaScript libraries** — vanilla JS only for interactivity (collapsible sections, sticky nav)
 - **Responsive** — works on desktop and tablet
 - **Print-friendly** — `@media print` styles included
-- **Dark mode** — `prefers-color-scheme: dark` support with adjusted SQL red and Grafana orange
+- **Dark mode** — `prefers-color-scheme: dark` support with the same dark-mode violet/aqua steps `dashboard/frontend` uses
 - **Sticky navigation** — sidebar or top nav for section jumping
 - **Overflow protection** — `min-width: 0` on flex/grid children, `overflow-wrap: break-word`
 
@@ -278,10 +278,10 @@ Styled cards with severity indicators:
 ```css
 @media (prefers-color-scheme: dark) {
     :root {
-        --sql-red: #E85350;
-        --sql-red-light: #3D1A1A;
-        --grafana-orange: #FF8533;
-        --grafana-orange-light: #3D2A1A;
+        --eyes-primary: #9085e9;
+        --eyes-primary-light: #2A2350;
+        --eyes-accent: #199e70;
+        --eyes-accent-light: #17352A;
         --bg-primary: #1A1A1A;
         --bg-card: #252525;
         --bg-code: #2D2D2D;

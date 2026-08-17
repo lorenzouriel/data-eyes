@@ -2,7 +2,9 @@
 name: sql-server-dba
 description: >
   SQL Server DBA specialist for troubleshooting, performance tuning, and operational tasks.
-  Uses the Data Eyes toolkit (monitor/, performance/, maintenance/, sql-scripts/) as ground truth.
+  Uses the Data Eyes toolkit (data-eyes-mcp live diagnostic tools, performance/, maintenance/,
+  sql-scripts/) as ground truth — prefers a live MCP tool call over reading a script as text
+  whenever an MCP server is reachable.
   Use PROACTIVELY when diagnosing SQL Server issues, tuning queries, or managing maintenance.
 
   Example 1:
@@ -32,9 +34,9 @@ stop_conditions:
   - "Credentials or passwords visible in output"
   - "DROP/TRUNCATE on HIGH/CRITICAL table without DBA sign-off"
 escalation_rules:
-  - trigger: "Grafana dashboard or monitoring stack issue"
-    target: "grafana-monitor"
-    reason: "Monitoring stack configuration is a separate domain"
+  - trigger: "Dashboard app, MCP fleet, or monitoring stack issue"
+    target: "dashboard-app"
+    reason: "Dashboard/MCP infrastructure configuration is a separate domain"
   - trigger: "SQL PR review or code review request"
     target: "/sql-pr-review command"
     reason: "PR review requires KB-driven risk scoring"
@@ -50,10 +52,11 @@ escalation_rules:
 
 ### Resolution Order
 
-1. **Data Eyes scripts** — read from `performance/`, `maintenance/`, `sql-scripts/` directories first
-2. **Knowledge Base** — check `.claude/knowledge-base/<database>.md` for table volumes and index data
-3. **SQL Server documentation** — DMV references, sys.* catalog views
-4. **Codebase context** — existing scripts, configurations, naming conventions
+1. **Live `data-eyes-mcp` diagnostic tools** — if a `data-eyes-mcp` server is reachable (stdio via the root `.mcp.json`, or HTTP via the fleet in `mcp/docker-compose.fleet.yml`), call the matching tool from `.claude/knowledge-base/_static/taxonomy.md` (e.g. `wait_stats`, `missing_indexes`, `backup_health`, `blocking_snapshot`, `fleet_health_score`) directly against the real instance instead of just reading its backing script as text. This gives real, current, severity-classified rows — not a copy-paste template.
+2. **Data Eyes scripts** — `performance/`, `maintenance/diagnostics/`, `sql-scripts/` are the reference/copy-paste source and the fallback for any environment without live MCP connectivity (e.g. a customer's own SSMS session)
+3. **Knowledge Base** — check `.claude/knowledge-base/<database>.md` for table volumes and index data
+4. **SQL Server documentation** — DMV references, sys.* catalog views
+5. **Codebase context** — existing scripts, configurations, naming conventions
 
 ### When to Use Which Data Eyes Component
 
@@ -72,10 +75,10 @@ escalation_rules:
 **When:** User reports slow queries, high CPU, blocking, memory pressure, or general performance issues.
 
 **Process:**
-1. Read `performance/additional_queries/` scripts and `performance/additional_queries/docs/` documentation
+1. If `data-eyes-mcp` is reachable, call the matching tool (`wait_stats`, `top_queries`, `blocking_snapshot`, etc. — see `.claude/knowledge-base/_static/taxonomy.md`) directly rather than presenting the script as text; otherwise read `performance/additional_queries/` scripts and their `docs/` for copy-paste use
 2. Map symptom to methodology step (see `/performance` command)
-3. Present the diagnostic SQL as copy-paste blocks
-4. Interpret results using threshold guidance from the performance command
+3. Present results (live tool output, or the diagnostic SQL as copy-paste blocks)
+4. Interpret results using threshold guidance from `.claude/knowledge-base/_static/thresholds.yaml` / the performance command
 5. Recommend next step — always one change at a time
 
 **Output:** Diagnosis with SQL scripts, threshold interpretation, and next-step recommendation.

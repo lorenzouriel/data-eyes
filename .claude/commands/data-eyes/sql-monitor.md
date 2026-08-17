@@ -1,141 +1,129 @@
 ---
 name: sql-monitor
-description: Grafana SQL Server monitoring stack — diagnose issues, explain dashboards, configure alerts
+description: Data Eyes dashboard app + MCP fleet — diagnose issues, explain tabs, configure the fleet registry
 ---
 
-# /monitor Command
+# /sql-monitor Command
 
-> Diagnose and configure the Grafana SQL Server monitoring stack
+> Diagnose and configure the Data Eyes dashboard app (`dashboard/`) and the MCP fleet it depends on (`mcp/`)
+
+`monitor/`'s Grafana stack is deprecated — see `monitor/README.md`. This command now targets its replacement: the custom `dashboard/` app plus the `data-eyes-mcp` servers in `mcp/`.
 
 ## Usage
 
 ```
-/monitor <describe the issue or question>
+/sql-monitor <describe the issue or question>
 ```
 
 ## Examples
 
 ```
-/monitor "Grafana is not showing any data"
-/monitor "how do I add an email alert for buffer pool?"
-/monitor "what does the Page Life Expectancy panel show?"
-/monitor "the stack won't start — container error"
-/monitor "restart the monitoring stack"
-/monitor "how do I connect to a different SQL Server?"
-/monitor "what metrics are available in the dashboard?"
-/monitor "set up Gmail SMTP for alert notifications"
+/sql-monitor "the dashboard says prod1 is unreachable"
+/sql-monitor "trend strips show 'unavailable' — is the repository down?"
+/sql-monitor "insights feed is empty, is that expected?"
+/sql-monitor "add our new reporting replica to the fleet"
+/sql-monitor "the dashboard-backend container won't start"
+/sql-monitor "what does the Wait Time Analysis tab show?"
+/sql-monitor "restart the dashboard stack"
 ```
 
 ---
 
-## What This Skill Does
+## What This Command Does
 
-1. Reads the monitoring stack configuration files at invocation time — configs are always the ground truth
-2. Maps your issue or question to the right component (Docker, datasource, Grafana config, dashboard, alerts)
+1. Reads the dashboard/MCP configuration at invocation time — configs are always the ground truth
+2. Maps your issue or question to the right component (fleet registry, MCP connectivity, backend, repository, insights agent, or a specific tab)
 3. Explains the fix, config change, or command needed
-4. Shows exact YAML/INI changes or `docker-compose` commands
+4. Shows exact YAML/`.env`-variable-name changes or `docker compose` commands
 5. Offers to run Docker commands after explicit user confirmation
+
+This command is a thin front door onto the `dashboard-app` agent — for anything beyond a quick diagnosis, it delegates there.
 
 ---
 
 ## Stack Overview
 
-The monitor stack runs as Docker containers:
-
 ```
-┌─────────────────────────────────────────┐
-│         monitor/                        │
-├─────────────────────────────────────────┤
-│  docker-compose.yml   → service defs    │
-│  grafana/                               │
-│  ├── grafana.ini      → Grafana config  │
-│  ├── datasources.yml  → SQL Server conn │
-│  ├── dashboard-provider.yml             │
-│  ├── alerts-and-notifiers.yml           │
-│  └── dashboards/                        │
-│      ├── sqlserver.json  (comprehensive)│
-│      └── sql_server_simplified.json     │
-│  docs/                → panel docs      │
-└─────────────────────────────────────────┘
+┌───────────────────────────────────────────────────────────┐
+│                     data-eyes-net (Docker network)         │
+│                                                             │
+│  dashboard/                          mcp/                  │
+│  ├── docker-compose.yml              ├── docker-compose.yml (single instance)
+│  │   ├── dashboard-repo   (Postgres, trend history)         │
+│  │   ├── dashboard-backend (FastAPI, :8090)                 │
+│  │   └── dashboard-frontend (nginx, :8091)                  │
+│  └── backend/instances.yaml — fleet registry                └── docker-compose.fleet.yml
+│      (name → mcp_url per instance)                              (data-eyes-mcp-dev/staging/prod1/prod2, :8081-8084)
+└───────────────────────────────────────────────────────────┘
 ```
 
-**Access:** Grafana at `http://localhost:3000`
-**Default credentials:** Set via `.env` file (GF_SECURITY_ADMIN_USER / GF_SECURITY_ADMIN_PASSWORD)
+**Access:** Dashboard at `http://localhost:8091` (or wherever `dashboard-frontend` is exposed)
+**Auth:** Single admin credential — set via `dashboard/backend/.env` (`DASHBOARD_ADMIN_USERNAME` / `DASHBOARD_ADMIN_PASSWORD`)
 
 ---
 
 ## Process
 
-### Step 1: Read Monitor Configuration
+### Step 1: Read Configuration
 
 Always read these core files first:
 ```
-Read("monitor/docker-compose.yml")
-Read("monitor/grafana/datasources.yml")
-Read("monitor/grafana/grafana.ini")
-Read("monitor/grafana/alerts-and-notifiers.yml")
-Read("monitor/README.md")
+Read("dashboard/backend/instances.yaml")
+Read("dashboard/docker-compose.yml")
+Read("mcp/docker-compose.fleet.yml")
+Read("dashboard/README.md")
 ```
 
-For dashboard-related questions, also read:
+For tab/metric questions, also read:
 ```
-Read("monitor/grafana/dashboards/sqlserver.json")       — comprehensive dashboard
-Read("monitor/grafana/dashboards/sql_server_simplified.json") — simplified dashboard
-Glob("monitor/docs/*.md") then Read matching doc files
+Read(".claude/knowledge-base/_static/taxonomy.md")   — category → tab → script → MCP tool
+Read(".claude/knowledge-base/_static/thresholds.yaml") — severity bands
 ```
 
 ### Step 2: Map Problem to Category
 
 | User says... | Focus on | Files to check |
 |---|---|---|
-| not showing data, no metrics, empty panels, blank dashboard | SQL Server datasource connection | `datasources.yml` |
-| won't start, container fails, port already in use, exit code | Service configuration, dependencies | `docker-compose.yml` |
-| alert, email notification, SMTP, Gmail, alert channel | Alert notifier + SMTP config | `alerts-and-notifiers.yml` + `grafana.ini` |
-| panel, dashboard, what does X mean, metric explanation | Panel documentation | matching `monitor/docs/*.md` |
-| add panel, new metric, custom SQL query | Grafana JSON model, SQL datasource | `sqlserver.json` as reference |
-| Azure SSO, Active Directory, authentication | Grafana auth config | `grafana.ini` — Azure SSO section |
-| slow dashboard, refresh too fast/slow, performance | Refresh intervals, query optimization | `grafana.ini` + dashboard JSON |
-| change SQL Server, different server, new connection | Datasource configuration | `datasources.yml` |
-| restart, start, stop, update stack | Docker Compose commands | `docker-compose.yml` |
+| instance unreachable, unknown status, no data for a tab | MCP connectivity for that instance | `instances.yaml`, the matching `data-eyes-mcp-*` container, `data-eyes-net` network |
+| won't start, container fails, port already in use | Docker Compose service config | `dashboard/docker-compose.yml`, `mcp/docker-compose.fleet.yml` |
+| trend strip says "unavailable" | Repository connectivity | `dashboard/backend/.env` → `REPOSITORY_DSN` (name only), `dashboard-repo` container health |
+| insights feed empty, no "Explain in depth" output | Insights agent config | `dashboard/backend/.env` → `ANTHROPIC_API_KEY` (name only), backend logs |
+| add/remove/rename an instance | Fleet registry | `instances.yaml` + `mcp/docker-compose.fleet.yml` + `.env.<name>` |
+| what does tab/panel X show, what's normal | Taxonomy + thresholds | `.claude/knowledge-base/_static/taxonomy.md`, `thresholds.yaml` |
+| restart, start, stop, update stack | Docker Compose commands | both compose files |
 
 ### Step 3: Output by Category
 
-**Datasource issues (no data):**
-- Read `datasources.yml` and identify the SQL Server connection parameters
-- Check: server address, port, database, auth method, encrypted connection setting
-- Show the exact YAML section that needs to change
-- Explain: "Edit `monitor/grafana/datasources.yml`, then restart the Grafana container"
-- Provide the restart command — ask confirmation before running
+**Instance unreachable:**
+- Read `instances.yaml`, confirm the instance's `mcp_url` matches a running `data-eyes-mcp-*` container
+- Check `docker network ls` includes `data-eyes-net` and both stacks joined it
+- Show the exact fix, ask confirmation before restarting anything
 
 **Docker stack issues (won't start):**
-- Read `docker-compose.yml` and identify service configuration
-- Check: port conflicts (3000 for Grafana), volume mounts, env_file reference
-- Show the relevant `docker-compose` commands:
+- Read the relevant compose file, check port conflicts and `env_file` references
+- Show the relevant commands:
   ```
-  docker-compose -f monitor/docker-compose.yml logs grafana
-  docker-compose -f monitor/docker-compose.yml down
-  docker-compose -f monitor/docker-compose.yml up -d
+  docker compose -f mcp/docker-compose.fleet.yml logs data-eyes-mcp-<name>
+  docker compose -f dashboard/docker-compose.yml logs dashboard-backend
+  docker compose -f dashboard/docker-compose.yml restart dashboard-backend
   ```
-- Ask confirmation before running any `docker-compose` command
+- Ask confirmation before running any `docker compose` command
 
-**Alert/notification issues:**
-- Read `alerts-and-notifiers.yml` and `grafana.ini`
-- For Gmail SMTP: explain the required `grafana.ini` [smtp] section settings
-- Show the exact INI/YAML changes needed
-- Remind: changes to `grafana.ini` require a container restart
-- Provide the restart command — ask confirmation before running
+**Trend history / insights agent:**
+- Confirm whether `REPOSITORY_DSN` / `ANTHROPIC_API_KEY` are set (variable names only — never display values)
+- Unset is a valid, intentional no-op state, not a bug — both features degrade gracefully by design
+- If set but not working, check `dashboard-backend` logs for the actual connection/auth error
 
-**Dashboard/panel questions:**
-- Read the matching `monitor/docs/*.md` file for the panel topic
-- Explain in plain language: what the metric measures, normal range, warning thresholds
-- For "how do I add a panel": explain the Grafana JSON model structure
-  - Important: Direct edits to `dashboards/*.json` are overwritten on container restart
-  - Recommend: edit via Grafana UI, then export to replace the JSON file
+**Fleet registry changes:**
+- For a new instance: add a service to `mcp/docker-compose.fleet.yml` (copy the `x-mcp-service` anchor, next free port) and a `.env.<name>` file, plus a matching `instances.yaml` entry
+- Show the full diff, ask confirmation, then offer the `docker compose up -d` commands
+
+**Tab/metric questions:**
+- Look up the category in `taxonomy.md`, read the linked source doc and the relevant band in `thresholds.yaml`
+- Explain in plain language: what it measures, normal range, warning thresholds
 
 **Docker commands (restart/stop/start):**
-- Show the exact command first
-- Explain what it will do
-- Ask: "Ready to run? (yes/no)"
+- Show the exact command first, explain what it will do, ask "Ready to run? (yes/no)"
 - ONLY run after explicit "yes"
 
 ---
@@ -143,47 +131,27 @@ Glob("monitor/docs/*.md") then Read matching doc files
 ## Common Commands Reference
 
 ```bash
-# Start the stack
-docker-compose -f monitor/docker-compose.yml up -d
+# One-time, before either stack
+docker network create data-eyes-net
 
-# Stop the stack
-docker-compose -f monitor/docker-compose.yml down
+# MCP fleet
+docker compose -f mcp/docker-compose.fleet.yml up -d
+docker compose -f mcp/docker-compose.fleet.yml ps
+docker compose -f mcp/docker-compose.fleet.yml logs -f data-eyes-mcp-prod1
 
-# Restart Grafana only (after config changes)
-docker-compose -f monitor/docker-compose.yml restart grafana
-
-# View Grafana logs
-docker-compose -f monitor/docker-compose.yml logs -f grafana
-
-# Check container status
-docker-compose -f monitor/docker-compose.yml ps
-
-# Force recreate (after docker-compose.yml changes)
-docker-compose -f monitor/docker-compose.yml up -d --force-recreate
+# Dashboard app
+docker compose -f dashboard/docker-compose.yml up -d
+docker compose -f dashboard/docker-compose.yml restart dashboard-backend
+docker compose -f dashboard/docker-compose.yml logs -f dashboard-backend
+docker compose -f dashboard/docker-compose.yml ps
 ```
-
----
-
-## Dashboard Panel Documentation Map
-
-| Topic | Doc file |
-|---|---|
-| General overview, uptime, sessions, connections | `monitor/docs/general.md` |
-| Buffer pool, index hit rate, PLE, memory grants | `monitor/docs/buffer_index_management.md` |
-| Database file sizes, space usage, transaction log | `monitor/docs/database_space_usage.md` |
-| SQL Agent jobs, execution status, failures | `monitor/docs/jobs_monitoring.md` |
-| Top 10 slow queries, cache hit rate, latency | `monitor/docs/query_perfomance.md` |
-| CPU, I/O, wait statistics | `monitor/docs/server_performance.md` |
-| Locks, blocking, other metrics | `monitor/docs/other_metrics.md` |
 
 ---
 
 ## Important Rules
 
-- NEVER display the contents of the `.env` file — it contains secrets
-  - Only reference variable names (e.g., `GF_SECURITY_ADMIN_USER`) and explain what they control
-- NEVER directly edit `monitor/grafana/dashboards/*.json` in production — changes are overwritten on container restart
-  - For persistent dashboard changes: edit via Grafana UI → save → export JSON → replace the file
-- Alert channel changes require restarting the Grafana container to take effect
-- The stack uses `env_file: .env` — if `.env` doesn't exist, the containers will fail to start
-- Always show the exact command before running it; never run `docker-compose` commands silently
+- NEVER display the contents of any `.env` file — it contains secrets (SQL Server credentials, session key, repository password, Anthropic API key)
+  - Only reference variable names and explain what they control
+- An unset `REPOSITORY_DSN` or `ANTHROPIC_API_KEY` is a deliberate graceful-degradation state — confirm with the user whether the feature is actually meant to be enabled before treating it as broken
+- Always show the exact command before running it; never run `docker compose` commands silently
+- For anything beyond a quick diagnosis, hand off to the `dashboard-app` agent

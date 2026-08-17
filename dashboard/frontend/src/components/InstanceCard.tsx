@@ -1,11 +1,14 @@
+import { Link } from "react-router-dom";
 import type { InstanceHealth } from "../types";
 import StatusBadge from "./StatusBadge";
+import TrendStrip from "./TrendStrip";
 
 // Matches .claude/knowledge-base/_static/taxonomy.md's category names —
 // keep these two lists in sync if new MCP diagnostic tools are added.
 const CATEGORY_LABELS: Record<string, string> = {
   wait_stats: "Wait Stats",
   index_fragmentation: "Index Fragmentation",
+  db_space: "Disk Space",
   backup_health: "Backup Health",
   checkdb_health: "CHECKDB",
   blocking: "Blocking",
@@ -15,7 +18,10 @@ const CATEGORY_LABELS: Record<string, string> = {
 
 export default function InstanceCard({ instance }: { instance: InstanceHealth }) {
   return (
-    <div className={`instance-card instance-card--${instance.overall_severity.toLowerCase()}`}>
+    <Link
+      to={`/instances/${encodeURIComponent(instance.name)}`}
+      className={`instance-card instance-card--${instance.overall_severity.toLowerCase()}`}
+    >
       <div className="instance-card-header">
         <div>
           <h2>{instance.label}</h2>
@@ -43,10 +49,11 @@ export default function InstanceCard({ instance }: { instance: InstanceHealth })
               ))}
             </ul>
           )}
+          <TrendStrip instanceName={instance.name} category="overall" hours={24} />
         </>
       ) : (
         <div className="instance-error">{instance.error ?? "Instance unreachable"}</div>
       )}
-    </div>
+    </Link>
   );
 }

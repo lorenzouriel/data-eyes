@@ -10,8 +10,9 @@ Catalog of every script in the toolkit, its read-only/write nature, and whether 
 | Unused indexes | `unused_indexes.sql` | `unused_indexes.json.sql` | `unused_indexes` |
 | Wait statistics | `wait_statistics.sql` | `wait_statistics.json.sql` | `wait_stats` |
 | Stale statistics | `update_statistics.sql` | `update_statistics.json.sql` | `stale_statistics` |
+| Top queries by duration | — (structured form only, see below) | `top_queries.json.sql` | `top_queries` |
 
-All four `.json.sql` copies emit `severity` (from [[thresholds]]) and `FOR JSON AUTO` output; the original `.sql` files are unchanged and remain the copy-paste/SSMS form.
+The first four `.json.sql` copies emit `severity` (from [[thresholds]]) and `FOR JSON AUTO` output alongside an unchanged plain `.sql` original (copy-paste/SSMS form). `top_queries.json.sql` was authored directly in structured form during Phase 3 — it closed a gap where this logic previously existed only as inline Grafana panel SQL, so there was no pre-existing plain `.sql` to keep a sibling of.
 
 ## maintenance/ — mixed
 
@@ -28,6 +29,7 @@ All four `.json.sql` copies emit `severity` (from [[thresholds]]) and `FOR JSON 
 | `diagnostics/blocking_chain_snapshot.sql` | Read-only, live observation | `blocking_snapshot` |
 | `diagnostics/ag_sync_health.sql` | Read-only, live observation | `ag_health` |
 | `diagnostics/job_failure_scan.sql` | Read-only, live observation | `job_health` |
+| `diagnostics/db_space_check.sql` | Read-only, live observation | `db_space` |
 
 The `diagnostics/` folder is what closes the gap identified in the rearchitecture plan: before this pass, `maintenance/` had zero live "is it healthy right now" queries — only action scripts.
 

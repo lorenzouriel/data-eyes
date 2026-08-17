@@ -193,6 +193,8 @@ def explain_policy() -> dict:
             "unused_indexes",
             "stale_statistics",
             "index_fragmentation",
+            "top_queries",
+            "db_space",
             "backup_health",
             "checkdb_health",
             "blocking_snapshot",

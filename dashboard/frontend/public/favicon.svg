@@ -1,0 +1,21 @@
+<svg viewBox="0 0 32 32" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Data Eyes">
+  <defs>
+    <linearGradient id="eyesFaviconGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#4a3aa7"/>
+      <stop offset="100%" stop-color="#1baf7a"/>
+    </linearGradient>
+  </defs>
+
+  <!-- Cylinder base: bottom rim peeking out below the body -->
+  <ellipse cx="16" cy="24" rx="11" ry="4" fill="url(#eyesFaviconGradient)"/>
+  <!-- Body: covers the top half of the base ellipse, leaving its bottom arc as the rounded foot -->
+  <rect x="5" y="7" width="22" height="17" fill="url(#eyesFaviconGradient)"/>
+  <!-- Stacked-plate divider lines (front bands of the cylinder) -->
+  <path d="M6 13 Q16 17 26 13" fill="none" stroke="#ffffff" stroke-opacity="0.55" stroke-width="1.3" stroke-linecap="round"/>
+  <path d="M6 19 Q16 23 26 19" fill="none" stroke="#ffffff" stroke-opacity="0.55" stroke-width="1.3" stroke-linecap="round"/>
+  <!-- Top rim of the cylinder, doubling as the eye: "a database that watches itself" -->
+  <ellipse cx="16" cy="7" rx="11" ry="4" fill="url(#eyesFaviconGradient)"/>
+  <ellipse cx="16" cy="7" rx="11" ry="4" fill="none" stroke="#ffffff" stroke-opacity="0.35" stroke-width="1"/>
+  <circle cx="16" cy="7" r="2.6" fill="#ffffff"/>
+  <circle cx="16" cy="7" r="1.15" fill="#14122a"/>
+</svg>

@@ -1,9 +1,12 @@
 import { useEffect, useState, useCallback } from "react";
 import { useAuth } from "../auth/AuthContext";
-import { getFleetHealth } from "../api";
+import { getFleetHealth, fleetInsightStreamUrl } from "../api";
 import type { FleetHealth } from "../types";
 import StatusBadge from "../components/StatusBadge";
 import InstanceCard from "../components/InstanceCard";
+import PageInsight from "../components/PageInsight";
+import InsightsFeed from "../components/InsightsFeed";
+import Logo from "../components/Logo";
 
 const POLL_INTERVAL_MS = 30_000;
 
@@ -34,7 +37,7 @@ export default function MainPage() {
     <div className="page">
       <header className="topbar">
         <div className="topbar-brand">
-          <div className="brand-mark" aria-hidden="true" />
+          <Logo className="brand-mark" />
           <span className="brand-name">Data Eyes</span>
         </div>
         <div className="topbar-right">
@@ -55,6 +58,10 @@ export default function MainPage() {
         {error && <div className="banner-error">{error}</div>}
 
         {!fleet && !error && <div className="page-loading">Loading fleet…</div>}
+
+        {fleet && <PageInsight streamUrl={fleetInsightStreamUrl()} />}
+
+        <InsightsFeed />
 
         {fleet && (
           <div className="instance-grid">

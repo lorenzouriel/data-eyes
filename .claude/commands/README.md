@@ -8,7 +8,7 @@
 |---------|-------------|
 | `/sql-document` | Generate database documentation from catalog views |
 | `/sql-maintenance` | Set up maintenance using Ola Hallengren scripts |
-| `/sql-monitor` | Diagnose and configure Grafana monitoring stack |
+| `/sql-monitor` | Diagnose and configure the Data Eyes dashboard app + MCP fleet |
 | `/sql-performance` | Systematic performance tuning (10-step methodology) |
 | `/sql-guidelines` | Review SQL against clean code guidelines |
 | `/sql-scripts` | Find and adapt scripts from the 80+ script library |
@@ -24,7 +24,7 @@
 
 | Command | Description |
 |---------|-------------|
-| `/sql-visual-report` | Self-contained HTML report for performance tuning and maintenance changes. SQL Server red (`#CC2927`) + Grafana orange (`#F46800`) branding. Supports `--branch-diff`, `--kb`, session context. |
+| `/sql-visual-report` | Self-contained HTML report for performance tuning and maintenance changes. Data Eyes violet (`#4a3aa7`) + aqua (`#1baf7a`) branding. Supports `--branch-diff`, `--kb`, session context. |
 
 ## Project Management (3)
 
@@ -62,8 +62,8 @@
 # Set up maintenance
 /maintenance "weekly index optimization for all user databases"
 
-# Grafana troubleshooting
-/monitor "dashboard not showing data"
+# Dashboard app / MCP fleet troubleshooting
+/sql-monitor "the dashboard says prod1 is unreachable"
 ```
 
 ## Agents
@@ -71,6 +71,6 @@
 | Agent | Description |
 |-------|-------------|
 | `sql-server-dba` | SQL Server troubleshooting, performance tuning, maintenance |
-| `grafana-monitor` | Grafana monitoring stack configuration and diagnostics |
+| `dashboard-app` | Data Eyes dashboard app + MCP fleet configuration and diagnostics |
 
 Agents are in `.claude/agents/` and are automatically available via the Agent tool.

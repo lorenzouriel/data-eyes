@@ -1,22 +1,32 @@
 # Data Eyes — SQL Server Monitoring, Performance & Maintenance Toolkit
 
-Open-source toolkit for complete visibility and best-practice automation on Microsoft SQL Server.
+Open-source toolkit for complete visibility and best-practice automation on Microsoft SQL Server. The primary way to *see* a fleet is now the custom `dashboard/` app (a DPA-style Main Page + per-database drill-down + embedded insights agent), backed by the `mcp/` `data-eyes-mcp` servers — not direct SQL connections. `monitor/`'s Grafana stack is deprecated (kept for a burn-in period, see `monitor/README.md`) but no longer the primary interface.
 
 ## Repository Structure
 ```
 data-eyes/
-├── monitor/              Grafana + Prometheus monitoring stack (Docker)
+├── dashboard/            Custom Data Eyes dashboard app (replaces monitor/'s Grafana stack)
+│   ├── backend/          FastAPI — fleet health rollup, auth, trend collector, insights agent
+│   ├── frontend/         React + TS + Vite — Main Page, per-database tabbed drill-down
+│   ├── repository/       Schema for the dedicated trend-history Postgres DB
+│   └── docker-compose.yml
+├── mcp/                  data-eyes-mcp server — MCP tools consumed by the dashboard AND Claude Code
+│   ├── src/data_eyes_mcp/   generic tools (tools.py) + DBA diagnostic tools (dba_tools.py, 11 tools)
+│   ├── docker-compose.yml         single instance
+│   └── docker-compose.fleet.yml   one container per monitored instance (dev/staging/prod1/prod2)
+├── monitor/              DEPRECATED — Grafana + Prometheus monitoring stack (Docker); see dashboard/
 │   ├── docker-compose.yml
 │   ├── grafana/          dashboards, datasources, alerts, config
 │   └── docs/             panel documentation (8 topic files)
 ├── performance/          10-step performance tuning methodology
 │   ├── performance_tuning_workbook.xlsx
-│   └── additional_queries/   4 diagnostic SQL scripts + docs
+│   └── additional_queries/   9 diagnostic SQL scripts (severity-classified *.json.sql + originals) + docs
 ├── maintenance/          Ola Hallengren maintenance automation
 │   ├── playbook.sql
 │   ├── sql_agent_schedule_playbook.sql
-│   └── use_cases/        35+ scenarios (backup, integrity, index)
-├── sql-scripts/          80+ reusable DBA scripts across 18 topics
+│   ├── use_cases/        35+ scenarios (backup, integrity, index)
+│   └── diagnostics/      7 live read-only diagnostic scripts (backup, CHECKDB, fragmentation, blocking, AG, jobs, space) + docs
+├── sql-scripts/          84 reusable DBA scripts across 18 topics
 │   ├── audit/            backup_recovery/   custom_alert_emails/
 │   ├── database_size/    free_space/         functions/
 │   ├── helps/            index/              lock/
@@ -26,9 +36,11 @@ data-eyes/
 │   └── README.md
 └── .claude/
     ├── settings.json
-    ├── commands/data-eyes/   slash commands
-    ├── agents/               specialist agents
-    └── knowledge-base/       database volume KBs
+    ├── commands/data-eyes/   12 slash commands
+    ├── agents/               sql-server-dba, dashboard-app
+    └── knowledge-base/
+        ├── _static/          shared static KB: thresholds.yaml, taxonomy.md, naming-conventions.md, methodology.md, scripts-index.md
+        └── <database>.md     per-database volume/index KBs (built by /sql-kb)
 ```
 
 ## Key Conventions
@@ -37,7 +49,8 @@ data-eyes/
 - Scripts that CREATE/ALTER/DROP objects require explicit user confirmation
 - Connection via $MSSQL_CONNECTION env var or manual credential prompt
 - Ola Hallengren parameters use @Databases, @Directory, @CleanupTime etc.
-- Monitor stack uses Docker Compose with .env for secrets (never display .env contents)
+- Prefer a live `data-eyes-mcp` tool call over reading a script as text whenever an MCP server is reachable — scripts remain the reference/copy-paste source, not the primary path (see `sql-server-dba` agent's Knowledge Resolution order)
+- `dashboard/` and `mcp/` use Docker Compose with `.env` for secrets (never display .env contents); `monitor/`'s stack still does too, while it remains in its deprecation burn-in period
 
 ## SQL Naming Standards (Data Eyes Guidelines)
 
@@ -56,26 +69,28 @@ data-eyes/
 |---------|---------|
 | /sql-document | Generate database documentation from catalog views |
 | /sql-maintenance | Set up maintenance using Ola Hallengren scripts |
-| /sql-monitor | Diagnose and configure Grafana monitoring stack |
+| /sql-monitor | Diagnose and configure the Data Eyes dashboard app + MCP fleet |
 | /sql-performance | Systematic performance tuning (10-step methodology) |
 | /sql-guidelines | Review SQL against clean code guidelines |
-| /sql-scripts | Find and adapt scripts from the 80+ script library |
+| /sql-scripts | Find and adapt scripts from the 84-script library |
 | /sql-kb | Build knowledge base for a database (volumes, indexes) |
 | /sql-pr-review | Review SQL changes against KB + guidelines + performance rules |
-| /sql-visual-report | Generate HTML report for performance/maintenance changes (SQL Server red + Grafana orange) |
+| /sql-visual-report | Generate HTML report for performance/maintenance changes (Data Eyes violet + aqua) |
 | /status | Project health report — components, monitor stack, KB freshness |
 | /sync-context | Update CLAUDE.md with current repo structure |
 | /memory | Save valuable DBA session insights to storage |
 
 ## Knowledge Base
 
-Database-specific knowledge bases live in .claude/knowledge-base/<database-name>.md.
-Built by /sql-kb, consumed by /sql-pr-review. Contains:
-- Table volumes with SMALL/MEDIUM/HIGH/CRITICAL classification
-- Existing index inventory with usage stats
-- Missing index hints from DMV
-- Unused index candidates
-- SQL Server version/edition capabilities
+Two layers:
+
+- **Static domain KB** (`.claude/knowledge-base/_static/`) — thresholds, taxonomy, naming conventions, methodology, and the scripts index. Single source of truth for severity bands and the category ↔ tab ↔ script ↔ MCP-tool routing table; consumed by the `data-eyes-mcp` diagnostic tools, the `dashboard/` backend's health rollup, and the `sql-server-dba`/`dashboard-app` agents alike.
+- **Per-database KB** (`.claude/knowledge-base/<database-name>.md`) — built by /sql-kb, consumed by /sql-pr-review. Contains:
+  - Table volumes with SMALL/MEDIUM/HIGH/CRITICAL classification
+  - Existing index inventory with usage stats
+  - Missing index hints from DMV
+  - Unused index candidates
+  - SQL Server version/edition capabilities
 
 ## Safety Rules
 

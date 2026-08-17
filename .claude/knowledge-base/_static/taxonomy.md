@@ -15,17 +15,12 @@ Maps every DPA-style category to its script, MCP tool, and (for the future dashb
 | Blocking / sessions | Sessions / Blocking | `maintenance/diagnostics/blocking_chain_snapshot.sql` | `blocking_snapshot` | `maintenance/diagnostics/docs/blocking_chain_snapshot.md`, `monitor/docs/database_space_usage.md` (Active Locks) |
 | AG / replica sync health | AG (conditional tab) | `maintenance/diagnostics/ag_sync_health.sql` | `ag_health` | `monitor/docs/availability_groups.md` |
 | SQL Agent job health | Configuration / Alerts | `maintenance/diagnostics/job_failure_scan.sql` | `job_health` | `monitor/docs/jobs_monitoring.md` |
-| Top SQL (slow/costly queries) | Top SQL | *not yet extracted — see gap below* | *pending* | `monitor/docs/query_perfomance.md`, `monitor/docs/other_metrics.md` |
-| Storage / disk space | Storage / Disk Space | *not yet extracted — see gap below* | *pending* | `monitor/docs/database_space_usage.md` |
+| Top SQL (slow/costly queries) | Top SQL | `performance/additional_queries/top_queries.json.sql` | `top_queries` | `performance/additional_queries/docs/top_queries.md`, `monitor/docs/query_perfomance.md`, `monitor/docs/other_metrics.md` |
+| Storage / disk space | Storage | `maintenance/diagnostics/db_space_check.sql` | `db_space` | `maintenance/diagnostics/docs/db_space_check.md`, `monitor/docs/database_space_usage.md` |
 
-## Known gaps (tracked, not yet closed)
+## Closed gaps
 
-Two categories exist today only as inline Grafana panel SQL in `monitor/dashboards/sqlserver.json` and prose in `monitor/docs/`, with no standalone script or MCP tool yet:
-
-- **Top SQL** — top CPU/duration/logical-reads queries (`monitor/docs/query_perfomance.md`, `monitor/docs/other_metrics.md`). Needs a `performance/additional_queries/top_queries.json.sql` + a `top_queries` MCP tool.
-- **Storage / disk space** — per-database/file size, free space, drive space (`monitor/docs/database_space_usage.md`). Needs a `maintenance/diagnostics/db_space_check.sql` + a `db_space` MCP tool.
-
-These are scoped for the dashboard-app phase (when the "Top SQL" and "Storage" tabs are actually built), not part of this knowledge-base/MCP foundation pass.
+Top SQL and Storage previously existed only as inline Grafana panel SQL in `monitor/dashboards/sqlserver.json` with no standalone script or MCP tool — closed in the Phase 3 (per-database drill-down) pass. `top_queries` is deliberately excluded from `fleet_health_score`'s rollup (analysis category, not an operational-risk gate); `db_space` is included (disk exhaustion is a real fleet-health signal).
 
 ## Health rollup convention
 
