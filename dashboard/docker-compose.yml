@@ -1,16 +1,17 @@
 # Data Eyes dashboard — replaces monitor/'s Grafana stack.
 #
-# Joins the shared data-eyes-net network so the backend can reach each
-# instance's data-eyes-mcp server by service name (see
-# mcp/docker-compose.fleet.yml, which must be created and running first):
-#   docker network create data-eyes-net
-#   docker compose -f mcp/docker-compose.fleet.yml up -d
+# All three services talk to each other over Compose's own default network
+# (no external network needed) — the backend connects directly to each
+# monitored SQL Server (app/mssql_client.py), not through any MCP container,
+# so there's nothing outside this compose file for it to reach.
 #   docker compose -f dashboard/docker-compose.yml up -d
 
 services:
-  # Dedicated trend-history repository — never a monitored SQL Server (see
-  # dashboard/repository/init.sql). The backend's collector writes here;
-  # nothing else in the fleet ever does.
+  # The dashboard's own database — trend history, the instance registry, and
+  # user accounts. Never a monitored SQL Server (see
+  # dashboard/repository/init.sql). Required, not optional: the backend's
+  # collector writes trend snapshots here, but login and the instance
+  # registry depend on it too.
   dashboard-repo:
     image: postgres:16-alpine
     container_name: data-eyes-dashboard-repo
@@ -21,8 +22,6 @@ services:
     volumes:
       - dashboard-repo-data:/var/lib/postgresql/data
       - ./repository/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
-    networks:
-      - data-eyes-net
     restart: unless-stopped
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U data_eyes -d data_eyes_dashboard"]
@@ -38,8 +37,6 @@ services:
       - ./backend/.env
     ports:
       - "8090:8090"
-    networks:
-      - data-eyes-net
     depends_on:
       dashboard-repo:
         condition: service_healthy
@@ -57,15 +54,9 @@ services:
     container_name: data-eyes-dashboard-frontend
     ports:
       - "8091:80"
-    networks:
-      - data-eyes-net
     depends_on:
       - dashboard-backend
     restart: unless-stopped
-
-networks:
-  data-eyes-net:
-    external: true
 
 volumes:
   dashboard-repo-data:

@@ -57,3 +57,17 @@ export interface Insight {
   message: string;
   created_at: string;
 }
+
+export type Role = "admin" | "member";
+
+export interface InstanceSummary {
+  name: string;
+  label: string;
+  environment: string | null;
+}
+
+export interface AppUser {
+  username: string;
+  role: Role;
+  created_at: string;
+}

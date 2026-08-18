@@ -4,11 +4,11 @@ stack never had (its "alerting" was only a provisioned SMTP contact point
 with zero actual alert rules; every threshold lived only as a static panel
 color).
 
-Severities are computed once, in SQL, by the MCP server's diagnostic tools
-(mcp/src/data_eyes_mcp/dba_tools.py), driven by
-.claude/knowledge-base/_static/thresholds.yaml. This module only aggregates
-what those tools already decided via fleet_health_score — it does not invent
-new thresholds of its own.
+Severities are computed once, in SQL, by app/diagnostics.py (a direct-SQL
+port of the MCP server's diagnostic tools, mcp/src/data_eyes_mcp/dba_tools.py),
+driven by .claude/knowledge-base/_static/thresholds.yaml. This module only
+aggregates what diagnostics.fleet_health_score already decided — it does not
+invent new thresholds of its own.
 """
 
 import asyncio
@@ -17,8 +17,9 @@ from typing import List, Optional
 
 from pydantic import BaseModel
 
-from .config import InstanceConfig, settings
-from .mcp_client import MCPToolError, call_tool
+from . import diagnostics
+from .config import InstanceConfig
+from .mssql_client import MSSQLError
 
 logger = logging.getLogger(__name__)
 
@@ -44,8 +45,8 @@ class FleetHealth(BaseModel):
 async def _instance_health(instance: InstanceConfig) -> InstanceHealth:
     try:
         score, db_list = await asyncio.gather(
-            call_tool(instance.mcp_url, "fleet_health_score", timeout=settings.MCP_CALL_TIMEOUT_SECONDS),
-            call_tool(instance.mcp_url, "list_databases", timeout=settings.MCP_CALL_TIMEOUT_SECONDS),
+            diagnostics.fleet_health_score(instance.mssql_connection_string),
+            diagnostics.list_databases(instance.mssql_connection_string),
         )
         database_count = len(db_list) if isinstance(db_list, list) else None
         overall = score.get("overall_severity", "UNKNOWN") if isinstance(score, dict) else "UNKNOWN"
@@ -59,7 +60,7 @@ async def _instance_health(instance: InstanceConfig) -> InstanceHealth:
             categories=categories,
             database_count=database_count,
         )
-    except MCPToolError as e:
+    except MSSQLError as e:
         logger.warning("Instance %s unreachable: %s", instance.name, e)
         return InstanceHealth(
             name=instance.name,
@@ -74,7 +75,8 @@ async def _instance_health(instance: InstanceConfig) -> InstanceHealth:
 async def get_fleet_health(instances: List[InstanceConfig]) -> FleetHealth:
     """Fan out to every registered instance in parallel and roll up the worst
     severity across the fleet. One unreachable/slow instance never blocks the
-    others — each call has its own timeout (MCP_CALL_TIMEOUT_SECONDS)."""
+    others — each direct-SQL call has its own timeout (see mssql_client.py's
+    DEFAULT_QUERY_TIMEOUT)."""
     if not instances:
         return FleetHealth(overall_severity="UNKNOWN", instances=[])
     results = await asyncio.gather(*(_instance_health(i) for i in instances))

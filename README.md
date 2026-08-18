@@ -1,5 +1,5 @@
 <div align="center">
-  <img src="monitor/docs/logos.png" alt="logo" width="250">
+  <img src="assets/logo.svg" alt="Data Eyes logo" width="180">
 </div>
 
 # SQL Server Monitoring, Performance & Maintenance Toolkit
@@ -29,7 +29,7 @@ Data Eyes consists of three services that work together seamlessly:
         ┌─────────────────┼─────────────────┐
         │                 │                 │
     ┌───▼────┐       ┌────▼────┐      ┌────▼──────┐
-    │Monitor │       │  Perf   │      │Maintenance│
+    │Dashboard│      │  Perf   │      │Maintenance│
     │(Watch) │       │(Analyze)│      │ (Automate)│
     └───┬────┘       └────┬────┘      └────┬──────┘
         │                 │                 │
@@ -45,51 +45,44 @@ Data Eyes consists of three services that work together seamlessly:
 
 ### How They Work Together
 **Typical Workflow:**
-1. **Monitor** detects performance degradation (Grafana dashboard shows alert)
+1. **Dashboard** detects performance degradation (fleet health rollup shows Warning/Critical)
 2. **Performance** toolkit analyzes root cause (wait stats, missing indexes, slow queries)
 3. **Maintenance** automates ongoing fixes (index optimization, statistics updates, backups)
-4. **Monitor** validates improvements (before/after baseline comparison)
+4. **Dashboard** validates improvements (before/after trend comparison)
 
 **Example Scenario:**
-- **Monitor** alerts: "Buffer pool hit rate dropped below 95%"
+- **Dashboard** alerts: category severity flips to Warning on the Index & Buffer tab
 - **Performance** investigates: Wait statistics show memory pressure, Page Life Expectancy is low
 - **Performance** recommends: Add indexes to reduce logical reads, optimize memory-intensive queries
 - **Maintenance** executes: Automated index defragmentation and statistics update jobs
-- **Monitor** confirms: Buffer pool hit rate returns to normal, queries run faster
+- **Dashboard** confirms: severity returns to OK, trend strip shows the recovery
 
 ## Components
-### 1. Monitoring Solution (Grafana + Prometheus)
-**Location:** [monitor/](monitor/)
+### 1. Dashboard App (custom, connects directly to SQL Server)
+**Location:** [dashboard/](dashboard/)
 
-**Purpose:** Real-time visibility and alerting for SQL Server health and performance
+**Purpose:** Real-time visibility and evaluated health status for SQL Server fleets — a DPA-style Main Page and per-database drill-down, not a generic panel dashboard
 
 **What's Included:**
-- **Grafana dashboards** - Pre-built visualizations with 45+ metrics
-  - Comprehensive view (full server analysis)
-  - Simplified view (essential metrics only)
-- **Prometheus backend** - Time-series metrics storage with historical trending
-- **Docker Compose stack** - Automated deployment and orchestration
-- **Email alerting** - SMTP/Gmail integration for notifications
-- **Pre-configured metrics:**
-  - Server health: Uptime, sessions, connections
-  - Query performance: Top 10 slowest queries, cache hit rate, latency
-  - Resource utilization: Buffer pool, memory grants, Page Life Expectancy
-  - Storage: Database sizes, transaction log usage, I/O statistics
-  - SQL Agent jobs: Execution status, failures, history
-  - Wait statistics: Performance bottleneck identification
-  - Locks & blocking: Contention detection
-  - Backup status: Last successful backup, backup types
+- **Main Page** - Fleet-wide health rollup (OK/Warning/Critical per instance and category), an embedded insights feed
+- **Per-database drill-down** - Tabbed DPA-style views: Wait Time, Top SQL, Storage, Sessions/Blocking, Config/Alerts, Index & Buffer, AG
+- **Database-backed instance registry** - Self-service "Add Instance" in the UI; `instances.yaml` only seeds it once on first boot
+- **Real user accounts** - One shared team, admin/member roles, no more single shared credential
+- **Trend history** - The dashboard's own Postgres database + persistent collector, independent of any monitored SQL Server
+- **Embedded insights agent** - Claude-generated commentary on page load and on severity change, plus on-demand deep explanations
+- **Docker Compose stack** - `dashboard/docker-compose.yml`
 
 **Key Features:**
-- 2 fully provisioned Grafana dashboards
-- Direct SQL Server connection (no exporter needed)
-- Real-time and historical analysis
-- Color-coded thresholds (green/yellow/red)
-- Auto-refresh and time range selection
-- Export to PDF/PNG for reporting
-- Azure SSO configured and ready to be enabled
+- Real evaluated alerting (worst-of-category/instance/fleet severity rollup), not just static color thresholds
+- Talks directly to each monitored SQL Server — no MCP hop in the rendering/collection path (see `dashboard/README.md`'s "Why not MCP for the dashboard itself?")
+- Trend strips per category, backed by the dashboard's own database
+- Graceful degradation: the insights agent is fully optional and no-ops cleanly when unconfigured (the database itself, unlike earlier versions of this dashboard, is required — it backs login and the instance registry too, not just trend charts)
 
-**Technologies:** Grafana (latest), Prometheus (latest), Docker, Microsoft SQL Server
+**Technologies:** FastAPI, React + TypeScript, PostgreSQL, Docker, Microsoft SQL Server (direct connection, `pyodbc`)
+
+Separately, [`mcp/`](mcp/) runs its own `data-eyes-mcp` server for **agent use only** — Claude Code's `sql-server-dba` agent, not the dashboard (see the Documentation section below).
+
+> The previous Grafana + Prometheus stack (`monitor/`) has been retired now that every panel category it covered has a live equivalent here — see `.claude/knowledge-base/_static/taxonomy.md` for the full mapping.
 
 ### 2. Performance Tuning Toolkit
 
@@ -229,19 +222,29 @@ Trusted by enterprises worldwide, battle-tested in production
 ### Prerequisites
 - **SQL Server:** 2012+ (2016+ recommended for Query Store)
 - **SQL Server Agent:** Running and enabled (for maintenance)
-- **Docker:** 20.10+ with Docker Compose 2.0+ (for monitoring)
+- **Docker:** 20.10+ with Docker Compose 2.0+ (for the dashboard app; optional for `mcp/`, agent-only)
 - **Permissions:** VIEW SERVER STATE, sysadmin for maintenance
 - **Tools:** SSMS (SQL Server Management Studio), Microsoft Excel
 
 ### Installation Steps
-#### 1. Set Up Monitoring (15 minutes)
+#### 1. Set Up the Dashboard App (15 minutes)
 ```bash
-cd monitor/
-# Configure .env file with credentials
+# Postgres first — the dashboard's own database (required: trend history,
+# instance registry, and login all live here). See dashboard/README.md.
+docker run -d --name data-eyes-dashboard-repo -p 5432:5432 \
+  -e POSTGRES_DB=data_eyes_dashboard -e POSTGRES_USER=data_eyes -e POSTGRES_PASSWORD=change-me \
+  -v "$(pwd)/dashboard/repository/init.sql:/docker-entrypoint-initdb.d/init.sql:ro" \
+  postgres:16-alpine
 
-docker-compose up -d
-# Access Grafana at http://localhost:3000
+cd dashboard/backend
+cp .env.example .env
+# set DASHBOARD_ADMIN_PASSWORD, SESSION_SECRET_KEY, REPOSITORY_DSN, and INSTANCE_SECRET_KEY
+uv run --with-editable . uvicorn app.main:app --reload --port 8090
+# Access the dashboard frontend per dashboard/README.md's quick start —
+# instances and additional user logins are added through the UI, not files
 ```
+
+(Optional, agent-only — not needed to run the dashboard: `mcp/` gives Claude Code live SQL Server access. See `mcp/README.md`.)
 
 #### 2. Deploy Performance Toolkit (10 minutes)
 ```bash
@@ -263,24 +266,24 @@ cd maintenance/
 
 ## Integration and Workflow
 **Phase 1: Establish Baseline (Initial Setup)**
-1. Deploy **Monitor** stack and verify dashboards show metrics
+1. Deploy the **Dashboard** app and verify fleet health shows OK
 2. Open **Performance** workbook and capture baseline metrics
 3. Deploy **Maintenance** jobs and verify first execution
 
 **Phase 2: Continuous Operations (Ongoing)**
-1. **Monitor** dashboards display real-time health (check daily)
+1. **Dashboard** displays real-time fleet health (check daily)
 2. **Maintenance** jobs run automatically per schedule (verify weekly)
 3. **Performance** scripts run on-demand when investigating issues
 
 **Phase 3: Performance Tuning (When Issues Arise)**
-1. **Monitor** detects anomaly or alert fires
+1. **Dashboard** detects a severity change (insights feed, or a tab turns Warning/Critical)
 2. Use **Performance** methodology (Steps 0-9) to diagnose
 3. Implement fixes (indexes, configuration, query tuning)
 4. **Maintenance** automates ongoing optimization
-5. **Monitor** validates improvements via baseline comparison
+5. **Dashboard** validates improvements via trend strip comparison
 
 **Phase 4: Reporting and Trending (Monthly/Quarterly)**
-1. Export **Monitor** dashboards to PDF for stakeholders
+1. Review **Dashboard** trend strips for stakeholders, or generate a report with `/sql-visual-report`
 2. Review **Performance** workbook baseline log for trends
 3. Analyze **Maintenance** CommandLog for operation history
 4. Adjust schedules and thresholds as needed
@@ -288,11 +291,14 @@ cd maintenance/
 ## Documentation
 Each component includes comprehensive documentation:
 
-- **Monitor:** [monitor/README.md](monitor/README.md)
-  - Architecture and component interaction
-  - Dashboard features and panels
-  - Alert configuration
-  - Troubleshooting guide
+- **Dashboard:** [dashboard/README.md](dashboard/README.md)
+  - Architecture, quick start, and Docker Compose setup
+  - Instance registry, user accounts, trend history, and embedded insights agent configuration
+  - Health rollup
+
+- **MCP:** [mcp/README.md](mcp/README.md)
+  - `data-eyes-mcp` server setup (stdio + HTTP transports) — agent-only, not used by the dashboard
+  - Available diagnostic tools, plus the dashboard-repository trend tools (optional)
 
 - **Performance:** [performance/README.md](performance/README.md)
   - 9-step methodology detailed walkthrough

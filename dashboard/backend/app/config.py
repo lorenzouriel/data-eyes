@@ -1,11 +1,11 @@
 """
 Configuration for the Data Eyes dashboard backend.
 
-Loads runtime settings from environment variables (.env) and the fleet
-registry from instances.yaml — the dashboard's equivalent of Grafana's
-datasources.yml (monitor/grafana/datasources.yml), except each entry here
-points at a data-eyes-mcp server rather than a direct SQL connection (see
-mcp/docker-compose.fleet.yml for the matching per-instance MCP topology).
+Loads runtime settings from environment variables (.env). The instance
+registry itself now lives in the database (app/repository.py's instance_*
+functions) — instances.yaml is only a one-time seed read at startup, not the
+live source of truth; see load_seed_instances() below and
+app/repository.py's seed_instances_from_yaml().
 """
 
 from pathlib import Path
@@ -19,29 +19,34 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 class Settings(BaseSettings):
     """Application settings loaded from environment variables."""
 
-    # Session / auth — see app/auth.py for why this is a single shared
-    # credential rather than a user database.
+    # Session / auth bootstrap — see app/auth.py. DASHBOARD_ADMIN_USERNAME/
+    # PASSWORD only matter once, to seed the first admin account when the
+    # user table is empty; after that, accounts are managed through the UI.
     DASHBOARD_ADMIN_USERNAME: str = "admin"
     DASHBOARD_ADMIN_PASSWORD: str
     SESSION_SECRET_KEY: str
     SESSION_MAX_AGE_SECONDS: int = 60 * 60 * 12  # 12h
 
-    # Fleet registry (relative to this backend's project root unless absolute)
+    # Fleet registry seed (relative to this backend's project root unless
+    # absolute) — read once at startup, see load_seed_instances() below.
     INSTANCES_FILE: str = "instances.yaml"
 
-    # MCP client
-    MCP_CALL_TIMEOUT_SECONDS: float = 15.0
+    # Encrypts instance connection strings at rest (app/crypto.py). Generate
+    # with: python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
+    INSTANCE_SECRET_KEY: str
 
     # CORS — only needed when the frontend runs on a different origin (e.g.
     # the Vite dev server on :5173 during local development). JSON array
     # string, e.g. ["http://localhost:5173"]. Empty = same-origin only.
     CORS_ALLOW_ORIGINS: List[str] = []
 
-    # Trend-history repository (app/repository.py, app/collector.py) — a
-    # dedicated database, never a monitored SQL Server. Optional: if unset,
-    # the collector simply never starts and the dashboard runs exactly as it
-    # did in Phase 2/3 (current-state views only, no trend strips).
-    REPOSITORY_DSN: Optional[str] = None
+    # The dashboard's own Postgres database (app/repository.py) — trend
+    # history, the instance registry, and user accounts all live here. No
+    # longer optional: unlike Phase 4's trend-history-only role, the
+    # instance registry and login are core functionality now, not a
+    # nice-to-have. A monitored SQL Server is never stored here — this is
+    # strictly the dashboard's own store, separate from every system it watches.
+    REPOSITORY_DSN: str
     COLLECTOR_INTERVAL_SECONDS: int = 60
     TREND_RETENTION_DAYS: int = 30
 
@@ -69,18 +74,20 @@ settings = Settings()
 
 
 class InstanceConfig(BaseModel):
-    """One monitored SQL Server instance, backed by its own data-eyes-mcp server."""
+    """One monitored SQL Server instance, reached by direct connection."""
 
     name: str
     label: str
-    mcp_url: str
+    mssql_connection_string: str
     environment: Optional[str] = None
 
 
-def load_instances() -> List[InstanceConfig]:
-    """Load the fleet registry from instances.yaml. Missing file -> empty fleet
-    (not an error) so the Main Page can still render a "no instances configured"
-    state rather than crashing."""
+def load_seed_instances() -> List[InstanceConfig]:
+    """Read instances.yaml as a one-time seed list — used only by
+    app/repository.py's seed_instances_from_yaml() at startup, never by a
+    request-serving code path. Missing file -> no seed entries (not an
+    error); a fresh instance table with no seed file is a valid, empty
+    starting state, same as it always could be."""
     path = Path(settings.INSTANCES_FILE)
     if not path.is_absolute():
         path = Path(__file__).resolve().parent.parent / settings.INSTANCES_FILE

@@ -759,3 +759,89 @@ body {
   color: var(--text-primary);
   white-space: pre-wrap;
 }
+
+/* --- Instance/user management forms (Phase 2/3) --- */
+.manager-form {
+  padding: 16px;
+  margin-bottom: 20px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface-card);
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.manager-form--narrow {
+  max-width: 360px;
+}
+
+.manager-form-row {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.manager-form-row label {
+  flex: 1;
+  min-width: 160px;
+}
+
+.manager-form label {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.manager-form input,
+.manager-form select {
+  padding: 8px 10px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: var(--surface-page);
+  color: var(--text-primary);
+  font-size: 13px;
+  font-family: inherit;
+}
+
+.manager-form input:focus,
+.manager-form select:focus {
+  outline: 2px solid var(--eyes-accent);
+  outline-offset: 1px;
+}
+
+.manager-form-connstr {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 12px;
+}
+
+.manager-form-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.manager-table td {
+  white-space: normal;
+}
+
+.manager-table-actions {
+  display: flex;
+  gap: 6px;
+  justify-content: flex-end;
+}
+
+.account-meta {
+  color: var(--text-secondary);
+  font-size: 13px;
+  margin: 0 0 16px;
+}
+
+.account-success {
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--status-ok) 12%, transparent);
+  color: var(--status-ok);
+  font-size: 13px;
+}

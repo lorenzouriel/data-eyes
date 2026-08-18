@@ -1,6 +1,6 @@
 ---
 name: status
-description: Data Eyes project health report — monitor stack, maintenance coverage, script inventory, KB freshness, and recommendations
+description: Data Eyes project health report — dashboard app, maintenance coverage, script inventory, KB freshness, and recommendations
 ---
 
 # /status Command
@@ -18,8 +18,8 @@ description: Data Eyes project health report — monitor stack, maintenance cove
 
 ## What It Does
 
-1. **Scans** all four toolkit components (monitor, performance, maintenance, sql-scripts)
-2. **Checks** monitor stack health (Docker containers, datasource config)
+1. **Scans** all toolkit components (dashboard/mcp, performance, maintenance, sql-scripts)
+2. **Checks** dashboard app health (Docker containers, instance registry)
 3. **Audits** knowledge base freshness and coverage
 4. **Counts** script inventory across all 18 sub-folders
 5. **Generates** actionable recommendations
@@ -33,12 +33,11 @@ Execute all steps inline (no agent delegation).
 ### Step 1: Scan Toolkit Components
 
 ```text
-# Monitor stack
-Glob("monitor/docker-compose.yml")
-Glob("monitor/grafana/dashboards/*.json")
-Glob("monitor/grafana/datasources.yml")
-Glob("monitor/grafana/alerts-and-notifiers.yml")
-Glob("monitor/docs/*.md")
+# Dashboard app + MCP (agent-only, separate from the dashboard)
+Glob("dashboard/docker-compose.yml")
+Glob("dashboard/backend/instances.yaml")
+Glob("mcp/docker-compose.yml")
+Glob(".claude/knowledge-base/_static/*")
 
 # Performance toolkit
 Glob("performance/additional_queries/*.sql")
@@ -55,20 +54,21 @@ Glob("sql-scripts/**/*.sql")
 
 Count files in each component.
 
-### Step 2: Check Monitor Stack Health
+### Step 2: Check Dashboard App Health
 
 ```bash
 # Check if Docker is available
 docker --version 2>/dev/null || echo "Docker not installed"
 
-# Check if monitor stack is running (only if Docker available)
-docker-compose -f monitor/docker-compose.yml ps 2>/dev/null || echo "Stack not running"
+# Check if the dashboard app is running (only if Docker available) — no
+# no MCP container to check — the dashboard connects to SQL Server directly
+docker compose -f dashboard/docker-compose.yml ps 2>/dev/null || echo "Dashboard stack not running"
 
-# Check if .env exists for monitor
-ls monitor/.env 2>/dev/null || echo "No .env file — stack will fail to start"
+# Check if .env exists for the dashboard backend
+ls dashboard/backend/.env 2>/dev/null || echo "No .env file — dashboard backend will fail to start"
 ```
 
-Read `monitor/grafana/datasources.yml` — extract SQL Server connection target (server name only, never credentials).
+Read `dashboard/backend/instances.yaml` — count registered instances (names only, never credentials).
 
 ### Step 3: Audit Knowledge Base
 
@@ -144,21 +144,19 @@ Glob("CLAUDE.md")
 
 | Component | Files | Status | Notes |
 |-----------|-------|--------|-------|
-| Monitor (Grafana) | {N} dashboards, {N} docs | {Running/Stopped/Unknown} | Target: {server from datasource} |
+| Dashboard app | {N} instances registered | {Running/Stopped/Unknown} | `dashboard/` |
 | Performance | {N} scripts, {N} docs, workbook | Present | 10-step methodology |
 | Maintenance | {N} playbooks, {N} use cases | Present | Ola Hallengren |
 | SQL Scripts | {N} scripts across {N} folders | Present | 18 topic areas |
 
-## Monitor Stack
+## Dashboard App
 
 | Check | Status |
 |-------|--------|
 | Docker installed | {Yes/No} |
-| Stack running | {Yes/No/Unknown} |
-| .env file | {Present/Missing} |
-| Datasource configured | {Yes — target: server} |
-| Dashboards provisioned | {N} dashboards |
-| Alerts configured | {Yes/No} |
+| Dashboard stack running | {Yes/No/Unknown} |
+| Dashboard backend .env file | {Present/Missing} |
+| Instances registered | {N} — {names} |
 
 ## Knowledge Base
 
@@ -217,8 +215,8 @@ Generate recommendations based on:
 |-----------|---------------|
 | No KB files exist | "Run `/sql-kb <database>` to enable volume-aware PR reviews" |
 | KB older than 30 days | "Run `/sql-kb --refresh <database>` — KB is {N} days stale" |
-| Monitor stack not running | "Run `docker-compose -f monitor/docker-compose.yml up -d` to start monitoring" |
-| No .env file for monitor | "Create `monitor/.env` with Grafana credentials — stack needs it to start" |
+| Dashboard stack not running | "Run `docker compose -f dashboard/docker-compose.yml up -d` to start the dashboard app" |
+| No .env file for dashboard backend | "Copy `dashboard/backend/.env.example` to `.env` and set credentials — backend needs it to start" |
 | CLAUDE.md missing | "Run `/sync-context` to generate CLAUDE.md" |
 | Uncommitted changes | "Commit or stash {N} uncommitted files" |
 | New scripts added without docs | "Add documentation for new scripts in the matching docs/ folder" |

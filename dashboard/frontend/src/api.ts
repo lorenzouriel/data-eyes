@@ -1,4 +1,13 @@
-import type { FleetHealth, Insight, InstanceDetail, TabResponse, TrendResponse } from "./types";
+import type {
+  AppUser,
+  FleetHealth,
+  Insight,
+  InstanceDetail,
+  InstanceSummary,
+  Role,
+  TabResponse,
+  TrendResponse,
+} from "./types";
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL || "";
 
@@ -26,11 +35,15 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
     }
     throw new ApiError(res.status, detail);
   }
+  // 204 No Content (DELETE endpoints) has no body to parse.
+  if (res.status === 204) {
+    return undefined as T;
+  }
   return res.json() as Promise<T>;
 }
 
 export function login(username: string, password: string) {
-  return request<{ username: string }>("/api/auth/login", {
+  return request<{ username: string; role: Role }>("/api/auth/login", {
     method: "POST",
     body: JSON.stringify({ username, password }),
   });
@@ -41,7 +54,7 @@ export function logout() {
 }
 
 export function me() {
-  return request<{ username: string }>("/api/auth/me");
+  return request<{ username: string; role: Role }>("/api/auth/me");
 }
 
 export function getFleetHealth() {
@@ -62,6 +75,63 @@ export function getTrend(instanceName: string, category: string, hours = 24) {
   return request<TrendResponse>(
     `/api/instances/${encodeURIComponent(instanceName)}/trend/${encodeURIComponent(category)}?hours=${hours}`,
   );
+}
+
+// --- Instance registry (any logged-in user can manage these — one shared
+// team, see app/auth.py's docstring for the tenancy model) ---
+
+export function getInstances() {
+  return request<InstanceSummary[]>("/api/instances");
+}
+
+export function createInstance(input: {
+  name: string;
+  label: string;
+  environment?: string;
+  connection_string: string;
+}) {
+  return request<InstanceSummary>("/api/instances", {
+    method: "POST",
+    body: JSON.stringify(input),
+  });
+}
+
+export function updateInstance(
+  name: string,
+  input: { label?: string; environment?: string; clear_environment?: boolean; connection_string?: string },
+) {
+  return request<InstanceSummary>(`/api/instances/${encodeURIComponent(name)}`, {
+    method: "PUT",
+    body: JSON.stringify(input),
+  });
+}
+
+export function deleteInstance(name: string) {
+  return request<void>(`/api/instances/${encodeURIComponent(name)}`, { method: "DELETE" });
+}
+
+// --- User management (admin-only, except changeMyPassword) ---
+
+export function getUsers() {
+  return request<AppUser[]>("/api/users");
+}
+
+export function createUser(input: { username: string; password: string; role: Role }) {
+  return request<AppUser>("/api/users", {
+    method: "POST",
+    body: JSON.stringify(input),
+  });
+}
+
+export function deleteUser(username: string) {
+  return request<void>(`/api/users/${encodeURIComponent(username)}`, { method: "DELETE" });
+}
+
+export function changeMyPassword(password: string) {
+  return request<{ ok: boolean }>("/api/users/me/password", {
+    method: "POST",
+    body: JSON.stringify({ password }),
+  });
 }
 
 export function getInsightsFeed() {

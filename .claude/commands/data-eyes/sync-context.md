@@ -1,6 +1,6 @@
 ---
 name: sync-context
-description: Sync CLAUDE.md with current data-eyes structure — scripts, commands, agents, KB, and monitor config
+description: Sync CLAUDE.md with current data-eyes structure — scripts, commands, agents, KB, and dashboard/MCP config
 ---
 
 # /sync-context Command
@@ -33,7 +33,8 @@ description: Sync CLAUDE.md with current data-eyes structure — scripts, comman
 
 ```text
 # Core components
-Glob("monitor/**/*")
+Glob("dashboard/**/*")
+Glob("mcp/**/*")
 Glob("performance/**/*")
 Glob("maintenance/**/*")
 Glob("sql-scripts/**/*.sql")
@@ -70,13 +71,13 @@ Read frontmatter from each agent file:
 Read(".claude/agents/<name>.md")  # first 10 lines for name + description + tier
 ```
 
-### Step 4: Check Monitor Configuration
+### Step 4: Check Dashboard/MCP Configuration
 
 ```text
-Read("monitor/docker-compose.yml")     # services, ports
-Read("monitor/grafana/datasources.yml") # SQL Server target (name only)
-Glob("monitor/grafana/dashboards/*.json")  # dashboard count
-Glob("monitor/docs/*.md")             # doc coverage
+Read("dashboard/docker-compose.yml")        # services, ports
+Read("dashboard/backend/instances.yaml")    # instance registry seed (names only)
+Read("mcp/docker-compose.yml")              # agent-only MCP server, not used by the dashboard
+Glob(".claude/knowledge-base/_static/*")    # static KB coverage
 ```
 
 ### Step 5: Check KB State
@@ -124,7 +125,8 @@ Auto-generate directory tree from Glob results. Include file counts:
 
 \```
 data-eyes/
-├── monitor/              {N} config files, {N} dashboards, {N} docs
+├── dashboard/            backend ({N} routers), frontend, repository schema
+├── mcp/                  data-eyes-mcp server, {N} DBA diagnostic tools
 ├── performance/          {N} scripts, {N} docs, workbook
 ├── maintenance/          {N} playbooks, {N} use cases
 ├── sql-scripts/          {N} scripts across {N} sub-folders
@@ -196,5 +198,5 @@ CLAUDE.md updated successfully
 - After adding new SQL scripts to any sub-folder
 - After creating new commands or agents
 - After building a new knowledge base with `/sql-kb`
-- After significant changes to monitor configuration
+- After significant changes to dashboard/MCP configuration
 - When onboarding team members

@@ -20,11 +20,11 @@ from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 
-from .. import insights_agent, insights_feed
+from .. import diagnostics, insights_agent, insights_feed, repository
 from ..auth import require_auth
-from ..config import InstanceConfig, load_instances, settings
+from ..config import InstanceConfig
 from ..health_score import get_fleet_health
-from ..mcp_client import MCPToolError, call_tool
+from ..mssql_client import MSSQLError
 from .databases import TAB_BUILDERS
 
 logger = logging.getLogger(__name__)
@@ -32,9 +32,11 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/insights", tags=["insights"])
 
 
-def _find_instance(instance_name: str) -> InstanceConfig:
-    instances = {i.name: i for i in load_instances()}
-    instance = instances.get(instance_name)
+async def _find_instance(instance_name: str) -> InstanceConfig:
+    try:
+        instance = await repository.get_instance(instance_name)
+    except repository.RepositoryUnavailable as e:
+        raise HTTPException(status_code=503, detail=f"Instance registry unavailable: {e}") from e
     if not instance:
         raise HTTPException(status_code=404, detail=f"Unknown instance: {instance_name}")
     return instance
@@ -54,7 +56,10 @@ async def get_feed(_: str = Depends(require_auth)):
 
 @router.get("/fleet/stream")
 async def stream_fleet_insight(_: str = Depends(require_auth)):
-    instances = load_instances()
+    try:
+        instances = await repository.list_instances()
+    except repository.RepositoryUnavailable:
+        instances = []
     fleet = await get_fleet_health(instances)
     context = {"fleet": [i.model_dump() for i in fleet.instances]}
     return StreamingResponse(_sse(insights_agent.stream_insight(context)), media_type="text/event-stream")
@@ -67,8 +72,8 @@ async def stream_tab_insight(
     builder = TAB_BUILDERS.get(tab_name)
     if not builder:
         raise HTTPException(status_code=404, detail=f"Unknown tab: {tab_name}")
-    instance = _find_instance(instance_name)
-    tab_data = await builder(instance.mcp_url, database_name)
+    instance = await _find_instance(instance_name)
+    tab_data = await builder(instance.mssql_connection_string, database_name)
     context = {key: result["data"] for key, result in tab_data.items() if result.get("data")}
     return StreamingResponse(_sse(insights_agent.stream_insight(context)), media_type="text/event-stream")
 
@@ -88,17 +93,15 @@ async def explain(payload: ExplainRequest, _: str = Depends(require_auth)):
         builder = TAB_BUILDERS.get(payload.tab_name)
         if not builder:
             raise HTTPException(status_code=404, detail=f"Unknown tab: {payload.tab_name}")
-        instance = _find_instance(payload.instance_name)
-        tab_data = await builder(instance.mcp_url, payload.database_name)
+        instance = await _find_instance(payload.instance_name)
+        tab_data = await builder(instance.mssql_connection_string, payload.database_name)
         context = {key: result["data"] for key, result in tab_data.items() if result.get("data")}
     else:
-        instance = _find_instance(payload.instance_name)
+        instance = await _find_instance(payload.instance_name)
         try:
-            score = await call_tool(
-                instance.mcp_url, "fleet_health_score", {}, timeout=settings.MCP_CALL_TIMEOUT_SECONDS
-            )
+            score = await diagnostics.fleet_health_score(instance.mssql_connection_string)
             context = {"fleet_health_score": score}
-        except MCPToolError as e:
+        except MSSQLError as e:
             logger.warning("Explain: instance %s unreachable: %s", payload.instance_name, e)
 
     return StreamingResponse(

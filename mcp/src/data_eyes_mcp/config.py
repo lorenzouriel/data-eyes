@@ -45,6 +45,16 @@ class Settings(BaseSettings):
     # Per-call `database` arguments and fully-qualified names still work and win.
     DEFAULT_DATABASE: Optional[str] = None
 
+    # Optional: the Data Eyes dashboard's own trend-history repository
+    # (dashboard/repository/init.sql) — a Postgres database, never a
+    # monitored SQL Server. When set, this server also exposes
+    # repository_tools.py's tools (list_tracked_instances, get_severity_trend,
+    # get_latest_snapshot) so an agent can ask "how has this looked over
+    # time" using the dashboard's own collected history, not just live DMVs.
+    # Leave unset to run this server exactly as before, with no dashboard
+    # dependency at all.
+    REPOSITORY_DSN: Optional[str] = None
+
     # Security & safety
     READ_ONLY: bool = True
     ENABLE_WRITES: bool = False

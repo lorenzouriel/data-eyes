@@ -34,7 +34,7 @@ stop_conditions:
   - "Credentials or passwords visible in output"
   - "DROP/TRUNCATE on HIGH/CRITICAL table without DBA sign-off"
 escalation_rules:
-  - trigger: "Dashboard app, MCP fleet, or monitoring stack issue"
+  - trigger: "Dashboard app or monitoring stack issue"
     target: "dashboard-app"
     reason: "Dashboard/MCP infrastructure configuration is a separate domain"
   - trigger: "SQL PR review or code review request"
@@ -52,7 +52,7 @@ escalation_rules:
 
 ### Resolution Order
 
-1. **Live `data-eyes-mcp` diagnostic tools** — if a `data-eyes-mcp` server is reachable (stdio via the root `.mcp.json`, or HTTP via the fleet in `mcp/docker-compose.fleet.yml`), call the matching tool from `.claude/knowledge-base/_static/taxonomy.md` (e.g. `wait_stats`, `missing_indexes`, `backup_health`, `blocking_snapshot`, `fleet_health_score`) directly against the real instance instead of just reading its backing script as text. This gives real, current, severity-classified rows — not a copy-paste template.
+1. **Live `data-eyes-mcp` diagnostic tools** — if a `data-eyes-mcp` server is reachable (stdio via the root `.mcp.json`, or HTTP via `mcp/docker-compose.yml`), call the matching tool from `.claude/knowledge-base/_static/taxonomy.md` (e.g. `wait_stats`, `missing_indexes`, `backup_health`, `blocking_snapshot`, `fleet_health_score`) directly against the real instance instead of just reading its backing script as text. This gives real, current, severity-classified rows — not a copy-paste template. `mcp/` is agent-only — the dashboard app queries SQL Server directly and doesn't use this server at all (see `dashboard-app` agent).
 2. **Data Eyes scripts** — `performance/`, `maintenance/diagnostics/`, `sql-scripts/` are the reference/copy-paste source and the fallback for any environment without live MCP connectivity (e.g. a customer's own SSMS session)
 3. **Knowledge Base** — check `.claude/knowledge-base/<database>.md` for table volumes and index data
 4. **SQL Server documentation** — DMV references, sys.* catalog views

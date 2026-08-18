@@ -201,6 +201,10 @@ def explain_policy() -> dict:
             "ag_health",
             "job_health",
             "fleet_health_score",
+            # Dashboard-repository trend tools (data_eyes_mcp/repository_tools.py)
+            "list_tracked_instances",
+            "get_severity_trend",
+            "get_latest_snapshot",
         ],
         "banned_patterns": READ_ONLY_BANNED_PATTERNS if mode == QueryMode.READ_ONLY else [],
         "rate_limiting_enabled": settings.RATE_LIMIT_ENABLED,

@@ -12,9 +12,9 @@ import asyncio
 import logging
 from typing import Dict, Optional, Tuple
 
-from . import insights_agent, insights_feed
-from .config import load_instances, settings
-from .mcp_client import MCPToolError, call_tool
+from . import diagnostics, insights_agent, insights_feed, repository
+from .config import settings
+from .mssql_client import MSSQLError
 
 logger = logging.getLogger(__name__)
 
@@ -27,10 +27,8 @@ _last_severity: Dict[Tuple[str, str], str] = {}
 
 async def _sweep_instance(instance) -> None:
     try:
-        score = await call_tool(
-            instance.mcp_url, "fleet_health_score", {}, timeout=settings.MCP_CALL_TIMEOUT_SECONDS
-        )
-    except MCPToolError as e:
+        score = await diagnostics.fleet_health_score(instance.mssql_connection_string)
+    except MSSQLError as e:
         logger.warning("Insights sweep: instance %s unreachable: %s", instance.name, e)
         return
     if not isinstance(score, dict):
@@ -52,7 +50,11 @@ async def _sweep_instance(instance) -> None:
 
 
 async def _sweep_once() -> None:
-    instances = load_instances()
+    try:
+        instances = await repository.list_instances()
+    except repository.RepositoryUnavailable as e:
+        logger.warning("Insights sweep: repository unavailable this cycle: %s", e)
+        return
     if not instances:
         return
     await asyncio.gather(*(_sweep_instance(i) for i in instances))

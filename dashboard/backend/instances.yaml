@@ -1,32 +1,33 @@
-# Data Eyes dashboard — fleet registry.
+# Data Eyes dashboard — fleet registry seed.
 #
-# The dashboard's equivalent of monitor/grafana/datasources.yml: one entry
-# per monitored SQL Server instance, each backed by its own data-eyes-mcp
-# server rather than a direct SQL connection (see
-# mcp/docker-compose.fleet.yml for the matching per-instance MCP topology).
+# One entry per monitored SQL Server instance, with a direct connection
+# string (app/diagnostics.py / app/mssql_client.py query it directly — no
+# MCP server sits in between; MCP is reserved for agent use, see mcp/).
 #
-# mcp_url uses the internal Docker network port (8080) and service name of
-# each mcp/docker-compose.fleet.yml service — not the host-mapped port
-# (8081-8084), since the backend reaches these over the shared data-eyes-net
-# Docker network, not via the host.
+# This file is a one-time seed: on startup, any entry whose `name` isn't
+# already registered gets inserted, then the dashboard's own instance
+# registry (managed via the UI / the /api/instances routes) takes over as
+# the live source of truth. Editing this file after first boot has no
+# effect on an instance that already exists.
 #
-# Names/labels below mirror the Dev/Staging/Prod1-AG/Prod2-AG topology that
-# monitor/'s Grafana datasources already used — same fleet, new transport.
+# NEVER commit real credentials here in a shared repo — this file ships
+# with placeholder connection strings; fill in real ones locally, or add
+# instances entirely through the UI instead.
 
 instances:
   - name: dev
     label: "Dev"
-    mcp_url: "http://data-eyes-mcp-dev:8080/mcp"
+    mssql_connection_string: "Driver={ODBC Driver 17 for SQL Server};Server=dev-sql,1433;Database=master;UID=data_eyes_ro;PWD=change-me"
     environment: development
   - name: staging
     label: "Staging"
-    mcp_url: "http://data-eyes-mcp-staging:8080/mcp"
+    mssql_connection_string: "Driver={ODBC Driver 17 for SQL Server};Server=staging-sql,1433;Database=master;UID=data_eyes_ro;PWD=change-me"
     environment: staging
   - name: prod1
     label: "Prod 1 (AG Primary)"
-    mcp_url: "http://data-eyes-mcp-prod1:8080/mcp"
+    mssql_connection_string: "Driver={ODBC Driver 17 for SQL Server};Server=prod1-sql,1433;Database=master;UID=data_eyes_ro;PWD=change-me"
     environment: production
   - name: prod2
     label: "Prod 2 (AG Secondary)"
-    mcp_url: "http://data-eyes-mcp-prod2:8080/mcp"
+    mssql_connection_string: "Driver={ODBC Driver 17 for SQL Server};Server=prod2-sql,1433;Database=master;UID=data_eyes_ro;PWD=change-me"
     environment: production

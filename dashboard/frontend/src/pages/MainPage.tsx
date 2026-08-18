@@ -1,4 +1,5 @@
 import { useEffect, useState, useCallback } from "react";
+import { Link } from "react-router-dom";
 import { useAuth } from "../auth/AuthContext";
 import { getFleetHealth, fleetInsightStreamUrl } from "../api";
 import type { FleetHealth } from "../types";
@@ -11,7 +12,7 @@ import Logo from "../components/Logo";
 const POLL_INTERVAL_MS = 30_000;
 
 export default function MainPage() {
-  const { username, logout } = useAuth();
+  const { username, role, logout } = useAuth();
   const [fleet, setFleet] = useState<FleetHealth | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
@@ -42,7 +43,17 @@ export default function MainPage() {
         </div>
         <div className="topbar-right">
           {fleet && <StatusBadge severity={fleet.overall_severity} label="Fleet" />}
-          <span className="topbar-user">{username}</span>
+          <Link className="btn-ghost" to="/manage/instances">
+            Instances
+          </Link>
+          {role === "admin" && (
+            <Link className="btn-ghost" to="/manage/users">
+              Users
+            </Link>
+          )}
+          <Link className="btn-ghost" to="/account">
+            {username}
+          </Link>
           <button className="btn-ghost" onClick={() => logout()}>
             Sign out
           </button>
@@ -70,7 +81,7 @@ export default function MainPage() {
             ))}
             {fleet.instances.length === 0 && (
               <div className="empty-state">
-                No instances configured — add entries to <code>dashboard/backend/instances.yaml</code>.
+                No instances registered yet — <Link to="/manage/instances">add one</Link> to get started.
               </div>
             )}
           </div>

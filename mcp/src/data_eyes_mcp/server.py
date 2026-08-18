@@ -16,6 +16,7 @@ from .logging_config import setup_logging, get_logger
 from .health import health_check, readiness_check, get_server_info, get_metrics_endpoint
 from .tools import mcp as tools_mcp
 from . import dba_tools  # noqa: F401 — import registers the DBA diagnostic tools on tools_mcp
+from . import repository_tools  # noqa: F401 — import registers the dashboard-repository trend tools
 
 logger = get_logger(__name__)
 

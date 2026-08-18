@@ -42,6 +42,7 @@ dependencies = [
     "uvicorn>=0.24.0",
     "prometheus-client>=0.19.0",
     "python-json-logger>=2.0.7",
+    "asyncpg>=0.29.0",  # repository_tools.py's optional dashboard-repository trend tools
 ]
 
 [project.optional-dependencies]

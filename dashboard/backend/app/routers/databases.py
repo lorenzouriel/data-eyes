@@ -1,12 +1,16 @@
 """
 Per-database DPA-style tabbed drill-down API.
 
-Each tab maps to one or more MCP diagnostic tools — see
+Each tab maps to one or more app/diagnostics.py functions — see
 .claude/knowledge-base/_static/taxonomy.md for the authoritative
-category-to-tool mapping this mirrors. Every sub-call is independently
-error-handled (see _safe_call): a failing tool degrades only that one
+category-to-query mapping this mirrors. Every sub-call is independently
+error-handled (see _safe_call): a failing query degrades only that one
 section of a tab, it never fails the whole tab, matching the same
 graceful-degradation shape as health_score.py's per-instance handling.
+
+Talks to SQL Server directly via app/diagnostics.py — no MCP hop. MCP is
+reserved for agent use (Claude Code's sql-server-dba agent); this backend
+just runs the same queries itself.
 """
 
 import asyncio
@@ -15,9 +19,10 @@ from typing import Any, Awaitable, Callable, Dict, Tuple
 
 from fastapi import APIRouter, Depends, HTTPException
 
+from .. import diagnostics, repository
 from ..auth import require_auth
-from ..config import InstanceConfig, load_instances, settings
-from ..mcp_client import MCPToolError, call_tool
+from ..config import InstanceConfig
+from ..mssql_client import MSSQLError
 
 logger = logging.getLogger(__name__)
 
@@ -26,33 +31,34 @@ router = APIRouter(
 )
 
 
-def _find_instance(instance_name: str) -> InstanceConfig:
-    instances = {i.name: i for i in load_instances()}
-    instance = instances.get(instance_name)
+async def _find_instance(instance_name: str) -> InstanceConfig:
+    try:
+        instance = await repository.get_instance(instance_name)
+    except repository.RepositoryUnavailable as e:
+        raise HTTPException(status_code=503, detail=f"Instance registry unavailable: {e}") from e
     if not instance:
         raise HTTPException(status_code=404, detail=f"Unknown instance: {instance_name}")
     return instance
 
 
-async def _safe_call(mcp_url: str, tool: str, arguments: dict) -> Dict[str, Any]:
+async def _safe_call(coro: Awaitable[Any]) -> Dict[str, Any]:
     try:
-        result = await call_tool(mcp_url, tool, arguments, timeout=settings.MCP_CALL_TIMEOUT_SECONDS)
+        result = await coro
         return {"data": result, "error": None}
-    except MCPToolError as e:
-        logger.warning("Tab tool call failed: tool=%s error=%s", tool, e)
+    except MSSQLError as e:
+        logger.warning("Tab query failed: %s", e)
         return {"data": None, "error": str(e)}
 
 
-async def _gather_named(mcp_url: str, calls: Dict[str, Tuple[str, dict]]) -> Dict[str, Any]:
-    """calls: {result_key: (tool_name, arguments)} -> {result_key: {data, error}}"""
+async def _gather_named(calls: Dict[str, Awaitable[Any]]) -> Dict[str, Any]:
+    """calls: {result_key: awaitable} -> {result_key: {data, error}}"""
     keys = list(calls.keys())
-    coros = [_safe_call(mcp_url, calls[k][0], calls[k][1]) for k in keys]
-    results = await asyncio.gather(*coros)
+    results = await asyncio.gather(*(_safe_call(calls[k]) for k in keys))
     return dict(zip(keys, results))
 
 
 def _filter_rows_by_database(data: Any, db: str, key: str = "DatabaseName") -> Any:
-    """blocking_snapshot and ag_health are instance-wide tools; narrow their
+    """blocking_snapshot and ag_health are instance-wide queries; narrow their
     rows to the database this tab is scoped to."""
     if not isinstance(data, list):
         return data
@@ -72,60 +78,57 @@ def tab(name: str):
 
 
 @tab("wait-time")
-async def _wait_time(mcp_url: str, db: str) -> Dict[str, Any]:
-    return await _gather_named(mcp_url, {"wait_stats": ("wait_stats", {"database": db})})
+async def _wait_time(conn_str: str, db: str) -> Dict[str, Any]:
+    return await _gather_named({"wait_stats": diagnostics.wait_stats(conn_str, database=db)})
 
 
 @tab("top-sql")
-async def _top_sql(mcp_url: str, db: str) -> Dict[str, Any]:
+async def _top_sql(conn_str: str, db: str) -> Dict[str, Any]:
     return await _gather_named(
-        mcp_url,
         {
-            "top_queries": ("top_queries", {"database": db}),
-            "missing_indexes": ("missing_indexes", {"database": db}),
-        },
+            "top_queries": diagnostics.top_queries(conn_str, database=db),
+            "missing_indexes": diagnostics.missing_indexes(conn_str, database=db),
+        }
     )
 
 
 @tab("storage")
-async def _storage(mcp_url: str, db: str) -> Dict[str, Any]:
-    return await _gather_named(mcp_url, {"db_space": ("db_space", {"database": db})})
+async def _storage(conn_str: str, db: str) -> Dict[str, Any]:
+    return await _gather_named({"db_space": diagnostics.db_space(conn_str, database=db)})
 
 
 @tab("sessions-blocking")
-async def _sessions_blocking(mcp_url: str, db: str) -> Dict[str, Any]:
-    result = await _gather_named(mcp_url, {"blocking": ("blocking_snapshot", {})})
+async def _sessions_blocking(conn_str: str, db: str) -> Dict[str, Any]:
+    result = await _gather_named({"blocking": diagnostics.blocking_snapshot(conn_str)})
     result["blocking"]["data"] = _filter_rows_by_database(result["blocking"]["data"], db)
     return result
 
 
 @tab("config-alerts")
-async def _config_alerts(mcp_url: str, db: str) -> Dict[str, Any]:
+async def _config_alerts(conn_str: str, db: str) -> Dict[str, Any]:
     return await _gather_named(
-        mcp_url,
         {
-            "backup_health": ("backup_health", {"database": db}),
-            "checkdb_health": ("checkdb_health", {"database": db}),
-            "job_health": ("job_health", {}),
-        },
+            "backup_health": diagnostics.backup_health(conn_str, database=db),
+            "checkdb_health": diagnostics.checkdb_health(conn_str, database=db),
+            "job_health": diagnostics.job_health(conn_str),
+        }
     )
 
 
 @tab("index-buffer")
-async def _index_buffer(mcp_url: str, db: str) -> Dict[str, Any]:
+async def _index_buffer(conn_str: str, db: str) -> Dict[str, Any]:
     return await _gather_named(
-        mcp_url,
         {
-            "index_fragmentation": ("index_fragmentation", {"database": db}),
-            "unused_indexes": ("unused_indexes", {"database": db}),
-            "stale_statistics": ("stale_statistics", {"database": db}),
-        },
+            "index_fragmentation": diagnostics.index_fragmentation(conn_str, database=db),
+            "unused_indexes": diagnostics.unused_indexes(conn_str, database=db),
+            "stale_statistics": diagnostics.stale_statistics(conn_str, database=db),
+        }
     )
 
 
 @tab("ag")
-async def _ag(mcp_url: str, db: str) -> Dict[str, Any]:
-    result = await _gather_named(mcp_url, {"ag_health": ("ag_health", {})})
+async def _ag(conn_str: str, db: str) -> Dict[str, Any]:
+    result = await _gather_named({"ag_health": diagnostics.ag_health(conn_str)})
     result["ag_health"]["data"] = _filter_rows_by_database(result["ag_health"]["data"], db)
     return result
 
@@ -142,5 +145,5 @@ async def get_tab(
         raise HTTPException(
             status_code=404, detail=f"Unknown tab: {tab_name}. Valid: {sorted(TAB_BUILDERS)}"
         )
-    instance = _find_instance(instance_name)
-    return await builder(instance.mcp_url, database_name)
+    instance = await _find_instance(instance_name)
+    return await builder(instance.mssql_connection_string, database_name)

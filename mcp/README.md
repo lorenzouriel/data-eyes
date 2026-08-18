@@ -1,6 +1,8 @@
 # Data Eyes MCP
 
-The MCP (Model Context Protocol) layer of the [Data Eyes](../README.md) toolkit — a Python server that safely exposes SQL Server database and DBA-diagnostic capabilities to LLM clients (Claude Code's `sql-server-dba` agent, the Data Eyes dashboard backend, or any other MCP client).
+The MCP (Model Context Protocol) layer of the [Data Eyes](../README.md) toolkit — a Python server that safely exposes SQL Server database and DBA-diagnostic capabilities to LLM clients (Claude Code's `sql-server-dba` agent, or any other MCP client).
+
+This server is agent-only: the [`dashboard/`](../dashboard/) app queries SQL Server directly (`dashboard/backend/app/diagnostics.py`) rather than through this server — MCP's tool-calling/policy-gate machinery is overhead a trusted backend running fixed, known queries doesn't need. What this server *does* additionally expose to an agent is read access to the dashboard's own trend-history repository (see `REPOSITORY_DSN` below) — a capability the dashboard's own rendering path doesn't need (it talks to that database directly) but an interactive Claude Code session might.
 
 - If you want a complete guide of how to use, [click here](/docs/HOW_TO_USE.md)!
 
@@ -162,6 +164,35 @@ Output: JSON list of {name, database_id, state}
 The server also sends `instructions` to clients on connect, guiding agents to
 discover (`list_databases` → `describe_table` / `get_relationships` / `sample_table`
 / `distinct_values`) before querying.
+
+## DBA Diagnostic Tools
+
+Beyond the generic tools above, `data_eyes_mcp/dba_tools.py` registers 11 more: `wait_stats`, `missing_indexes`, `unused_indexes`, `stale_statistics`, `index_fragmentation`, `top_queries`, `db_space`, `backup_health`, `checkdb_health`, `blocking_snapshot`, `ag_health`, `job_health`, plus the `fleet_health_score` rollup. Each mirrors a script in `performance/additional_queries/` or `maintenance/diagnostics/`, returns a `severity` (`OK`/`WARNING`/`CRITICAL`) per row driven by `.claude/knowledge-base/_static/thresholds.yaml`, and is documented in full via its own docstring (visible to any MCP client, including Claude Code) — see `.claude/knowledge-base/_static/taxonomy.md` for the category ↔ tool routing table.
+
+## Dashboard Repository Trend Tools
+
+3 more tools, in `data_eyes_mcp/repository_tools.py`, give an agent read access to the [`dashboard/`](../dashboard/) app's own trend-history repository (a Postgres database — never a monitored SQL Server) — a different question than the live-SQL tools above answer: "how has this looked over time" rather than "what does this look like right now." Optional: set `REPOSITORY_DSN` to enable them; all three report "not configured" (never an error) when it's unset.
+
+### `list_tracked_instances()`
+Every instance registered in the dashboard's instance registry.
+```
+Input: (none)
+Output: JSON list of {name, label, environment}
+```
+
+### `get_severity_trend(instance_name, category, hours=24)`
+Severity/metric history for one instance+category, as collected by the dashboard's background collector.
+```
+Input: instance_name="prod1", category="wait_stats", hours=24
+Output: JSON list of {captured_at, severity, metric_value}, oldest first
+```
+
+### `get_latest_snapshot(instance_name)`
+Most recent severity + headline metric per category for one instance, as of the dashboard's last collection cycle (may be stale by up to its collection interval — for the current moment, use the live-SQL tools instead).
+```
+Input: instance_name="prod1"
+Output: JSON list of {category, severity, metric_value, captured_at}
+```
 
 ## Security Features
 ✅ **Read-Only by Default**

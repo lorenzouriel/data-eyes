@@ -8,7 +8,7 @@
 |---------|-------------|
 | `/sql-document` | Generate database documentation from catalog views |
 | `/sql-maintenance` | Set up maintenance using Ola Hallengren scripts |
-| `/sql-monitor` | Diagnose and configure the Data Eyes dashboard app + MCP fleet |
+| `/sql-monitor` | Diagnose and configure the Data Eyes dashboard app |
 | `/sql-performance` | Systematic performance tuning (10-step methodology) |
 | `/sql-guidelines` | Review SQL against clean code guidelines |
 | `/sql-scripts` | Find and adapt scripts from the 80+ script library |
@@ -62,7 +62,7 @@
 # Set up maintenance
 /maintenance "weekly index optimization for all user databases"
 
-# Dashboard app / MCP fleet troubleshooting
+# Dashboard app troubleshooting
 /sql-monitor "the dashboard says prod1 is unreachable"
 ```
 
@@ -71,6 +71,6 @@
 | Agent | Description |
 |-------|-------------|
 | `sql-server-dba` | SQL Server troubleshooting, performance tuning, maintenance |
-| `dashboard-app` | Data Eyes dashboard app + MCP fleet configuration and diagnostics |
+| `dashboard-app` | Data Eyes dashboard app configuration and diagnostics |
 
 Agents are in `.claude/agents/` and are automatically available via the Agent tool.
