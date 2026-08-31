@@ -1,43 +1,43 @@
 # Data Eyes — Threshold Registry
 #
 # Single source of truth for every severity threshold used across the toolkit:
-# the upgraded performance/additional_queries/*.json.sql scripts, the new
-# maintenance/diagnostics/*.sql scripts, the MCP dba_tools, and (later) the
+# the upgraded .claude/resources/performance/additional_queries/*.json.sql scripts, the new
+# .claude/resources/maintenance/diagnostics/*.sql scripts, the MCP dba_tools, and (later) the
 # dashboard's health_score.py rollup all read from THIS file's values.
 #
 # Do not hardcode a different copy of these numbers elsewhere. If a SQL script's
 # CASE WHEN literal needs to change, change it here first, then propagate.
 #
 # Thresholds marked "heuristic" have no documented industry-standard value in
-# performance/README.md — they are reasonable engineering defaults, tune them
+# .claude/resources/performance/README.md — they are reasonable engineering defaults, tune them
 # per environment rather than treating them as gospel.
 
 memory:
   page_life_expectancy_seconds:
-    warning: 300        # PLE below this = memory pressure (performance/README.md Step 5)
+    warning: 300        # PLE below this = memory pressure (.claude/resources/performance/README.md Step 5)
   buffer_cache_hit_pct:
-    warning: 95          # below this = memory pressure (performance/README.md Step 5)
+    warning: 95          # below this = memory pressure (.claude/resources/performance/README.md Step 5)
   memory_grants_pending:
     warning: 1            # sustained > 0 = queries starved for memory grant
 
 io:
   data_file_latency_ms:
     ok: 10
-    warning: 20            # >20ms = poor (performance/README.md Step 7)
+    warning: 20            # >20ms = poor (.claude/resources/performance/README.md Step 7)
   log_file_latency_ms:
     ok: 5
-    warning: 10            # >10ms = poor (performance/README.md Step 7)
+    warning: 10            # >10ms = poor (.claude/resources/performance/README.md Step 7)
 
 cpu:
   sustained_pct:
-    warning: 80            # sustained CPU > 80% (performance/README.md Step 6)
+    warning: 80            # sustained CPU > 80% (.claude/resources/performance/README.md Step 6)
 
 index:
   fragmentation_pct:
-    reorganize: 5          # 5-30% = REORGANIZE (performance/README.md Step 2 / workbook Index_Maintenance)
+    reorganize: 5          # 5-30% = REORGANIZE (.claude/resources/performance/README.md Step 2 / workbook Index_Maintenance)
     rebuild: 30             # >30% = REBUILD
   stats_staleness_days:
-    warning: 30             # documented in performance/README.md Step 2
+    warning: 30             # documented in .claude/resources/performance/README.md Step 2
   missing_index_impact_score:
     # heuristic — avg_user_impact * (user_seeks + user_scans), no documented
     # industry threshold exists; tune per workload volume.
@@ -60,11 +60,11 @@ waits:
 maintenance:
   backup:
     full_backup_age_hours:
-      warning: 24            # matches the 24h/daily FULL backup cadence in maintenance/playbook.sql
+      warning: 24            # matches the 24h/daily FULL backup cadence in .claude/resources/maintenance/playbook.sql
       critical: 48
     log_backup_age_minutes:
       # only applies to FULL/BULK_LOGGED recovery model databases; matches the
-      # 30-minute LOG backup cadence in maintenance/playbook.sql
+      # 30-minute LOG backup cadence in .claude/resources/maintenance/playbook.sql
       warning: 60
       critical: 240
   checkdb:

@@ -18,6 +18,8 @@ no MCP text-content-block envelope to build.
 """
 
 import logging
+import re
+import xml.etree.ElementTree as ET
 from typing import Any, Dict, List, Optional, Tuple
 
 from . import mssql_client
@@ -25,7 +27,7 @@ from .mssql_client import MSSQLError
 
 logger = logging.getLogger(__name__)
 
-# Same exclusion list as performance/additional_queries/wait_statistics.sql /
+# Same exclusion list as .claude/resources/performance/additional_queries/wait_statistics.sql /
 # mcp/'s dba_tools.py — benign/system wait types that don't indicate a
 # performance issue.
 _BENIGN_WAIT_TYPES_SQL = """
@@ -79,7 +81,12 @@ def _rows_to_dicts(columns: List[str], rows: List[Tuple[Any, ...]]) -> List[Dict
         for i, col in enumerate(columns):
             value = row[i] if i < len(row) else None
             if isinstance(value, (bytes, bytearray)):
-                obj[col] = "<binary>"
+                # Hex-encoded (e.g. "0xABCD...") rather than an opaque
+                # placeholder — plan_handle in particular needs to round-trip
+                # through the API as a real, usable identifier (see
+                # query_plan()), and a hex string is more useful than
+                # "<binary>" for any other varbinary column too.
+                obj[col] = "0x" + bytes(value).hex()
             elif hasattr(value, "isoformat"):
                 obj[col] = value.isoformat()
             else:
@@ -281,6 +288,7 @@ def _sql_top_queries(top_n: int) -> str:
     return f"""
     SELECT TOP {top_n}
         DB_NAME(st.dbid) AS DatabaseName,
+        qs.plan_handle AS PlanHandle,
         qs.execution_count AS ExecutionCount,
         qs.total_elapsed_time / qs.execution_count / 1000.0 AS AvgElapsedTimeMs,
         qs.total_worker_time / qs.execution_count / 1000.0 AS AvgCpuTimeMs,
@@ -517,7 +525,10 @@ async def _query(connection_string: str, sql: str, database: Optional[str] = Non
 # ---------------------------------------------------------------------------
 
 async def wait_stats(connection_string: str, database: Optional[str] = None, top_n: int = 25) -> List[Dict[str, Any]]:
-    return await _query(connection_string, _sql_wait_stats(top_n), database)
+    rows = await _query(connection_string, _sql_wait_stats(top_n), database)
+    for row in rows:
+        row["Category"] = categorize_wait_type(str(row.get("Wait_Type", "")))
+    return rows
 
 
 async def missing_indexes(connection_string: str, database: Optional[str] = None, top_n: int = 25) -> List[Dict[str, Any]]:
@@ -628,3 +639,290 @@ async def fleet_health_score(connection_string: str) -> Dict[str, Any]:
     overall = min(results.values(), key=lambda s: rank_order.get(s, 3)) if results else "UNKNOWN"
 
     return {"overall_severity": overall, "categories": results, "metrics": headline_metrics}
+
+
+# ---------------------------------------------------------------------------
+# Strata design additions — instance-level detail views (wait categorization,
+# sessions, server facts, resource gauges, execution plans). Same
+# plain-function-returning-plain-data shape as everything above.
+# ---------------------------------------------------------------------------
+
+_WAIT_CATEGORY_PREFIXES: List[Tuple[Tuple[str, ...], str]] = [
+    (("LCK_", "PAGELATCH_", "LATCH_"), "lock"),
+    (("PAGEIOLATCH_", "IO_COMPLETION", "ASYNC_IO_COMPLETION", "WRITELOG", "BACKUPIO"), "disk"),
+    (("SOS_SCHEDULER_YIELD", "CXPACKET", "CXCONSUMER", "THREADPOOL"), "cpu"),
+    (("ASYNC_NETWORK_IO", "NET_WAITFOR_PACKET"), "network"),
+]
+
+
+def categorize_wait_type(wait_type: str) -> str:
+    """Buckets a raw sys.dm_os_wait_stats wait_type into the 5 categories the
+    Waits tab groups by (lock / disk / cpu / network / other). Shared by
+    wait_stats' category column and app/collector.py's historical
+    wait-category sampling — one taxonomy, not two."""
+    for prefixes, category in _WAIT_CATEGORY_PREFIXES:
+        if any(wait_type.startswith(p) for p in prefixes):
+            return category
+    return "other"
+
+
+def _sql_active_sessions(top_n: int) -> str:
+    top_n = max(1, min(top_n, 200))
+    return f"""
+    SELECT TOP {top_n}
+        r.session_id AS Pid,
+        st.text AS SqlText,
+        s.login_name AS LoginName,
+        s.program_name AS ProgramName,
+        s.host_name AS HostName,
+        ISNULL(r.wait_type, r.status) AS State,
+        r.wait_time / 1000.0 AS WaitSeconds,
+        r.total_elapsed_time / 1000.0 AS ElapsedSeconds
+    FROM sys.dm_exec_requests r
+    INNER JOIN sys.dm_exec_sessions s ON s.session_id = r.session_id
+    OUTER APPLY sys.dm_exec_sql_text(r.sql_handle) st
+    WHERE r.session_id > 50
+    ORDER BY r.total_elapsed_time DESC
+    """
+
+
+async def active_sessions(connection_string: str, top_n: int = 50) -> List[Dict[str, Any]]:
+    """Live sessions with an in-flight request right now — not a history;
+    call again to see how it's changed. Same DMV family as blocking_snapshot,
+    without the blocking filter."""
+    return await _query(connection_string, _sql_active_sessions(top_n))
+
+
+def _sql_session_dimension(column: str) -> str:
+    return f"""
+    SELECT
+        {column} AS Dimension,
+        SUM(r.wait_time) / 1000.0 AS WaitSeconds
+    FROM sys.dm_exec_requests r
+    INNER JOIN sys.dm_exec_sessions s ON s.session_id = r.session_id
+    WHERE r.session_id > 50 AND {column} IS NOT NULL
+    GROUP BY {column}
+    ORDER BY WaitSeconds DESC
+    """
+
+
+async def session_dimensions(connection_string: str, top_n: int = 5) -> Dict[str, List[Dict[str, Any]]]:
+    """Top users/programs/hosts by wait time among sessions active *right
+    now* — a live-snapshot breakdown, not a historical rollup (SQL Server
+    doesn't retain per-login wait history without Query Store or a
+    session-level trace, neither of which this reads)."""
+    dimensions = {"users": "s.login_name", "programs": "s.program_name", "hosts": "s.host_name"}
+    result: Dict[str, List[Dict[str, Any]]] = {}
+    for key, column in dimensions.items():
+        rows = await _query(connection_string, _sql_session_dimension(column))
+        result[key] = rows[:top_n]
+    return result
+
+
+_SQL_SERVER_OVERVIEW = """
+SELECT
+    CAST(SERVERPROPERTY('ProductVersion') AS NVARCHAR(128)) AS ProductVersion,
+    CAST(SERVERPROPERTY('Edition') AS NVARCHAR(128)) AS Edition,
+    CAST(SERVERPROPERTY('MachineName') AS NVARCHAR(128)) AS MachineName,
+    (SELECT cpu_count FROM sys.dm_os_sys_info) AS Cores,
+    (SELECT CAST(physical_memory_kb / 1024.0 / 1024 AS DECIMAL(10,1)) FROM sys.dm_os_sys_info) AS TotalMemoryGB,
+    (
+        SELECT CAST(SUM(total_bytes) / 1024.0 / 1024 / 1024 AS DECIMAL(10,1))
+        FROM (
+            SELECT DISTINCT vs.volume_mount_point, vs.total_bytes
+            FROM sys.master_files mf
+            CROSS APPLY sys.dm_os_volume_stats(mf.database_id, mf.file_id) vs
+        ) v
+    ) AS TotalDiskGB
+"""
+
+
+async def server_overview(connection_string: str) -> Dict[str, Any]:
+    """Static-ish server facts (version, host, cores, total memory/disk) —
+    powers the Fleet Status row-expand and Admin's instance table."""
+    rows = await _query(connection_string, _SQL_SERVER_OVERVIEW)
+    return rows[0] if rows else {}
+
+
+_SQL_BUFFER_GAUGES = """
+SELECT
+    (SELECT CAST(cntr_value AS FLOAT) FROM sys.dm_os_performance_counters
+     WHERE counter_name = 'Buffer cache hit ratio') AS BufferHitRaw,
+    (SELECT CAST(cntr_value AS FLOAT) FROM sys.dm_os_performance_counters
+     WHERE counter_name = 'Buffer cache hit ratio base') AS BufferHitBase,
+    (SELECT CAST(cntr_value AS FLOAT) FROM sys.dm_os_performance_counters
+     WHERE counter_name = 'Page life expectancy' AND object_name LIKE '%Buffer Manager%') AS PageLifeExpectancySeconds
+"""
+
+_SQL_CPU_HISTORY = """
+SELECT TOP 20
+    timestamp AS TimestampMs,
+    CAST(record AS XML).value('(./Record/SchedulerMonitorEvent/SystemHealth/ProcessUtilization)[1]', 'int') AS CpuPct
+FROM sys.dm_os_ring_buffers
+WHERE ring_buffer_type = 'RING_BUFFER_SCHEDULER_MONITOR'
+ORDER BY timestamp DESC
+"""
+
+_SQL_RATE_COUNTERS = """
+SELECT
+    (SELECT CAST(SUM(num_of_bytes_read) AS BIGINT) FROM sys.dm_io_virtual_file_stats(NULL, NULL)) AS DiskReadBytesTotal,
+    (SELECT CAST(cntr_value AS BIGINT) FROM sys.dm_os_performance_counters
+     WHERE counter_name = 'Batch Requests/sec') AS BatchRequestsTotal
+"""
+
+
+async def resource_utilization(connection_string: str) -> Dict[str, Any]:
+    """Current resource gauges for the Resources tab.
+
+    Buffer cache hit % and Page Life Expectancy are true point-in-time
+    gauges — no history needed to know "now". CPU % history comes free from
+    SQL Server's own scheduler-monitor ring buffer (~4h at ~1min resolution,
+    no collection needed on our side). Disk read bytes and batch requests
+    are *cumulative* counters since instance start — meaningless as a single
+    number, so this returns the raw totals for app/collector.py to diff
+    between cycles into an actual rate; a live "current" MB/s or requests/sec
+    figure only exists once at least two collector samples have landed.
+    """
+    gauges_rows = await _query(connection_string, _SQL_BUFFER_GAUGES)
+    gauges = gauges_rows[0] if gauges_rows else {}
+    buffer_hit_raw = gauges.get("BufferHitRaw")
+    buffer_hit_base = gauges.get("BufferHitBase")
+    buffer_cache_hit_pct = (
+        round(100.0 * buffer_hit_raw / buffer_hit_base, 2)
+        if buffer_hit_raw is not None and buffer_hit_base
+        else None
+    )
+
+    cpu_rows = await _query(connection_string, _SQL_CPU_HISTORY)
+    cpu_history = list(reversed(cpu_rows))  # oldest first, for charting
+
+    rate_rows = await _query(connection_string, _SQL_RATE_COUNTERS)
+    raw_counters = rate_rows[0] if rate_rows else {}
+
+    return {
+        "buffer_cache_hit_pct": buffer_cache_hit_pct,
+        "page_life_expectancy_seconds": gauges.get("PageLifeExpectancySeconds"),
+        "cpu_history": cpu_history,
+        "disk_read_bytes_total": raw_counters.get("DiskReadBytesTotal"),
+        "batch_requests_total": raw_counters.get("BatchRequestsTotal"),
+    }
+
+
+_PLAN_HANDLE_RE = re.compile(r"^0x[0-9A-Fa-f]+$")
+
+_SHOWPLAN_NS = "{http://schemas.microsoft.com/sqlserver/2004/07/showplan}"
+
+
+def _find_relops(elem, depth: int = 0) -> List[Tuple[Any, int]]:
+    """Yield every <RelOp> in document order with its nesting depth, walking
+    into each RelOp's operator-specific child (<Hash>, <NestedLoops>, ...) to
+    find the RelOps it contains one level deeper."""
+    out: List[Tuple[Any, int]] = []
+    for child in elem:
+        if child.tag == f"{_SHOWPLAN_NS}RelOp":
+            out.append((child, depth))
+            out.extend(_find_relops(child, depth + 1))
+        else:
+            out.extend(_find_relops(child, depth))
+    return out
+
+
+def _direct_child_relops(elem) -> List[Any]:
+    out = []
+    for child in elem:
+        if child.tag == f"{_SHOWPLAN_NS}RelOp":
+            out.append(child)
+        else:
+            out.extend(c for c in child if c.tag == f"{_SHOWPLAN_NS}RelOp")
+    return out
+
+
+def _subtree_cost(elem) -> float:
+    try:
+        return float(elem.get("EstimatedTotalSubtreeCost", 0.0))
+    except (TypeError, ValueError):
+        return 0.0
+
+
+def _parse_plan_xml(xml_text: str, avg_elapsed_ms: float) -> List[Dict[str, Any]]:
+    """Parse SQL Server's ShowPlan XML into a flat, depth-ordered operator
+    list with each node's own (non-subtree) share of the plan's total
+    estimated cost, used to allocate the query's real average elapsed time
+    proportionally across operators.
+
+    This is cost-based attribution — the same technique SSMS's estimated
+    plan view uses, applied to the actual cached plan for this statement.
+    It is NOT independently measured per-operator runtime: SQL Server only
+    exposes that via Query Store's actual-execution statistics or live
+    Extended Events tracing, neither of which this reads. The `estimated_
+    time_ms` field name is deliberate — never rename it to imply it was
+    measured.
+    """
+    try:
+        root = ET.fromstring(xml_text)
+    except ET.ParseError:
+        logger.warning("query_plan: could not parse plan XML")
+        return []
+
+    relops = _find_relops(root)
+    if not relops:
+        return []
+
+    total_cost = _subtree_cost(relops[0][0]) or 1.0  # first RelOp in document order is the plan root
+
+    nodes = []
+    for elem, depth in relops:
+        own_cost = _subtree_cost(elem) - sum(_subtree_cost(c) for c in _direct_child_relops(elem))
+        own_cost = max(own_cost, 0.0)
+        share = (own_cost / total_cost) if total_cost else 0.0
+        nodes.append(
+            {
+                "depth": depth,
+                "physical_op": elem.get("PhysicalOp", "?"),
+                "logical_op": elem.get("LogicalOp", "?"),
+                "estimated_rows": elem.get("EstimateRows"),
+                "cost_share": round(share, 4),
+                "estimated_time_ms": round(share * avg_elapsed_ms, 2),
+            }
+        )
+    return nodes
+
+
+_SQL_QUERY_PLAN = """
+SELECT
+    qs.execution_count AS ExecutionCount,
+    qs.total_elapsed_time AS TotalElapsedTimeMicros,
+    qs.total_logical_reads AS TotalLogicalReads,
+    CAST(qp.query_plan AS NVARCHAR(MAX)) AS QueryPlanXml
+FROM sys.dm_exec_query_stats qs
+CROSS APPLY sys.dm_exec_query_plan(qs.plan_handle) qp
+WHERE qs.plan_handle = {plan_handle}
+"""
+
+
+async def query_plan(connection_string: str, plan_handle: str) -> Dict[str, Any]:
+    """Real execution plan for one cached statement, parsed into a
+    cost-proportional per-node time breakdown — see _parse_plan_xml's
+    docstring for exactly what "real" means here (cost-derived, not
+    measured). `plan_handle` must be the hex string top_queries() returns
+    (e.g. "0x0500...") — validated strictly since it's embedded directly
+    into the query (mssql_client runs fixed, parameter-free SQL)."""
+    if not _PLAN_HANDLE_RE.match(plan_handle):
+        raise MSSQLError(f"Invalid plan_handle: {plan_handle!r}")
+
+    rows = await _query(connection_string, _SQL_QUERY_PLAN.format(plan_handle=plan_handle))
+    if not rows or not rows[0].get("QueryPlanXml"):
+        return {"available": False, "nodes": []}
+
+    row = rows[0]
+    execution_count = max(int(row.get("ExecutionCount") or 1), 1)
+    avg_elapsed_ms = (row.get("TotalElapsedTimeMicros") or 0) / execution_count / 1000.0
+    avg_logical_reads = (row.get("TotalLogicalReads") or 0) / execution_count
+
+    return {
+        "available": True,
+        "execution_count": execution_count,
+        "avg_elapsed_ms": round(avg_elapsed_ms, 2),
+        "avg_logical_reads": round(avg_logical_reads, 1),
+        "nodes": _parse_plan_xml(row["QueryPlanXml"], avg_elapsed_ms),
+    }

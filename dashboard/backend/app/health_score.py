@@ -33,6 +33,7 @@ class InstanceHealth(BaseModel):
     reachable: bool
     overall_severity: str
     categories: dict = {}
+    metrics: dict = {}
     database_count: Optional[int] = None
     error: Optional[str] = None
 
@@ -51,6 +52,7 @@ async def _instance_health(instance: InstanceConfig) -> InstanceHealth:
         database_count = len(db_list) if isinstance(db_list, list) else None
         overall = score.get("overall_severity", "UNKNOWN") if isinstance(score, dict) else "UNKNOWN"
         categories = score.get("categories", {}) if isinstance(score, dict) else {}
+        metrics = score.get("metrics", {}) if isinstance(score, dict) else {}
         return InstanceHealth(
             name=instance.name,
             label=instance.label,
@@ -58,6 +60,7 @@ async def _instance_health(instance: InstanceConfig) -> InstanceHealth:
             reachable=True,
             overall_severity=overall,
             categories=categories,
+            metrics=metrics,
             database_count=database_count,
         )
     except MSSQLError as e:

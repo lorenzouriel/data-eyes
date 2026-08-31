@@ -20,27 +20,41 @@ Managing SQL Server effectively requires three critical capabilities:
 3. **Automation**: Ensuring consistent operational excellence (maintenance)
 
 ## Architecture Overview
-Data Eyes consists of three services that work together seamlessly:
+The **dashboard is the main service** — start there. Performance and Maintenance are standalone toolkits it works alongside; `.claude/` and `mcp/` are secondary, agent-only tooling for working on this repo with Claude Code, not something you need to run the dashboard:
 ```bash
 ┌─────────────────────────────────────────────────────────┐
-│                  Data Eyes Ecosystem                    │
+│                  Data Eyes Ecosystem                     │
 └─────────────────────────────────────────────────────────┘
-                          │
-        ┌─────────────────┼─────────────────┐
-        │                 │                 │
-    ┌───▼────┐       ┌────▼────┐      ┌────▼──────┐
-    │Dashboard│      │  Perf   │      │Maintenance│
-    │(Watch) │       │(Analyze)│      │ (Automate)│
-    └───┬────┘       └────┬────┘      └────┬──────┘
-        │                 │                 │
-        └─────────────────┼─────────────────┘
-                          │
-              ┌───────────▼───────────┐
-              │   SQL Server(s)       │
-              │   - Databases         │
-              │   - SQL Agent         │
-              │   - DMVs & Logs       │
-              └───────────────────────┘
+
+  PRIMARY — start here
+  ┌────────────────────────────────────────────────────┐
+  │                     Dashboard                        │
+  │             (Watch — connects directly)               │
+  └───────────────────────┬──────────────────────────────┘
+                           │
+              ┌────────────┼────────────┐
+              │                         │
+        ┌─────▼─────┐             ┌─────▼──────┐
+        │    Perf    │             │ Maintenance │
+        │  (Analyze) │             │ (Automate)  │
+        └─────┬──────┘             └──────┬──────┘
+              │                           │
+              └─────────────┬─────────────┘
+                             │
+                  ┌──────────▼──────────┐
+                  │    SQL Server(s)     │
+                  │  Databases · Agent   │
+                  │  DMVs & Logs         │
+                  └──────────────────────┘
+
+  SECONDARY — agent tooling, not required to run the dashboard
+  ┌────────────────────────────────────────────────────┐
+  │  .claude/   commands, agents, knowledge base           │
+  │       │ names an MCP tool / reads _static/ for routing │
+  │       ▼                                                │
+  │  mcp/   data-eyes-mcp — read access to SQL Server(s)   │
+  │         (used by Claude Code only, not the dashboard)  │
+  └────────────────────────────────────────────────────┘
 ```
 
 ### How They Work Together
@@ -61,15 +75,16 @@ Data Eyes consists of three services that work together seamlessly:
 ### 1. Dashboard App (custom, connects directly to SQL Server)
 **Location:** [dashboard/](dashboard/)
 
-**Purpose:** Real-time visibility and evaluated health status for SQL Server fleets — a DPA-style Main Page and per-database drill-down, not a generic panel dashboard
+**Purpose:** Real-time visibility and evaluated health status for SQL Server fleets — a DPA-style Fleet Status page and per-instance drill-down, not a generic panel dashboard
 
 **What's Included:**
-- **Main Page** - Fleet-wide health rollup (OK/Warning/Critical per instance and category), an embedded insights feed
-- **Per-database drill-down** - Tabbed DPA-style views: Wait Time, Top SQL, Storage, Sessions/Blocking, Config/Alerts, Index & Buffer, AG
-- **Database-backed instance registry** - Self-service "Add Instance" in the UI; `instances.yaml` only seeds it once on first boot
+- **Fleet Status** - Fleet-wide health rollup (OK/Warning/Critical per instance and category), table and tile views with a live wait-time sparkline per row
+- **Per-instance drill-down** - Wait types, Blocking, Sessions & users, SQL statements (with real execution-plan time attribution), Resources, and Advisor
+- **Advisor** - On-demand, Claude-drafted root-cause findings over real diagnostic data (wait history, blocking chain, top query + plan, missing-index candidates) — never a fabricated "tested" or "modelled" claim, just a labeled estimate
+- **Ask the fleet** - Real multi-turn chat over the fleet's live health data
+- **Database-backed instance registry** - Self-service "Register instance" in the Admin panel; `instances.yaml` only seeds it once on first boot
 - **Real user accounts** - One shared team, admin/member roles, no more single shared credential
 - **Trend history** - The dashboard's own Postgres database + persistent collector, independent of any monitored SQL Server
-- **Embedded insights agent** - Claude-generated commentary on page load and on severity change, plus on-demand deep explanations
 - **Docker Compose stack** - `dashboard/docker-compose.yml`
 
 **Key Features:**
@@ -86,13 +101,13 @@ Separately, [`mcp/`](mcp/) runs its own `data-eyes-mcp` server for **agent use o
 
 ### 2. Performance Tuning Toolkit
 
-**Location:** [performance/](performance/)
+**Location:** [.claude/resources/performance/](.claude/resources/performance/)
 
 **Purpose:** Systematic performance analysis and optimization methodology
 
 **What's Included:**
 - **Performance Tuning Workbook** (Excel) - Interactive planning and tracking
-  - 9-step structured methodology
+  - 10-step structured methodology
   - PerfMon counter guidance
   - Baseline comparison logging
   - Index maintenance policy templates
@@ -109,7 +124,7 @@ Separately, [`mcp/`](mcp/) runs its own `data-eyes-mcp` server for **agent use o
   - Warning notes and considerations
 
 **Core Methodology:**
-**9-Step Proven Approach** for measurable performance improvements
+**10-Step Proven Approach** for measurable performance improvements
 ```bash
 Step 0: Prep → Step 1: Baseline → Step 2: Workload Analysis
     │               │                       │
@@ -141,7 +156,7 @@ Step 6: CPU → Step 7: I/O/Log → Step 8: Config Review
 
 ### 3. Maintenance Automation
 
-**Location:** [maintenance/](maintenance/)
+**Location:** [.claude/resources/maintenance/](.claude/resources/maintenance/)
 
 **Purpose:** Automated operational tasks for data protection and performance consistency
 
@@ -190,7 +205,7 @@ Trusted by enterprises worldwide, battle-tested in production
 
 ### 4. SQL Scripts Collection
 
-**Location:** [sql-scripts/](sql-scripts/)
+**Location:** [.claude/resources/sql-scripts/](.claude/resources/sql-scripts/)
 
 **Purpose:** Personal collection of reusable SQL Server scripts organized by topic
 
@@ -211,12 +226,24 @@ Trusted by enterprises worldwide, battle-tested in production
 | `sql_access/` | User management, permissions, and access auditing |
 | `sql_agent/` | SQL Agent job monitoring, access, and history |
 | `sql_docker/` | Docker Compose setup for SQL Server |
-| `sql_maintenance/` | Maintenance playbooks and SQL Agent schedules |
-| `sql_monitor/` | Grafana + Prometheus monitoring stack |
 | `sql_profiler/` | SQL Profiler traces |
 | `ssis/` | SSIS job scheduling and maintenance |
 | `ssrs/` | SSRS report analysis and permission scripts |
 | `triggers/` | Database triggers |
+
+### 5. Claude Code Integration (secondary — supports the toolkit, doesn't run it)
+
+**Location:** [.claude/](.claude/)
+
+**Purpose:** Makes this repo usable with Claude Code — slash commands, specialist agents, and a knowledge-base layer that keeps severity thresholds, naming rules, and script routing in one place instead of duplicated across docs
+
+**What's Included:**
+- **Commands** (`.claude/commands/data-eyes/`) - `/sql-performance`, `/sql-maintenance`, `/sql-scripts`, `/sql-kb`, `/sql-pr-review`, `/sql-monitor`, `/sql-visual-report`, and more
+- **Agents** (`.claude/agents/`) - `sql-server-dba` (troubleshooting, tuning, maintenance via live `data-eyes-mcp` tools or the script folders as fallback) and `dashboard-app` (diagnoses the dashboard stack itself)
+- **Knowledge base** (`.claude/knowledge-base/`) - `_static/` is the compact, cross-cutting index (severity thresholds, category/tab/script routing, naming rules, the 10-step methodology, a script catalog) that both agents and the dashboard's severity logic read from; per-database `.md` files (built by `/sql-kb`) hold deep per-instance data. See `.claude/knowledge-base/README.md`.
+- **Resources** (`.claude/resources/`) - the Performance, Maintenance, and SQL Scripts toolkits described below live here, not at the repo root — see their own sections for what each contains
+
+Not required to run the dashboard — the maintenance/performance scripts still work exactly as documented in their own READMEs by hand, they're just addressed under `.claude/resources/` now, not the repo root. This is the layer that lets Claude Code work on this repo, or drive it on your behalf, consistently.
 
 ## Quick Start
 ### Prerequisites
@@ -248,7 +275,7 @@ uv run --with-editable . uvicorn app.main:app --reload --port 8090
 
 #### 2. Deploy Performance Toolkit (10 minutes)
 ```bash
-cd performance/
+cd .claude/resources/performance/
 # Open performance_tuning_workbook.xlsx
 # Enable Query Store on target databases
 # Run initial analysis scripts in SSMS
@@ -256,7 +283,7 @@ cd performance/
 
 #### 3. Install Maintenance Solution (20 minutes)
 ```bash
-cd maintenance/
+cd .claude/resources/maintenance/
 # Download Ola Hallengren scripts from https://ola.hallengren.com/
 # Execute MaintenanceSolution.sql in SSMS
 # Create backup directory: mkdir C:\Backup
@@ -300,19 +327,19 @@ Each component includes comprehensive documentation:
   - `data-eyes-mcp` server setup (stdio + HTTP transports) — agent-only, not used by the dashboard
   - Available diagnostic tools, plus the dashboard-repository trend tools (optional)
 
-- **Performance:** [performance/README.md](performance/README.md)
-  - 9-step methodology detailed walkthrough
+- **Performance:** [.claude/resources/performance/README.md](.claude/resources/performance/README.md)
+  - 10-step methodology detailed walkthrough
   - Script documentation (4 scripts × 4 guides)
   - Common performance scenarios
   - Best practices and thresholds
 
-- **Maintenance:** [maintenance/README.md](maintenance/README.md)
+- **Maintenance:** [.claude/resources/maintenance/README.md](.claude/resources/maintenance/README.md)
   - Ola Hallengren script integration
   - Job scheduling and configuration
   - Use cases and examples (35+ scenarios)
   - Monitoring and logging queries
 
-- **SQL Scripts:** [sql-scripts/README.md](sql-scripts/README.md)
+- **SQL Scripts:** [.claude/resources/sql-scripts/README.md](.claude/resources/sql-scripts/README.md)
   - Personal collection of reusable SQL Server scripts
   - Organized by topic (audit, backup, index, access, agent, etc.)
   - Quick reference for day-to-day DBA tasks

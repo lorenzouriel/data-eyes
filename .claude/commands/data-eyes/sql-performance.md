@@ -38,7 +38,7 @@ description: SQL Server performance tuning guide — maps symptoms to the 10-ste
 4. Presents the SQL as a copy-paste block ready for SSMS
 5. Offers optional execution via `sqlcmd` and interprets the live output
 
-The full methodology and all 16 DMV scripts are documented in `articles/performance.md`. The workbook `performance/performance_tuning_workbook.xlsx` is the companion planning and tracking tool.
+The full methodology and all 16 DMV scripts are documented in `articles/performance.md`. The workbook `.claude/resources/performance/performance_tuning_workbook.xlsx` is the companion planning and tracking tool.
 
 ---
 
@@ -90,19 +90,23 @@ Scripts 01–16 are the diagnostic toolkit. They are inline in `articles/perform
 
 ## Process
 
+### Step 0: Read the Threshold Registry
+
+Read `.claude/knowledge-base/_static/thresholds.yaml` before answering — it is the single source of truth for every severity number below (wait-time %, IO latency, fragmentation, missing-index impact score). Do not use a remembered or hardcoded number if it conflicts with what's in that file; the file wins.
+
 ### Step 1: Read Available Scripts and Documentation
 
 Use Glob to discover the scripts present in the repo:
 ```
-Glob("performance/additional_queries/*.sql")
-Glob("performance/additional_queries/docs/*.md")
+Glob(".claude/resources/performance/additional_queries/*.sql")
+Glob(".claude/resources/performance/additional_queries/docs/*.md")
 ```
 
 Read all available scripts and their documentation files:
-- `performance/additional_queries/wait_statistics.sql` + `docs/wait_statistics.md`
-- `performance/additional_queries/missing_indexes.sql` + `docs/missing_indexes.md`
-- `performance/additional_queries/unused_indexes.sql` + `docs/unused_indexes.md`
-- `performance/additional_queries/update_statistics.sql` + `docs/update_statistics.md`
+- `.claude/resources/performance/additional_queries/wait_statistics.sql` + `docs/wait_statistics.md`
+- `.claude/resources/performance/additional_queries/missing_indexes.sql` + `docs/missing_indexes.md`
+- `.claude/resources/performance/additional_queries/unused_indexes.sql` + `docs/unused_indexes.md`
+- `.claude/resources/performance/additional_queries/update_statistics.sql` + `docs/update_statistics.md`
 
 For scripts not yet present as `.sql` files (01–16 from the workbook), use the SQL inline in `articles/performance.md`. Read that file if needed.
 
@@ -154,29 +158,30 @@ For each matched script:
 | `RESOURCE_SEMAPHORE` | Memory grant starvation | Step 5 — fix over-granting queries, update stats |
 | `THREADPOOL` | Worker thread starvation | Reduce blocking, cap parallelism |
 
-**Threshold guidance:**
-- > 30% of total wait time = critical bottleneck, address immediately
-- 10–30% = significant, investigate
-- < 10% = monitor for trends
+**Threshold guidance** — from `thresholds.yaml`'s `waits.percentage_of_total` (read it fresh each time; don't restate a memorized number here):
+- ≥ critical threshold of total wait time = critical bottleneck, address immediately
+- ≥ warning threshold = significant, investigate
+- below warning threshold = monitor for trends
 
 **Missing Indexes interpretation guide (08_Missing_Indexes):**
 - `Avg_Estimated_Impact` = `avg_user_impact × (user_seeks + user_scans)` — higher is more impactful
+- Flag WARNING/CRITICAL per `thresholds.yaml`'s `index.missing_index_impact_score` bands
 - The generated `CREATE INDEX` statement is a recommendation — always check for similar existing indexes first
 - Every index adds write overhead — do not create blindly on write-heavy tables
 - One index at a time, then Step 9 (verify)
 
 **Index Usage interpretation guide (09_Index_Usage):**
-- Zero `user_seeks` + `user_scans` with high `user_updates` = pure write overhead, candidate for removal
+- Zero `user_seeks` + `user_scans` with high `user_updates` = pure write overhead, candidate for removal — see `thresholds.yaml`'s `index.unused_index_update_cost` bands
 - Stats reset on server restart — check `last_user_seek` before dropping anything
 
-**IO Latency thresholds (05_IO_Latency_by_File):**
-- Data files: < 10 ms good, 10–20 ms acceptable, > 20 ms poor
-- Log files: < 5 ms good, 5–10 ms acceptable, > 10 ms poor
+**IO Latency thresholds (05_IO_Latency_by_File)** — from `thresholds.yaml`'s `io.data_file_latency_ms` / `io.log_file_latency_ms`:
+- Data files: below `ok` = good, between `ok` and `warning` = acceptable, above `warning` = poor
+- Log files: same shape, log's own `ok`/`warning` values (tighter than data files — log writes are latency-sensitive)
 
-**Index Maintenance thresholds (10_Index_Fragmentation):**
-- < 5% → do nothing
-- 5–30% + page_count > 1000 → REORGANIZE + UPDATE STATISTICS (sampled)
-- > 30% + page_count > 1000 → REBUILD (online if supported) + UPDATE STATISTICS (FULLSCAN for critical predicates)
+**Index Maintenance thresholds (10_Index_Fragmentation)** — from `thresholds.yaml`'s `index.fragmentation_pct`:
+- Below `reorganize` → do nothing
+- Between `reorganize` and `rebuild` + page_count > 1000 → REORGANIZE + UPDATE STATISTICS (sampled)
+- Above `rebuild` + page_count > 1000 → REBUILD (online if supported) + UPDATE STATISTICS (FULLSCAN for critical predicates)
 
 ### Step 4: Output
 
@@ -192,7 +197,7 @@ For each matched script:
 **Write scripts (12_Deadlocks_XE, 13_Enable_Query_Store):**
 - Explain exactly what will be created or changed
 - Show the adapted SQL
-- Write to `sql-scripts/generated/performance/<name>.sql` if file does not exist
+- Write to `.claude/resources/sql-scripts/generated/performance/<name>.sql` if file does not exist
 - Ask: "Ready to execute? (yes/no)" — ONLY run after explicit yes
 
 ---

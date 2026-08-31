@@ -194,9 +194,9 @@ For each table touched by the SQL:
 
 ### Step 4: Apply Data Eyes Naming and Formatting Guidelines
 
-Run the same checks as `/sql-guidelines` on the submitted SQL:
+Run the same checks as `/sql-guidelines` on the submitted SQL. Read `.claude/knowledge-base/_static/naming-conventions.md` for the canonical table — don't rely on a memorized copy, it's the single source `/sql-guidelines`, the `sql-server-dba` agent, and the `missing_indexes` MCP tool all check against too:
 
-1. **Naming Conventions** — tables singular snake_case, columns snake_case, PK `[entity]_id`, FK `[ref_entity]_id`, procedures `usp_[verb]_[entity]`, views `vw_[entity]_[purpose]`, indexes `ix_` / `nix_`
+1. **Naming Conventions** (per `naming-conventions.md`) — tables singular snake_case, columns snake_case, PK `[entity]_id`, FK column `[ref_entity]_id`, **FK constraint name `fk_[table]_[referenced_table]`** (a separate check from the column name — flag a correctly-named FK column with a missing or wrongly-shaped constraint name too), procedures `usp_[verb]_[entity]`, views `vw_[entity]_[purpose]`, indexes `ix_` (unique) / `nix_` (non-unique)
    - **Never use the `sp_` prefix** — SQL Server resolves `sp_`-prefixed names against `master` first (extra metadata lookup, potential collision with system procedures). Flag any `sp_` procedure as a naming violation with fix `usp_`.
    - **Reserved-word identifiers must be bracket-quoted.** Singular snake_case naming guarantees collisions with reserved words (`order`, `user`, `session`, `group`, `transaction`) — these must always be written as `[order]`, `[user]`, etc. Flag any unbracketed reserved word.
 2. **Formatting** — keywords UPPERCASE, one clause per line, 4-space indent, explicit column lists, `AS` for aliases

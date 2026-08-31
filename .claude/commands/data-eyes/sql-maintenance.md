@@ -28,10 +28,10 @@ description: SQL Server maintenance assistant — backup, integrity, index, and 
 
 ## What This Skill Does
 
-1. Reads the existing maintenance scripts from `maintenance/` at invocation time — scripts are always the ground truth
+1. Reads the existing maintenance scripts from `.claude/resources/maintenance/` at invocation time — scripts are always the ground truth
 2. Maps your maintenance need to the right Ola Hallengren script and scenario
 3. Adapts the SQL to your environment (database list, backup path, retention, schedule)
-4. Outputs the adapted script as copy-paste SQL or writes it to `maintenance/generated/`
+4. Outputs the adapted script as copy-paste SQL or writes it to `.claude/resources/maintenance/generated/`
 5. Offers optional execution via `sqlcmd` after explicit confirmation
 
 ---
@@ -42,15 +42,16 @@ description: SQL Server maintenance assistant — backup, integrity, index, and 
 
 Use Glob to discover all available scripts:
 ```
-Glob("maintenance/**/*.sql")
+Glob(".claude/resources/maintenance/**/*.sql")
 ```
 
 Then read the relevant scripts based on user need:
-- `maintenance/playbook.sql` — core routines (backup, integrity, index, stats with Ola Hallengren parameters)
-- `maintenance/sql_agent_schedule_playbook.sql` — creates the 7 pre-configured SQL Agent jobs
-- `maintenance/use_cases/backup_ola_hallengren.sql` — 15 backup scenarios (local, network, Azure, AWS, encrypted)
-- `maintenance/use_cases/dbcc_check_ola_hallengren.sql` — 10 integrity check scenarios (CHECKDB, CHECKALLOC, filegroups)
-- `maintenance/use_cases/index_statistics_ola_hallengren.sql` — 10 index optimization scenarios (rebuild, reorganize, partitions)
+- `.claude/resources/maintenance/playbook.sql` — core routines (backup, integrity, index, stats with Ola Hallengren parameters)
+- `.claude/resources/maintenance/sql_agent_schedule_playbook.sql` — creates the 7 pre-configured SQL Agent jobs
+- `.claude/resources/maintenance/use_cases/backup_ola_hallengren.sql` — 15 backup scenarios (local, network, Azure, AWS, encrypted)
+- `.claude/resources/maintenance/use_cases/dbcc_check_ola_hallengren.sql` — 10 integrity check scenarios (CHECKDB, CHECKALLOC, filegroups)
+- `.claude/resources/maintenance/use_cases/index_statistics_ola_hallengren.sql` — 10 index optimization scenarios (rebuild, reorganize, partitions)
+- `.claude/resources/maintenance/diagnostics/*.sql` — read-only, live health-check queries (backup age, CHECKDB staleness, fragmentation, blocking, AG sync, job failures, disk space) for **"is X currently healthy?"** questions, distinct from the setup/scheduling scripts above
 
 ### Step 2: Map to Use Case
 
@@ -61,6 +62,7 @@ Then read the relevant scripts based on user need:
 | index, fragmentation, rebuild, reorganize, defragment | `playbook.sql` + `use_cases/index_statistics_ola_hallengren.sql` |
 | statistics, stats, update, stale | `playbook.sql` + `use_cases/index_statistics_ola_hallengren.sql` |
 | schedule, SQL Agent, jobs, all jobs, automate | `sql_agent_schedule_playbook.sql` |
+| is my backup/CHECKDB/index maintenance/job current or healthy right now? | `.claude/resources/maintenance/diagnostics/*.sql` (read-only status check, not a setup script) — interpret severity via `.claude/knowledge-base/_static/thresholds.yaml`'s `maintenance.*` keys (`backup.full_backup_age_hours`, `backup.log_backup_age_minutes`, `checkdb.staleness_days`, `jobs.failure_lookback_days`); don't restate a memorized number, read the file fresh |
 | show all / general overview | all scripts |
 
 ### Step 3: Adapt Parameters
@@ -85,11 +87,11 @@ Present the adapted script with all parameters clearly labeled. Explain what eac
 ### Step 4: Output
 
 1. Show the adapted SQL as a copy-paste block with a brief explanation of what it does
-2. Write the adapted script to `maintenance/generated/<descriptive-name>.sql`
-   - If the file already exists, ask: "Overwrite `maintenance/generated/<name>.sql`? (yes/no)"
+2. Write the adapted script to `.claude/resources/maintenance/generated/<descriptive-name>.sql`
+   - If the file already exists, ask: "Overwrite `.claude/resources/maintenance/generated/<name>.sql`? (yes/no)"
 3. Ask: "Ready to execute via sqlcmd? (yes/no)"
 4. If yes: check `$MSSQL_CONNECTION` environment variable
-   - If set: use it — format: `sqlcmd -S <server> -U <user> -P <pass> -i maintenance/generated/<name>.sql`
+   - If set: use it — format: `sqlcmd -S <server> -U <user> -P <pass> -i .claude/resources/maintenance/generated/<name>.sql`
    - If not set: prompt — "Please provide: Server name, Username, Password"
 5. Show the exact command before running it. Only execute after user sees and accepts it.
 
@@ -105,14 +107,14 @@ Present the adapted script with all parameters clearly labeled. Explain what eac
 **Maintenance scripts (CREATE JOB, EXECUTE DatabaseBackup, etc.):**
 - Explain exactly what objects will be created or what operations will run
 - Show the adapted SQL
-- Write to `maintenance/generated/<descriptive-name>.sql`
+- Write to `.claude/resources/maintenance/generated/<descriptive-name>.sql`
 - Ask: "Ready to execute? (yes/no)"
 - ONLY run after explicit "yes"
 
 **SQL Agent job scripts:**
 - List the 7 jobs that will be created with their schedules
 - Warn: "This will create SQL Agent jobs on your server"
-- Write to `maintenance/generated/sql_agent_jobs.sql`
+- Write to `.claude/resources/maintenance/generated/sql_agent_jobs.sql`
 - Ask: "Ready to create these jobs? (yes/no)"
 - ONLY run after explicit "yes"
 

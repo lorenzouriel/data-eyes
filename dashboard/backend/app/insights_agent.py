@@ -16,9 +16,10 @@ feature; tune the model/prompt against real usage, not in advance.
 
 import json
 import logging
-from typing import AsyncIterator, Optional
+from typing import AsyncIterator, Dict, List, Optional
 
 from anthropic import AsyncAnthropic
+from pydantic import BaseModel
 
 from .config import settings
 
@@ -155,4 +156,137 @@ async def stream_deep_explanation(context: dict, question: Optional[str] = None)
                 yield text
     except Exception:
         logger.exception("Deep explanation generation failed")
+        return
+
+
+# ---------------------------------------------------------------------------
+# Advisor — structured, on-demand root-cause narration over one instance's
+# real diagnostic data (wait history, blocking chain, top query + its parsed
+# plan, missing-index candidates). Deliberately NOT the mock design's
+# "shadow-tested" / "modelled impact" claims: nothing here is validated or
+# benchmarked, only drafted from live evidence. estimated_impact must be
+# sourced from missing_indexes()'s own improvement-score numbers, never
+# fabricated — enforced by prompt instruction, not by code (there is no
+# reliable way to verify a free-text field's provenance after the fact).
+# ---------------------------------------------------------------------------
+
+
+class AdvisorTimelineStep(BaseModel):
+    stage: str
+    detail: str
+
+
+class AdvisorFinding(BaseModel):
+    # Stable id for this finding so a re-generated report can still match it
+    # against a previously-dismissed one (see repository.advisor_dismissal).
+    # Should stay the same across regenerations of the same underlying issue
+    # (e.g. derived from the table/column/wait-category it's about) — the
+    # model is instructed to do this, not code-enforced.
+    finding_key: str
+    title: str
+    severity: str
+    timeline: List[AdvisorTimelineStep]
+    proposed_ddl: Optional[str] = None
+    risks: List[str]
+    evidence: List[str]
+    estimated_impact: Optional[str] = None
+
+
+class AdvisorReport(BaseModel):
+    summary: str
+    findings: List[AdvisorFinding]
+
+
+_ADVISOR_SYSTEM_PROMPT = (
+    "You are a SQL Server performance advisor embedded in a DBA dashboard. "
+    "You are given real, already-computed diagnostic data for one instance: "
+    "wait-category history, the current blocking chain, the instance's "
+    "top-cost query and its execution plan (per-operator time there is "
+    "cost-derived from the plan's own cost estimates, not independently "
+    "measured — treat it as approximate), and missing-index candidates "
+    "computed from live DMV statistics. Draft at most 3 concrete findings, "
+    "worst first, each with a finding_key that is a short stable slug "
+    "derived from what the finding is about (e.g. the table/index name or "
+    "wait category), a short timeline of stages 'detected', 'correlated', "
+    "'analyzed', 'attributed', 'drafted' showing how you reasoned from "
+    "symptom to cause, a proposed_ddl ONLY when a specific missing-index "
+    "candidate in the data directly supports one (never invent an index "
+    "that isn't in the data; leave proposed_ddl null otherwise), concrete "
+    "risks of applying that DDL, and the evidence rows that led you there. "
+    "For estimated_impact, use ONLY the improvement-score/user-impact "
+    "numbers already present in the missing-index data, phrased as an "
+    "estimate (e.g. 'DMV improvement score: 84,200 — an estimate, not a "
+    "measured result'). Never say a change was shadow-tested, modelled, "
+    "validated, or benchmarked — nothing here has been applied. If the data "
+    "shows nothing actionable, return an empty findings list and say so "
+    "plainly in the summary."
+)
+
+
+async def generate_advisor_report(instance_name: str, context: dict) -> Optional[AdvisorReport]:
+    """Non-streaming, structured JSON output via messages.parse — the report
+    is generated fresh on every call (see routers/insights.py), not cached,
+    so it always reflects the instance's current data."""
+    client = _get_client()
+    if client is None:
+        return None
+    prompt = (
+        f"Instance: {instance_name}\n\n"
+        f"{_compact_context(context)}\n\n"
+        "Draft the advisor findings for this instance now."
+    )
+    try:
+        response = await client.messages.parse(
+            model=_DEEP_MODEL,
+            max_tokens=4096,
+            system=_ADVISOR_SYSTEM_PROMPT,
+            output_config={"effort": "medium"},
+            messages=[{"role": "user", "content": prompt}],
+            output_format=AdvisorReport,
+        )
+        return response.parsed_output
+    except Exception:
+        logger.exception("Advisor report generation failed for %s", instance_name)
+        return None
+
+
+# ---------------------------------------------------------------------------
+# Ask the fleet — real multi-turn chat (conversation history is sent back on
+# every turn, same statelessness as the rest of the Messages API) over
+# fleet-wide health data, not a single-shot Q&A.
+# ---------------------------------------------------------------------------
+
+_ASK_SYSTEM_PROMPT = (
+    "You are the Data Eyes fleet assistant, answering a DBA's plain-English "
+    "questions about their registered SQL Server instances. You are given "
+    "severity-tagged health data already computed by the monitoring system "
+    "— you do not query the databases yourself, and must never invent "
+    "numbers not present in the data. If the data needed to answer isn't in "
+    "the context provided, say so plainly instead of guessing. Be direct "
+    "and specific, and name instances explicitly when relevant."
+)
+
+
+async def stream_chat(history: List[Dict[str, str]], context: dict) -> AsyncIterator[str]:
+    """history is the full conversation so far, each item {"role": "user"|
+    "assistant", "content": str} — real multi-turn state, not a single
+    prompt. context is fleet-wide health data, recompacted fresh on every
+    call by the caller (see routers/insights.py's /ask) since fleet state
+    can change between turns."""
+    client = _get_client()
+    if client is None or not history:
+        return
+    system = f"{_ASK_SYSTEM_PROMPT}\n\nCurrent fleet data:\n{_compact_context(context)}"
+    messages = [{"role": item["role"], "content": item["content"]} for item in history]
+    try:
+        async with client.messages.stream(
+            model=_DEEP_MODEL,
+            max_tokens=2000,
+            system=system,
+            messages=messages,
+        ) as stream:
+            async for text in stream.text_stream:
+                yield text
+    except Exception:
+        logger.exception("Fleet chat generation failed")
         return

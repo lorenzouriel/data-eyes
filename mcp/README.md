@@ -1,5 +1,7 @@
 # Data Eyes MCP
 
+> **Secondary service — agent-only tooling.** This is what Claude Code (and other MCP clients) use to query SQL Server directly during a session. It is not required to run the [dashboard](../README.md) — that's the primary service, and it talks to SQL Server on its own, without going through this server at all. Skip this folder unless you're setting up Claude Code (or another MCP client) against this toolkit.
+
 The MCP (Model Context Protocol) layer of the [Data Eyes](../README.md) toolkit — a Python server that safely exposes SQL Server database and DBA-diagnostic capabilities to LLM clients (Claude Code's `sql-server-dba` agent, or any other MCP client).
 
 This server is agent-only: the [`dashboard/`](../dashboard/) app queries SQL Server directly (`dashboard/backend/app/diagnostics.py`) rather than through this server — MCP's tool-calling/policy-gate machinery is overhead a trusted backend running fixed, known queries doesn't need. What this server *does* additionally expose to an agent is read access to the dashboard's own trend-history repository (see `REPOSITORY_DSN` below) — a capability the dashboard's own rendering path doesn't need (it talks to that database directly) but an interactive Claude Code session might.
@@ -167,7 +169,7 @@ discover (`list_databases` → `describe_table` / `get_relationships` / `sample_
 
 ## DBA Diagnostic Tools
 
-Beyond the generic tools above, `data_eyes_mcp/dba_tools.py` registers 11 more: `wait_stats`, `missing_indexes`, `unused_indexes`, `stale_statistics`, `index_fragmentation`, `top_queries`, `db_space`, `backup_health`, `checkdb_health`, `blocking_snapshot`, `ag_health`, `job_health`, plus the `fleet_health_score` rollup. Each mirrors a script in `performance/additional_queries/` or `maintenance/diagnostics/`, returns a `severity` (`OK`/`WARNING`/`CRITICAL`) per row driven by `.claude/knowledge-base/_static/thresholds.yaml`, and is documented in full via its own docstring (visible to any MCP client, including Claude Code) — see `.claude/knowledge-base/_static/taxonomy.md` for the category ↔ tool routing table.
+Beyond the generic tools above, `data_eyes_mcp/dba_tools.py` registers 11 more: `wait_stats`, `missing_indexes`, `unused_indexes`, `stale_statistics`, `index_fragmentation`, `top_queries`, `db_space`, `backup_health`, `checkdb_health`, `blocking_snapshot`, `ag_health`, `job_health`, plus the `fleet_health_score` rollup. Each mirrors a script in `.claude/resources/performance/additional_queries/` or `.claude/resources/maintenance/diagnostics/`, returns a `severity` (`OK`/`WARNING`/`CRITICAL`) per row driven by `.claude/knowledge-base/_static/thresholds.yaml`, and is documented in full via its own docstring (visible to any MCP client, including Claude Code) — see `.claude/knowledge-base/_static/taxonomy.md` for the category ↔ tool routing table.
 
 ## Dashboard Repository Trend Tools
 

@@ -7,18 +7,18 @@ Maps every DPA-style category to its script, tool/function name, and its dashboa
 | Category | Tab | Script(s) | Tool/function name | Source doc |
 |---|---|---|---|---|
 | Overview / instance health | Overview | — (composite) | `fleet_health_score` | `monitor/docs/general.md`, `monitor/docs/availability_groups.md` |
-| Wait time analysis | Wait Time Analysis | `performance/additional_queries/wait_statistics.json.sql` | `wait_stats` | `performance/additional_queries/docs/wait_statistics.md` |
-| Missing indexes | Index & Buffer | `performance/additional_queries/missing_indexes.json.sql` | `missing_indexes` | `performance/additional_queries/docs/missing_indexes.md` |
-| Unused indexes | Index & Buffer | `performance/additional_queries/unused_indexes.json.sql` | `unused_indexes` | `performance/additional_queries/docs/unused_indexes.md` |
-| Stale statistics | Index & Buffer | `performance/additional_queries/update_statistics.json.sql` | `stale_statistics` | `performance/additional_queries/docs/update_statistics.md` |
-| Index fragmentation (live) | Index & Buffer | `maintenance/diagnostics/fragmentation_live_scan.sql` | `index_fragmentation` | `maintenance/diagnostics/docs/fragmentation_live_scan.md` |
-| Backup health | Configuration / Alerts | `maintenance/diagnostics/backup_health_check.sql` | `backup_health` | `maintenance/diagnostics/docs/backup_health_check.md`, `monitor/docs/other_metrics.md` |
-| CHECKDB / corruption staleness | Configuration / Alerts | `maintenance/diagnostics/checkdb_staleness.sql` | `checkdb_health` | `maintenance/diagnostics/docs/checkdb_staleness.md`, `maintenance/README.md` (CommandLog) |
-| Blocking / sessions | Sessions / Blocking | `maintenance/diagnostics/blocking_chain_snapshot.sql` | `blocking_snapshot` | `maintenance/diagnostics/docs/blocking_chain_snapshot.md`, `monitor/docs/database_space_usage.md` (Active Locks) |
-| AG / replica sync health | AG (conditional tab) | `maintenance/diagnostics/ag_sync_health.sql` | `ag_health` | `monitor/docs/availability_groups.md` |
-| SQL Agent job health | Configuration / Alerts | `maintenance/diagnostics/job_failure_scan.sql` | `job_health` | `monitor/docs/jobs_monitoring.md` |
-| Top SQL (slow/costly queries) | Top SQL | `performance/additional_queries/top_queries.json.sql` | `top_queries` | `performance/additional_queries/docs/top_queries.md`, `monitor/docs/query_perfomance.md`, `monitor/docs/other_metrics.md` |
-| Storage / disk space | Storage | `maintenance/diagnostics/db_space_check.sql` | `db_space` | `maintenance/diagnostics/docs/db_space_check.md`, `monitor/docs/database_space_usage.md` |
+| Wait time analysis | Wait Time Analysis | `.claude/resources/performance/additional_queries/wait_statistics.json.sql` | `wait_stats` | `.claude/resources/performance/additional_queries/docs/wait_statistics.md` |
+| Missing indexes | Index & Buffer | `.claude/resources/performance/additional_queries/missing_indexes.json.sql` | `missing_indexes` | `.claude/resources/performance/additional_queries/docs/missing_indexes.md` |
+| Unused indexes | Index & Buffer | `.claude/resources/performance/additional_queries/unused_indexes.json.sql` | `unused_indexes` | `.claude/resources/performance/additional_queries/docs/unused_indexes.md` |
+| Stale statistics | Index & Buffer | `.claude/resources/performance/additional_queries/update_statistics.json.sql` | `stale_statistics` | `.claude/resources/performance/additional_queries/docs/update_statistics.md` |
+| Index fragmentation (live) | Index & Buffer | `.claude/resources/maintenance/diagnostics/fragmentation_live_scan.sql` | `index_fragmentation` | `.claude/resources/maintenance/diagnostics/docs/fragmentation_live_scan.md` |
+| Backup health | Configuration / Alerts | `.claude/resources/maintenance/diagnostics/backup_health_check.sql` | `backup_health` | `.claude/resources/maintenance/diagnostics/docs/backup_health_check.md`, `monitor/docs/other_metrics.md` |
+| CHECKDB / corruption staleness | Configuration / Alerts | `.claude/resources/maintenance/diagnostics/checkdb_staleness.sql` | `checkdb_health` | `.claude/resources/maintenance/diagnostics/docs/checkdb_staleness.md`, `.claude/resources/maintenance/README.md` (CommandLog) |
+| Blocking / sessions | Sessions / Blocking | `.claude/resources/maintenance/diagnostics/blocking_chain_snapshot.sql` | `blocking_snapshot` | `.claude/resources/maintenance/diagnostics/docs/blocking_chain_snapshot.md`, `monitor/docs/database_space_usage.md` (Active Locks) |
+| AG / replica sync health | AG (conditional tab) | `.claude/resources/maintenance/diagnostics/ag_sync_health.sql` | `ag_health` | `monitor/docs/availability_groups.md` |
+| SQL Agent job health | Configuration / Alerts | `.claude/resources/maintenance/diagnostics/job_failure_scan.sql` | `job_health` | `monitor/docs/jobs_monitoring.md` |
+| Top SQL (slow/costly queries) | Top SQL | `.claude/resources/performance/additional_queries/top_queries.json.sql` | `top_queries` | `.claude/resources/performance/additional_queries/docs/top_queries.md`, `monitor/docs/query_perfomance.md`, `monitor/docs/other_metrics.md` |
+| Storage / disk space | Storage | `.claude/resources/maintenance/diagnostics/db_space_check.sql` | `db_space` | `.claude/resources/maintenance/diagnostics/docs/db_space_check.md`, `monitor/docs/database_space_usage.md` |
 
 ## Trend history (agent-accessible)
 

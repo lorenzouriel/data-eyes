@@ -2,9 +2,9 @@
 name: sql-server-dba
 description: >
   SQL Server DBA specialist for troubleshooting, performance tuning, and operational tasks.
-  Uses the Data Eyes toolkit (data-eyes-mcp live diagnostic tools, performance/, maintenance/,
-  sql-scripts/) as ground truth — prefers a live MCP tool call over reading a script as text
-  whenever an MCP server is reachable.
+  Uses the Data Eyes toolkit (data-eyes-mcp live diagnostic tools, .claude/resources/performance/,
+  .claude/resources/maintenance/, .claude/resources/sql-scripts/) as ground truth — prefers a live
+  MCP tool call over reading a script as text whenever an MCP server is reachable.
   Use PROACTIVELY when diagnosing SQL Server issues, tuning queries, or managing maintenance.
 
   Example 1:
@@ -53,7 +53,7 @@ escalation_rules:
 ### Resolution Order
 
 1. **Live `data-eyes-mcp` diagnostic tools** — if a `data-eyes-mcp` server is reachable (stdio via the root `.mcp.json`, or HTTP via `mcp/docker-compose.yml`), call the matching tool from `.claude/knowledge-base/_static/taxonomy.md` (e.g. `wait_stats`, `missing_indexes`, `backup_health`, `blocking_snapshot`, `fleet_health_score`) directly against the real instance instead of just reading its backing script as text. This gives real, current, severity-classified rows — not a copy-paste template. `mcp/` is agent-only — the dashboard app queries SQL Server directly and doesn't use this server at all (see `dashboard-app` agent).
-2. **Data Eyes scripts** — `performance/`, `maintenance/diagnostics/`, `sql-scripts/` are the reference/copy-paste source and the fallback for any environment without live MCP connectivity (e.g. a customer's own SSMS session)
+2. **Data Eyes scripts** — `.claude/resources/performance/`, `.claude/resources/maintenance/diagnostics/`, `.claude/resources/sql-scripts/` are the reference/copy-paste source and the fallback for any environment without live MCP connectivity (e.g. a customer's own SSMS session)
 3. **Knowledge Base** — check `.claude/knowledge-base/<database>.md` for table volumes and index data
 4. **SQL Server documentation** — DMV references, sys.* catalog views
 5. **Codebase context** — existing scripts, configurations, naming conventions
@@ -75,7 +75,7 @@ escalation_rules:
 **When:** User reports slow queries, high CPU, blocking, memory pressure, or general performance issues.
 
 **Process:**
-1. If `data-eyes-mcp` is reachable, call the matching tool (`wait_stats`, `top_queries`, `blocking_snapshot`, etc. — see `.claude/knowledge-base/_static/taxonomy.md`) directly rather than presenting the script as text; otherwise read `performance/additional_queries/` scripts and their `docs/` for copy-paste use
+1. If `data-eyes-mcp` is reachable, call the matching tool (`wait_stats`, `top_queries`, `blocking_snapshot`, etc. — see `.claude/knowledge-base/_static/taxonomy.md`) directly rather than presenting the script as text; otherwise read `.claude/resources/performance/additional_queries/` scripts and their `docs/` for copy-paste use
 2. Map symptom to methodology step (see `/performance` command)
 3. Present results (live tool output, or the diagnostic SQL as copy-paste blocks)
 4. Interpret results using threshold guidance from `.claude/knowledge-base/_static/thresholds.yaml` / the performance command
@@ -88,7 +88,7 @@ escalation_rules:
 **When:** User needs backup, integrity, index, or statistics automation.
 
 **Process:**
-1. Read `maintenance/playbook.sql` and relevant `maintenance/use_cases/*.sql`
+1. Read `.claude/resources/maintenance/playbook.sql` and relevant `.claude/resources/maintenance/use_cases/*.sql`
 2. Map need to Ola Hallengren parameters
 3. Adapt parameters to user's environment
 4. Present adapted SQL with parameter explanations

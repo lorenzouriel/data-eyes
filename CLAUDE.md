@@ -18,29 +18,30 @@ data-eyes/
 │   ├── src/data_eyes_mcp/   generic tools (tools.py) + DBA diagnostic tools (dba_tools.py, 11 tools)
 │   │                        + dashboard-repository trend tools (repository_tools.py, 3 tools)
 │   └── docker-compose.yml   single instance
-├── performance/          10-step performance tuning methodology
-│   ├── performance_tuning_workbook.xlsx
-│   └── additional_queries/   9 diagnostic SQL scripts (severity-classified *.json.sql + originals) + docs
-├── maintenance/          Ola Hallengren maintenance automation
-│   ├── playbook.sql
-│   ├── sql_agent_schedule_playbook.sql
-│   ├── use_cases/        35+ scenarios (backup, integrity, index)
-│   └── diagnostics/      7 live read-only diagnostic scripts (backup, CHECKDB, fragmentation, blocking, AG, jobs, space) + docs
-├── sql-scripts/          84 reusable DBA scripts across 18 topics
-│   ├── audit/            backup_recovery/   custom_alert_emails/
-│   ├── database_size/    free_space/         functions/
-│   ├── helps/            index/              lock/
-│   ├── query_store/      server/             sql_access/
-│   ├── sql_agent/        sql_docker/         sql_profiler/
-│   ├── ssis/             ssrs/               triggers/
-│   └── README.md
 └── .claude/
     ├── settings.json
     ├── commands/data-eyes/   12 slash commands
     ├── agents/               sql-server-dba, dashboard-app
-    └── knowledge-base/
-        ├── _static/          shared static KB: thresholds.yaml, taxonomy.md, naming-conventions.md, methodology.md, scripts-index.md
-        └── <database>.md     per-database volume/index KBs (built by /sql-kb)
+    ├── knowledge-base/
+    │   ├── _static/          shared static KB: thresholds.yaml, taxonomy.md, naming-conventions.md, methodology.md, scripts-index.md
+    │   └── <database>.md     per-database volume/index KBs (built by /sql-kb)
+    └── resources/            secondary, agent-supporting toolkits — not required to run the dashboard
+        ├── performance/      10-step performance tuning methodology
+        │   ├── performance_tuning_workbook.xlsx
+        │   └── additional_queries/   9 diagnostic SQL scripts (severity-classified *.json.sql + originals) + docs
+        ├── maintenance/      Ola Hallengren maintenance automation
+        │   ├── playbook.sql
+        │   ├── sql_agent_schedule_playbook.sql
+        │   ├── use_cases/    35+ scenarios (backup, integrity, index)
+        │   └── diagnostics/  7 live read-only diagnostic scripts (backup, CHECKDB, fragmentation, blocking, AG, jobs, space) + docs
+        └── sql-scripts/      84 reusable DBA scripts across 18 topics
+            ├── audit/            backup_recovery/   custom_alert_emails/
+            ├── database_size/    free_space/         functions/
+            ├── helps/            index/              lock/
+            ├── query_store/      server/             sql_access/
+            ├── sql_agent/        sql_docker/         sql_profiler/
+            ├── ssis/             ssrs/               triggers/
+            └── README.md
 ```
 
 ## Key Conventions

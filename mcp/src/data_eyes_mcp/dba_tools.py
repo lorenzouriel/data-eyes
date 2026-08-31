@@ -8,7 +8,7 @@ stale statistics, live index fragmentation, backup/CHECKDB/job/AG health, and a
 per-instance fleet_health_score rollup.
 
 Each tool reimplements the equivalent logic found in
-performance/additional_queries/*.json.sql or maintenance/diagnostics/*.sql as a
+.claude/resources/performance/additional_queries/*.json.sql or .claude/resources/maintenance/diagnostics/*.sql as a
 plain (non-FOR-JSON) query built in Python, then formats results via
 utils.format_json — mirroring the existing generic tools in tools.py
 (schema_discovery, describe_table, etc.), not the .sql files' own
@@ -33,7 +33,7 @@ from .utils import format_json, escape_sql_string
 
 logger = logging.getLogger(__name__)
 
-# Same exclusion list as performance/additional_queries/wait_statistics.sql —
+# Same exclusion list as .claude/resources/performance/additional_queries/wait_statistics.sql —
 # benign/system wait types that don't indicate a performance issue.
 _BENIGN_WAIT_TYPES_SQL = """
     N'BROKER_EVENTHANDLER', N'BROKER_RECEIVE_WAITFOR', N'BROKER_TASK_STOP',
@@ -522,7 +522,7 @@ async def wait_stats(database: Optional[str] = None, top_n: int = 25, ctx: Optio
     Analyze SQL Server wait statistics to identify performance bottlenecks.
 
     Cumulative since last restart / DBCC SQLPERF CLEAR — short-uptime instances
-    show noisy percentages. Mirrors performance/additional_queries/wait_statistics.json.sql.
+    show noisy percentages. Mirrors .claude/resources/performance/additional_queries/wait_statistics.json.sql.
 
     Args:
         database: Initial catalog for the connection (waits are instance-wide).
@@ -549,7 +549,7 @@ async def missing_indexes(database: Optional[str] = None, top_n: int = 25, ctx: 
     """
     Identify missing indexes by estimated impact, with generated CREATE INDEX text.
 
-    Mirrors performance/additional_queries/missing_indexes.json.sql. Impact
+    Mirrors .claude/resources/performance/additional_queries/missing_indexes.json.sql. Impact
     thresholds are heuristic — see .claude/knowledge-base/_static/thresholds.yaml.
 
     Args:
@@ -579,7 +579,7 @@ async def unused_indexes(database: Optional[str] = None, top_n: int = 25, ctx: O
 
     Caveat: sys.dm_db_index_usage_stats resets on service restart — cross-check
     instance uptime before treating a result here as conclusive. Mirrors
-    performance/additional_queries/unused_indexes.json.sql.
+    .claude/resources/performance/additional_queries/unused_indexes.json.sql.
 
     Args:
         database: Database to analyze (defaults to the connection's database).
@@ -608,9 +608,9 @@ async def stale_statistics(
     """
     Find statistics that are stale (old + modified since last update).
 
-    Mirrors performance/additional_queries/update_statistics.json.sql (the
+    Mirrors .claude/resources/performance/additional_queries/update_statistics.json.sql (the
     read-only analysis half — running sp_updatestats itself is a write
-    operation and stays in that original script / maintenance/).
+    operation and stays in that original script / .claude/resources/maintenance/).
 
     Args:
         database: Database to analyze (defaults to the connection's database).
@@ -644,7 +644,7 @@ async def index_fragmentation(
     Live index fragmentation scan (sys.dm_db_index_physical_stats), distinct
     from unused_indexes (usage-stats based). Not a cheap query on large
     databases — don't poll on a short interval. Mirrors
-    maintenance/diagnostics/fragmentation_live_scan.sql.
+    .claude/resources/maintenance/diagnostics/fragmentation_live_scan.sql.
 
     Args:
         database: Database to scan (defaults to the connection's database —
@@ -672,7 +672,7 @@ async def index_fragmentation(
 async def top_queries(database: Optional[str] = None, top_n: int = 25, ctx: Optional[Context] = None) -> str:
     """
     Rank queries by average elapsed time per execution — the "Top SQL"
-    DPA-style category. Mirrors performance/additional_queries/top_queries.json.sql,
+    DPA-style category. Mirrors .claude/resources/performance/additional_queries/top_queries.json.sql,
     which closed a gap where this logic previously only existed as inline
     Grafana panel SQL.
 
@@ -706,7 +706,7 @@ async def db_space(database: Optional[str] = None, ctx: Optional[Context] = None
     "Storage" DPA-style category. A database can have plenty of free space
     inside its own files while the disk hosting it is nearly full; severity
     is driven by drive free space, the actual outage risk. Mirrors
-    maintenance/diagnostics/db_space_check.sql, which closed a gap where
+    .claude/resources/maintenance/diagnostics/db_space_check.sql, which closed a gap where
     this logic previously only existed as inline Grafana panel SQL.
 
     Args:
@@ -735,7 +735,7 @@ async def backup_health(database: Optional[str] = None, ctx: Optional[Context] =
     Backup health per user database: last FULL/DIFF/LOG backup and staleness.
 
     Reads msdb.dbo.backupset (any backup method, not just this toolkit's jobs).
-    Mirrors maintenance/diagnostics/backup_health_check.sql.
+    Mirrors .claude/resources/maintenance/diagnostics/backup_health_check.sql.
 
     Args:
         database: Restrict to a single database (defaults to all user databases).
@@ -764,9 +764,9 @@ async def checkdb_health(database: Optional[str] = None, ctx: Optional[Context] 
     CHECKDB staleness + active suspect pages per user database.
 
     Reads master.dbo.CommandLog, which only exists once Ola Hallengren's
-    maintenance scripts are installed (see maintenance/README.md) — a database
+    maintenance scripts are installed (see .claude/resources/maintenance/README.md) — a database
     never checked via that path reports LastCheckDBEndTime = NULL and
-    severity = CRITICAL. Mirrors maintenance/diagnostics/checkdb_staleness.sql.
+    severity = CRITICAL. Mirrors .claude/resources/maintenance/diagnostics/checkdb_staleness.sql.
 
     Args:
         database: Restrict to a single database (defaults to all user databases).
@@ -794,7 +794,7 @@ async def blocking_snapshot(ctx: Optional[Context] = None) -> str:
     Point-in-time snapshot of active blocking, instance-wide, with head-blocker
     identification. This is a snapshot, not a trend — call repeatedly to detect
     persistent vs. transient blocking. Mirrors
-    maintenance/diagnostics/blocking_chain_snapshot.sql.
+    .claude/resources/maintenance/diagnostics/blocking_chain_snapshot.sql.
 
     Returns:
         JSON rows: BlockedSessionID, BlockingSessionID, WaitType,
@@ -819,7 +819,7 @@ async def ag_health(ctx: Optional[Context] = None) -> str:
     Per-database Availability Group sync health — a replica can report HEALTHY
     while one of its databases is NOT SYNCHRONIZING. Returns an empty result
     (not an error) on standalone/non-AG instances. Mirrors
-    maintenance/diagnostics/ag_sync_health.sql.
+    .claude/resources/maintenance/diagnostics/ag_sync_health.sql.
 
     Returns:
         JSON rows: DatabaseName, Replica, SyncState, SyncHealth,
@@ -844,7 +844,7 @@ async def job_health(ctx: Optional[Context] = None) -> str:
     Most recent run outcome and 7-day failure count per enabled SQL Agent job.
 
     Jobs are instance-level, not per-database — this tool has no `database`
-    parameter. Mirrors maintenance/diagnostics/job_failure_scan.sql.
+    parameter. Mirrors .claude/resources/maintenance/diagnostics/job_failure_scan.sql.
 
     Returns:
         JSON rows: JobName, LastRunDateTime, LastRunStatus, LastRunMessage,

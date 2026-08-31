@@ -1,11 +1,12 @@
 """
 Data Eyes dashboard backend — FastAPI app.
 
-Replaces monitor/'s Grafana stack. Serves the Main Page (fleet-wide health
-summary, GET /api/fleet), the per-database DPA-style tabbed drill-down
-(GET /api/instances/:id, GET /api/instances/:id/databases/:db/tabs/:tab),
-trend history (GET /api/instances/:id/trend/:category), and the embedded
-insights agent (GET /api/insights/feed, SSE streams, POST /api/insights/explain).
+Replaces monitor/'s Grafana stack. Serves Fleet Status (GET /api/fleet), the
+per-instance tabbed drill-down (GET /api/instances/:id/overview,
+GET /api/instances/:id/tabs/:tab), trend history (GET /api/instances/:id/trend/:category),
+and the embedded insights agent (GET /api/insights/feed, SSE streams,
+POST /api/insights/explain, POST /api/insights/instances/:id/advisor,
+POST /api/insights/ask).
 Talks to each monitored SQL Server instance directly (app/mssql_client.py,
 app/diagnostics.py) rather than through an MCP server — MCP
 (mcp/src/data_eyes_mcp/) is reserved for agent use (Claude Code's
@@ -23,10 +24,10 @@ from . import collector, insights_sweep, repository
 from .auth import ensure_bootstrap_admin
 from .auth import router as auth_router
 from .config import load_seed_instances, settings
-from .routers.databases import router as databases_router
 from .routers.fleet import router as fleet_router
 from .routers.health import router as health_router
 from .routers.insights import router as insights_router
+from .routers.instance_tabs import router as instance_tabs_router
 from .routers.instances import router as instances_router
 from .routers.trends import router as trends_router
 from .routers.users import router as users_router
@@ -93,6 +94,6 @@ app.include_router(auth_router)
 app.include_router(users_router)
 app.include_router(fleet_router)
 app.include_router(instances_router)
-app.include_router(databases_router)
+app.include_router(instance_tabs_router)
 app.include_router(trends_router)
 app.include_router(insights_router)

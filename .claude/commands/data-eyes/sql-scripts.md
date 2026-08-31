@@ -42,6 +42,8 @@ description: Find, adapt, and run SQL Server scripts from the sql-scripts librar
 
 ## Sub-folder Routing Map
 
+This table is the canonical routing source for `.claude/resources/sql-scripts/` — `.claude/knowledge-base/_static/scripts-index.md` deliberately does not duplicate it (would drift immediately against this file), and only lists the folder names. Keep new sub-folders' keywords here, not there.
+
 Before reading any scripts, route the user's problem to the correct sub-folder:
 
 | Keywords | Sub-folder |
@@ -77,7 +79,7 @@ Before reading any scripts, route the user's problem to the correct sub-folder:
 Parse the user's message. Find the best matching keywords in the routing table above.
 For each matched sub-folder:
 ```
-Glob("sql-scripts/<matched-sub-folder>/*.sql")
+Glob(".claude/resources/sql-scripts/<matched-sub-folder>/*.sql")
 ```
 
 If the match is ambiguous (e.g., "index" could mean index fragmentation OR index statistics), route to both sub-folders and read all scripts.
@@ -116,7 +118,7 @@ Show the adapted SQL with placeholders clearly marked with `-- TODO: replace` co
 **Scripts that CREATE or ALTER objects (indexes, stored procedures, jobs, credentials):**
 - Explain exactly what will be created or changed
 - Show the adapted SQL
-- Write to `sql-scripts/generated/<sub-folder>/<descriptive-name>.sql`
+- Write to `.claude/resources/sql-scripts/generated/<sub-folder>/<descriptive-name>.sql`
   - If file already exists: ask "Overwrite? (yes/no)"
 - Ask: "Ready to execute? (yes/no)"
 - ONLY run after explicit "yes"
@@ -130,7 +132,7 @@ Show the adapted SQL with placeholders clearly marked with `-- TODO: replace` co
 **Destructive operations (DROP USER, DENY, KILL session, SHRINK, DELETE):**
 - Always explain the impact before showing the script
 - State clearly: "This operation is irreversible" or "This will terminate active sessions"
-- Write to `sql-scripts/generated/<sub-folder>/<name>.sql`
+- Write to `.claude/resources/sql-scripts/generated/<sub-folder>/<name>.sql`
 - Ask for explicit confirmation with a clear warning
 - ONLY run after explicit "yes"
 
@@ -169,4 +171,4 @@ Show the adapted SQL with placeholders clearly marked with `-- TODO: replace` co
 - For `SHRINK`: warn this is generally not recommended in production — it causes index fragmentation
 - For DROP USER: confirm the user is not actively connected before suggesting the script
 - If the user provides a specific script name, read and present it directly without routing
-- New sub-folders added to `sql-scripts/` can be accessed by adding their keywords to the routing table in this skill file
+- New sub-folders added to `.claude/resources/sql-scripts/` can be accessed by adding their keywords to the routing table in this skill file

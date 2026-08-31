@@ -2,11 +2,10 @@ import type { JSX } from "react";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { AuthProvider, useAuth } from "./auth/AuthContext";
 import Login from "./pages/Login";
-import MainPage from "./pages/MainPage";
+import FleetStatus from "./pages/FleetStatus";
 import InstanceDetail from "./pages/InstanceDetail";
-import DatabaseDrillDown from "./pages/DatabaseDrillDown";
-import InstanceManager from "./pages/InstanceManager";
-import UserManager from "./pages/UserManager";
+import Admin from "./pages/Admin";
+import Ask from "./pages/Ask";
 import Account from "./pages/Account";
 
 function ProtectedRoute({ children }: { children: JSX.Element }) {
@@ -26,12 +25,12 @@ export default function App() {
             path="/"
             element={
               <ProtectedRoute>
-                <MainPage />
+                <FleetStatus />
               </ProtectedRoute>
             }
           />
           <Route
-            path="/instances/:instanceName"
+            path="/instances/:instanceName/:tab?"
             element={
               <ProtectedRoute>
                 <InstanceDetail />
@@ -39,26 +38,18 @@ export default function App() {
             }
           />
           <Route
-            path="/instances/:instanceName/db/:databaseName/:tab?"
+            path="/admin/:tab?"
             element={
               <ProtectedRoute>
-                <DatabaseDrillDown />
+                <Admin />
               </ProtectedRoute>
             }
           />
           <Route
-            path="/manage/instances"
+            path="/ask"
             element={
               <ProtectedRoute>
-                <InstanceManager />
-              </ProtectedRoute>
-            }
-          />
-          <Route
-            path="/manage/users"
-            element={
-              <ProtectedRoute>
-                <UserManager />
+                <Ask />
               </ProtectedRoute>
             }
           />

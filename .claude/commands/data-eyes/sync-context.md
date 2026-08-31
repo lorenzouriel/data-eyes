@@ -35,9 +35,9 @@ description: Sync CLAUDE.md with current data-eyes structure — scripts, comman
 # Core components
 Glob("dashboard/**/*")
 Glob("mcp/**/*")
-Glob("performance/**/*")
-Glob("maintenance/**/*")
-Glob("sql-scripts/**/*.sql")
+Glob(".claude/resources/performance/**/*")
+Glob(".claude/resources/maintenance/**/*")
+Glob(".claude/resources/sql-scripts/**/*.sql")
 
 # .claude configuration
 Glob(".claude/commands/data-eyes/*.md")
@@ -52,9 +52,9 @@ Glob("**/README.md")
 
 ### Step 2: Count Script Inventory
 
-For each sub-folder in `sql-scripts/`:
+For each sub-folder in `.claude/resources/sql-scripts/`:
 ```text
-Glob("sql-scripts/<subfolder>/*.sql")
+Glob(".claude/resources/sql-scripts/<subfolder>/*.sql")
 ```
 
 Build inventory table with counts. Compare against CLAUDE.md if it exists — flag new sub-folders or scripts.
@@ -127,16 +127,17 @@ Auto-generate directory tree from Glob results. Include file counts:
 data-eyes/
 ├── dashboard/            backend ({N} routers), frontend, repository schema
 ├── mcp/                  data-eyes-mcp server, {N} DBA diagnostic tools
-├── performance/          {N} scripts, {N} docs, workbook
-├── maintenance/          {N} playbooks, {N} use cases
-├── sql-scripts/          {N} scripts across {N} sub-folders
-│   ├── audit/            {N} scripts
-│   ├── backup_recovery/  {N} scripts
-│   └── ...
 └── .claude/
     ├── commands/         {N} commands
     ├── agents/           {N} agents
-    └── knowledge-base/   {N} databases
+    ├── knowledge-base/   {N} databases, plus the _static/ index tier
+    └── resources/
+        ├── performance/     {N} scripts, {N} docs, workbook
+        ├── maintenance/     {N} playbooks, {N} use cases
+        └── sql-scripts/     {N} scripts across {N} sub-folders
+            ├── audit/       {N} scripts
+            ├── backup_recovery/  {N} scripts
+            └── ...
 \```
 ```
 

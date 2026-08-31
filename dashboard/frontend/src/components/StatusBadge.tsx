@@ -1,22 +1,15 @@
 import type { Severity } from "../types";
+import { statusColorVar, statusLabel, tagStyle } from "../strata";
 
-// Status is never carried by color alone (dataviz skill, status-palette rule):
-// each state gets a distinct icon shape AND a text label, not just a hue.
-const SEVERITY_META: Record<Severity, { label: string; icon: string; className: string }> = {
-  OK: { label: "Healthy", icon: "●", className: "status-ok" }, // ●
-  WARNING: { label: "Warning", icon: "▲", className: "status-warning" }, // ▲
-  CRITICAL: { label: "Critical", icon: "■", className: "status-critical" }, // ■
-  UNKNOWN: { label: "Unreachable", icon: "?", className: "status-unknown" },
-};
-
+// Status is never carried by color alone: a dot plus a text label, never
+// just a hue — same accessibility rule the previous design followed, kept
+// through the Strata re-skin.
 export default function StatusBadge({ severity, label }: { severity: Severity; label?: string }) {
-  const meta = SEVERITY_META[severity] ?? SEVERITY_META.UNKNOWN;
+  const color = statusColorVar(severity);
   return (
-    <span className={`status-badge ${meta.className}`}>
-      <span className="status-badge-icon" aria-hidden="true">
-        {meta.icon}
-      </span>
-      <span className="status-badge-text">{label ? `${label}: ${meta.label}` : meta.label}</span>
+    <span className="tag" style={{ display: "inline-flex", alignItems: "center", gap: 6, ...tagStyle(color) }}>
+      <span className="status-dot" style={{ background: color, width: 6, height: 6 }} aria-hidden="true" />
+      {label ? `${label}: ${statusLabel(severity)}` : statusLabel(severity)}
     </span>
   );
 }

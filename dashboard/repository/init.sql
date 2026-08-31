@@ -66,3 +66,51 @@ CREATE TABLE IF NOT EXISTS app_user (
     role           TEXT NOT NULL DEFAULT 'member', -- 'admin' | 'member'
     created_at     TIMESTAMPTZ NOT NULL DEFAULT now()
 );
+
+-- Wait-category history — the Strata design's Waits tab needs a real 24h
+-- stacked-by-category chart, not just a live snapshot. One row per
+-- (instance, category) per collection cycle, `seconds` being the delta of
+-- cumulative sys.dm_os_wait_stats time since the previous cycle (see
+-- app/collector.py) — a rate over that cycle, not a running total.
+-- `category` values match app/diagnostics.py's categorize_wait_type()
+-- buckets (lock/disk/cpu/network/other).
+CREATE TABLE IF NOT EXISTS wait_category_snapshot (
+    snapshot_id     BIGSERIAL PRIMARY KEY,
+    captured_at     TIMESTAMPTZ NOT NULL DEFAULT now(),
+    instance_name   TEXT NOT NULL,
+    category        TEXT NOT NULL,
+    seconds         DOUBLE PRECISION NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS ix_wait_category_snapshot_lookup
+    ON wait_category_snapshot (instance_name, captured_at DESC);
+
+-- Blocking-event log — the Blocking tab's "last 24 hours" list needs actual
+-- history, not a re-labeled live snapshot. One row per collection cycle
+-- where a root blocker was found (cleared cycles write nothing) — an
+-- append-only log, not a table the collector overwrites.
+CREATE TABLE IF NOT EXISTS blocking_event (
+    event_id          BIGSERIAL PRIMARY KEY,
+    captured_at       TIMESTAMPTZ NOT NULL DEFAULT now(),
+    instance_name     TEXT NOT NULL,
+    root_sql          TEXT,
+    lock_type         TEXT,
+    blocked_count     INTEGER NOT NULL,
+    duration_seconds  DOUBLE PRECISION NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS ix_blocking_event_lookup
+    ON blocking_event (instance_name, captured_at DESC);
+
+-- Advisor dismiss state — findings are generated fresh on every Advisor-tab
+-- request (never cached server-side), so this table holds only the one bit
+-- that must survive across requests: "the DBA already saw and dismissed
+-- this one." finding_key is a stable identifier the LLM assigns per finding
+-- (see insights_agent.AdvisorFinding) so a re-generated report can still
+-- recognize a previously-dismissed finding and filter it back out.
+CREATE TABLE IF NOT EXISTS advisor_dismissal (
+    instance_name  TEXT NOT NULL,
+    finding_key    TEXT NOT NULL,
+    dismissed_at   TIMESTAMPTZ NOT NULL DEFAULT now(),
+    PRIMARY KEY (instance_name, finding_key)
+);

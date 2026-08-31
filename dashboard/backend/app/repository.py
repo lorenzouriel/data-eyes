@@ -154,6 +154,203 @@ async def get_trend(instance_name: str, category: str, since_hours: int = 24) ->
     ]
 
 
+async def insert_resource_rate(instance_name: str, category: str, metric_value: float) -> None:
+    """Reuses metric_snapshot for the two Resources-tab metrics that are only
+    meaningful as a rate (disk read MB/s, batch requests/sec — see
+    app/collector.py). severity is fixed to "OK": these are informational,
+    not operational-risk gates with a threshold band the way backup/CHECKDB
+    are, so they're written outside fleet_health_score's rollup (same
+    reasoning top_queries is already excluded from it)."""
+    captured_at = datetime.now(timezone.utc)
+    try:
+        async with await _acquire() as conn:
+            await conn.execute(
+                """
+                INSERT INTO metric_snapshot
+                    (captured_at, instance_name, overall_severity, category, severity, metric_value)
+                VALUES ($1, $2, 'OK', $3, 'OK', $4)
+                """,
+                captured_at,
+                instance_name,
+                category,
+                metric_value,
+            )
+    except RepositoryUnavailable:
+        raise
+    except Exception as e:
+        _invalidate_pool_on_failure()
+        raise RepositoryUnavailable(f"Resource-rate insert failed: {e}") from e
+
+
+async def insert_wait_category_snapshot(instance_name: str, category_seconds: Dict[str, float]) -> None:
+    """One row per category this cycle — category_seconds is the delta
+    since the previous cycle (see app/collector.py), already computed by
+    the caller; this function just persists it."""
+    if not category_seconds:
+        return
+    captured_at = datetime.now(timezone.utc)
+    rows = [(captured_at, instance_name, category, seconds) for category, seconds in category_seconds.items()]
+    try:
+        async with await _acquire() as conn:
+            await conn.executemany(
+                "INSERT INTO wait_category_snapshot (captured_at, instance_name, category, seconds) "
+                "VALUES ($1, $2, $3, $4)",
+                rows,
+            )
+    except RepositoryUnavailable:
+        raise
+    except Exception as e:
+        _invalidate_pool_on_failure()
+        raise RepositoryUnavailable(f"Wait-category snapshot insert failed: {e}") from e
+
+
+async def get_wait_category_history(instance_name: str, since_hours: int = 24) -> List[Dict[str, Any]]:
+    since = datetime.now(timezone.utc) - timedelta(hours=since_hours)
+    try:
+        async with await _acquire() as conn:
+            rows = await conn.fetch(
+                """
+                SELECT captured_at, category, seconds
+                FROM wait_category_snapshot
+                WHERE instance_name = $1 AND captured_at >= $2
+                ORDER BY captured_at ASC
+                """,
+                instance_name,
+                since,
+            )
+    except RepositoryUnavailable:
+        raise
+    except Exception as e:
+        _invalidate_pool_on_failure()
+        raise RepositoryUnavailable(f"Wait-category history query failed: {e}") from e
+    return [
+        {"captured_at": row["captured_at"].isoformat(), "category": row["category"], "seconds": row["seconds"]}
+        for row in rows
+    ]
+
+
+async def prune_old_wait_category_snapshots(retention_days: int) -> int:
+    cutoff = datetime.now(timezone.utc) - timedelta(days=retention_days)
+    try:
+        async with await _acquire() as conn:
+            result = await conn.execute("DELETE FROM wait_category_snapshot WHERE captured_at < $1", cutoff)
+    except RepositoryUnavailable:
+        raise
+    except Exception as e:
+        _invalidate_pool_on_failure()
+        raise RepositoryUnavailable(f"Wait-category prune failed: {e}") from e
+    try:
+        return int(result.split()[-1])
+    except (IndexError, ValueError):
+        return 0
+
+
+async def insert_blocking_event(
+    instance_name: str, root_sql: Optional[str], lock_type: Optional[str], blocked_count: int, duration_seconds: float
+) -> None:
+    try:
+        async with await _acquire() as conn:
+            await conn.execute(
+                """
+                INSERT INTO blocking_event
+                    (instance_name, root_sql, lock_type, blocked_count, duration_seconds)
+                VALUES ($1, $2, $3, $4, $5)
+                """,
+                instance_name,
+                root_sql,
+                lock_type,
+                blocked_count,
+                duration_seconds,
+            )
+    except RepositoryUnavailable:
+        raise
+    except Exception as e:
+        _invalidate_pool_on_failure()
+        raise RepositoryUnavailable(f"Blocking-event insert failed: {e}") from e
+
+
+async def get_blocking_events(instance_name: str, since_hours: int = 24) -> List[Dict[str, Any]]:
+    since = datetime.now(timezone.utc) - timedelta(hours=since_hours)
+    try:
+        async with await _acquire() as conn:
+            rows = await conn.fetch(
+                """
+                SELECT captured_at, root_sql, lock_type, blocked_count, duration_seconds
+                FROM blocking_event
+                WHERE instance_name = $1 AND captured_at >= $2
+                ORDER BY captured_at DESC
+                """,
+                instance_name,
+                since,
+            )
+    except RepositoryUnavailable:
+        raise
+    except Exception as e:
+        _invalidate_pool_on_failure()
+        raise RepositoryUnavailable(f"Blocking-event query failed: {e}") from e
+    return [
+        {
+            "captured_at": row["captured_at"].isoformat(),
+            "root_sql": row["root_sql"],
+            "lock_type": row["lock_type"],
+            "blocked_count": row["blocked_count"],
+            "duration_seconds": row["duration_seconds"],
+        }
+        for row in rows
+    ]
+
+
+async def dismiss_advisor_finding(instance_name: str, finding_key: str) -> None:
+    """Idempotent — dismissing an already-dismissed finding just refreshes
+    dismissed_at, it doesn't error."""
+    try:
+        async with await _acquire() as conn:
+            await conn.execute(
+                """
+                INSERT INTO advisor_dismissal (instance_name, finding_key)
+                VALUES ($1, $2)
+                ON CONFLICT (instance_name, finding_key) DO UPDATE SET dismissed_at = now()
+                """,
+                instance_name,
+                finding_key,
+            )
+    except RepositoryUnavailable:
+        raise
+    except Exception as e:
+        _invalidate_pool_on_failure()
+        raise RepositoryUnavailable(f"Advisor dismiss failed: {e}") from e
+
+
+async def get_dismissed_advisor_findings(instance_name: str) -> set:
+    try:
+        async with await _acquire() as conn:
+            rows = await conn.fetch(
+                "SELECT finding_key FROM advisor_dismissal WHERE instance_name = $1", instance_name
+            )
+    except RepositoryUnavailable:
+        raise
+    except Exception as e:
+        _invalidate_pool_on_failure()
+        raise RepositoryUnavailable(f"Advisor dismissal query failed: {e}") from e
+    return {row["finding_key"] for row in rows}
+
+
+async def prune_old_blocking_events(retention_days: int) -> int:
+    cutoff = datetime.now(timezone.utc) - timedelta(days=retention_days)
+    try:
+        async with await _acquire() as conn:
+            result = await conn.execute("DELETE FROM blocking_event WHERE captured_at < $1", cutoff)
+    except RepositoryUnavailable:
+        raise
+    except Exception as e:
+        _invalidate_pool_on_failure()
+        raise RepositoryUnavailable(f"Blocking-event prune failed: {e}") from e
+    try:
+        return int(result.split()[-1])
+    except (IndexError, ValueError):
+        return 0
+
+
 # ---------------------------------------------------------------------------
 # Instance registry — database-backed fleet registry (Phase 2). Shares this
 # module's pool/RepositoryUnavailable handling rather than owning a second

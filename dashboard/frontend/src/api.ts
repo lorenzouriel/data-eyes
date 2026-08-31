@@ -1,9 +1,11 @@
 import type {
+  AdvisorReport,
   AppUser,
+  ChatMessage,
   FleetHealth,
-  Insight,
-  InstanceDetail,
+  InstanceOverview,
   InstanceSummary,
+  QueryPlan,
   Role,
   TabResponse,
   TrendResponse,
@@ -61,13 +63,20 @@ export function getFleetHealth() {
   return request<FleetHealth>("/api/fleet");
 }
 
-export function getInstance(instanceName: string) {
-  return request<InstanceDetail>(`/api/instances/${encodeURIComponent(instanceName)}`);
+export function getInstanceOverview(instanceName: string) {
+  return request<InstanceOverview>(`/api/instances/${encodeURIComponent(instanceName)}/overview`);
 }
 
-export function getDatabaseTab(instanceName: string, databaseName: string, tabName: string) {
+export function getInstanceTab(instanceName: string, tabName: string, database?: string) {
+  const query = database ? `?database=${encodeURIComponent(database)}` : "";
   return request<TabResponse>(
-    `/api/instances/${encodeURIComponent(instanceName)}/databases/${encodeURIComponent(databaseName)}/tabs/${encodeURIComponent(tabName)}`,
+    `/api/instances/${encodeURIComponent(instanceName)}/tabs/${encodeURIComponent(tabName)}${query}`,
+  );
+}
+
+export function getQueryPlan(instanceName: string, planHandle: string) {
+  return request<QueryPlan>(
+    `/api/instances/${encodeURIComponent(instanceName)}/plan?plan_handle=${encodeURIComponent(planHandle)}`,
   );
 }
 
@@ -134,40 +143,32 @@ export function changeMyPassword(password: string) {
   });
 }
 
-export function getInsightsFeed() {
-  return request<{ insights: Insight[] }>("/api/insights/feed");
+// --- Advisor + Ask the fleet (app/insights_agent.py's structured/chat paths) ---
+
+export function getAdvisorReport(instanceName: string, database?: string) {
+  const query = database ? `?database=${encodeURIComponent(database)}` : "";
+  return request<AdvisorReport>(
+    `/api/insights/instances/${encodeURIComponent(instanceName)}/advisor${query}`,
+    { method: "POST" },
+  );
 }
 
-// GET-based SSE streams — consumed via EventSource, so callers just need the
-// URL (with credentials: EventSource takes withCredentials, not a fetch init).
-export function fleetInsightStreamUrl() {
-  return `${API_BASE}/api/insights/fleet/stream`;
+export function dismissAdvisorFinding(instanceName: string, findingKey: string) {
+  return request<{ ok: boolean }>(
+    `/api/insights/instances/${encodeURIComponent(instanceName)}/advisor/dismiss`,
+    { method: "POST", body: JSON.stringify({ finding_key: findingKey }) },
+  );
 }
 
-export function tabInsightStreamUrl(instanceName: string, databaseName: string, tabName: string) {
-  return `${API_BASE}/api/insights/instances/${encodeURIComponent(instanceName)}/databases/${encodeURIComponent(databaseName)}/tabs/${encodeURIComponent(tabName)}/stream`;
-}
-
-export interface ExplainRequest {
-  instance_name: string;
-  database_name?: string;
-  tab_name?: string;
-  question?: string;
-}
-
-// POST /api/insights/explain is also SSE, but EventSource can't send a POST
-// body — so this parses the same "data: {json}\n\n" / "event: done\n..."
-// framing by hand off a streamed fetch response.
-export async function streamExplain(
-  payload: ExplainRequest,
-  onChunk: (text: string) => void,
-  signal?: AbortSignal,
-): Promise<void> {
-  const res = await fetch(`${API_BASE}/api/insights/explain`, {
+// POST /api/insights/ask is SSE, but EventSource can't send a POST body — so
+// this parses the same "data: {json}\n\n" / "event: done\n..." framing by
+// hand off a streamed fetch response.
+async function streamSse(url: string, body: unknown, onChunk: (text: string) => void, signal?: AbortSignal): Promise<void> {
+  const res = await fetch(`${API_BASE}${url}`, {
     method: "POST",
     credentials: "include",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(payload),
+    body: JSON.stringify(body),
     signal,
   });
   if (!res.ok || !res.body) {
@@ -193,4 +194,8 @@ export async function streamExplain(
       }
     }
   }
+}
+
+export function streamAsk(messages: ChatMessage[], onChunk: (text: string) => void, signal?: AbortSignal): Promise<void> {
+  return streamSse("/api/insights/ask", { messages }, onChunk, signal);
 }

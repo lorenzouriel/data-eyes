@@ -40,16 +40,16 @@ Glob("mcp/docker-compose.yml")
 Glob(".claude/knowledge-base/_static/*")
 
 # Performance toolkit
-Glob("performance/additional_queries/*.sql")
-Glob("performance/additional_queries/docs/*.md")
-Glob("performance/performance_tuning_workbook.xlsx")
+Glob(".claude/resources/performance/additional_queries/*.sql")
+Glob(".claude/resources/performance/additional_queries/docs/*.md")
+Glob(".claude/resources/performance/performance_tuning_workbook.xlsx")
 
 # Maintenance
-Glob("maintenance/*.sql")
-Glob("maintenance/use_cases/*.sql")
+Glob(".claude/resources/maintenance/*.sql")
+Glob(".claude/resources/maintenance/use_cases/*.sql")
 
 # SQL Scripts library
-Glob("sql-scripts/**/*.sql")
+Glob(".claude/resources/sql-scripts/**/*.sql")
 ```
 
 Count files in each component.
@@ -83,26 +83,26 @@ For each KB file found:
 
 ### Step 4: Script Inventory
 
-Count `.sql` files per sub-folder in `sql-scripts/`:
+Count `.sql` files per sub-folder in `.claude/resources/sql-scripts/`:
 
 ```text
-Glob("sql-scripts/audit/*.sql")
-Glob("sql-scripts/backup_recovery/**/*.sql")
-Glob("sql-scripts/custom_alert_emails/*.sql")
-Glob("sql-scripts/database_size/*.sql")
-Glob("sql-scripts/free_space/*.sql")
-Glob("sql-scripts/functions/*.sql")
-Glob("sql-scripts/helps/**/*.sql")
-Glob("sql-scripts/index/*.sql")
-Glob("sql-scripts/lock/*.sql")
-Glob("sql-scripts/query_store/*.sql")
-Glob("sql-scripts/server/*.sql")
-Glob("sql-scripts/sql_access/*.sql")
-Glob("sql-scripts/sql_agent/*.sql")
-Glob("sql-scripts/sql_profiler/*.sql")
-Glob("sql-scripts/ssis/*.sql")
-Glob("sql-scripts/ssrs/*.sql")
-Glob("sql-scripts/triggers/*.sql")
+Glob(".claude/resources/sql-scripts/audit/*.sql")
+Glob(".claude/resources/sql-scripts/backup_recovery/**/*.sql")
+Glob(".claude/resources/sql-scripts/custom_alert_emails/*.sql")
+Glob(".claude/resources/sql-scripts/database_size/*.sql")
+Glob(".claude/resources/sql-scripts/free_space/*.sql")
+Glob(".claude/resources/sql-scripts/functions/*.sql")
+Glob(".claude/resources/sql-scripts/helps/**/*.sql")
+Glob(".claude/resources/sql-scripts/index/*.sql")
+Glob(".claude/resources/sql-scripts/lock/*.sql")
+Glob(".claude/resources/sql-scripts/query_store/*.sql")
+Glob(".claude/resources/sql-scripts/server/*.sql")
+Glob(".claude/resources/sql-scripts/sql_access/*.sql")
+Glob(".claude/resources/sql-scripts/sql_agent/*.sql")
+Glob(".claude/resources/sql-scripts/sql_profiler/*.sql")
+Glob(".claude/resources/sql-scripts/ssis/*.sql")
+Glob(".claude/resources/sql-scripts/ssrs/*.sql")
+Glob(".claude/resources/sql-scripts/triggers/*.sql")
 ```
 
 ### Step 5: Check Git State
