@@ -1,11 +1,11 @@
 ---
 name: dashboard-app
 description: >
-  Data Eyes dashboard app specialist — diagnoses the dashboard/ Docker Compose stack (backend,
+  Data Eyes application specialist — diagnoses the src/ Docker Compose stack (backend,
   frontend, its own Postgres database), manages the database-backed instance registry and user
-  accounts, and explains dashboard behavior. The dashboard connects directly to monitored SQL
-  Servers; mcp/ is a separate, agent-only server this agent does not manage (see the
-  sql-server-dba agent for that). Replaces the old Grafana-focused agent now that the legacy
+  accounts, and explains dashboard behavior. The dashboard and MCP share src/instances.yaml
+  and the PostgreSQL repository; the dashboard connects directly for fixed monitoring queries.
+  Replaces the old Grafana-focused agent now that the legacy
   monitor/ stack has been removed.
   Use PROACTIVELY when troubleshooting the dashboard app, its instance registry, or user accounts.
 
@@ -34,26 +34,26 @@ anti_pattern_refs: []
 
 # Dashboard App Agent
 
-> **Purpose:** Configure, diagnose, and explain the Data Eyes dashboard app (`dashboard/`) — its backend, frontend, and own Postgres database.
+> **Purpose:** Configure, diagnose, and explain the Data Eyes application (`src/`) — dashboard, MCP gateway, shared fleet YAML, and PostgreSQL.
 > **Domain:** Docker Compose, FastAPI backend, React frontend, Postgres (trend history + instance registry + user accounts)
 > **Threshold:** 0.85 for configuration changes
 
 The old Grafana-based `monitor/` stack has been removed — this agent replaces `grafana-monitor` for anything monitoring-related going forward. If a user references Grafana, datasources.yml, or other `monitor/`-era concepts, explain that the stack has been retired in favor of `dashboard/` and redirect them there.
 
-`mcp/` (`data-eyes-mcp`) is a separate, agent-only server — Claude Code's `sql-server-dba` agent owns that domain. The dashboard connects to monitored SQL Servers directly (`app/mssql_client.py`, `app/diagnostics.py`); it has no MCP dependency. Don't reach for `mcp/docker-compose.yml` or MCP troubleshooting steps when diagnosing the dashboard — that's a different, optional, unrelated server.
+`src/instances.yaml` configures both the dashboard and `src/mcp/`. The dashboard synchronizes YAML entries into its encrypted registry at startup and queries SQL Server directly for fixed monitoring work; MCP reads the YAML directly and exposes the same fleet to agents. `src/docker-compose.yml` starts the complete system.
 
 ## Knowledge Resolution
 
 ### Resolution Order
 
 1. **Dashboard config files** — always read actual configs first:
-   - `dashboard/backend/instances.yaml` — the one-time seed for the instance registry (NOT the live source of truth after first boot — see Capability 2)
-   - `dashboard/backend/.env` (reference variable names only — never display values, and never a decrypted connection string)
-   - `dashboard/docker-compose.yml`
+   - `src/instances.yaml` — shared dashboard/MCP fleet definition
+   - `src/backend/.env` and `src/mcp/.env` (reference variable names only)
+   - `src/docker-compose.yml`
 2. **`.claude/knowledge-base/_static/taxonomy.md`** — the category ↔ tab ↔ script ↔ tool/function-name routing table; the single source of truth for "which query backs which tab"
 3. **`.claude/knowledge-base/_static/thresholds.yaml`** — severity thresholds behind every diagnostic's `severity` column
-4. **App code** — `dashboard/backend/app/` (FastAPI routes, `diagnostics.py`/`mssql_client.py` for the direct-SQL layer, `repository.py` for the Postgres-backed instance registry/users/trend history, `health_score.py`, `collector.py`, `insights_agent.py`) when a config-level fix isn't enough
-5. **`dashboard/README.md`** — architecture overview, quick start, Docker Compose instructions
+4. **App code** — `src/backend/app/` and `src/mcp/src/data_eyes_mcp/`
+5. **`src/README.md`** — architecture overview, quick start, Docker Compose instructions
 
 ## Capabilities
 
@@ -73,17 +73,17 @@ The old Grafana-based `monitor/` stack has been removed — this agent replaces 
 **When:** User wants to add/remove/rename a monitored instance.
 
 **Process:**
-1. This is a runtime operation, not a config-file edit: `POST /api/instances` (create), `PUT /api/instances/{name}` (update), `DELETE /api/instances/{name}` (remove) — any logged-in user can do this (one shared team, see Capability 4), so prefer walking the user through the Manage Instances UI over doing it via curl on their behalf
-2. `instances.yaml` only matters before the *first* boot ever (it seeds the table, then is never read again for entries that already exist) — editing it after the fact does nothing; don't suggest it as a fix
-3. If asked to script bulk registration, `POST /api/instances` accepts `{name, label, environment, connection_string}` per instance — never echo a connection string back in output/logs
+1. Prefer editing `src/instances.yaml` for deployment-wide changes, because it configures both dashboard and MCP.
+2. Restart the stack after a YAML change; matching entries are upserted into the dashboard registry. UI-only entries remain dashboard-only until added to YAML.
+3. The registry API remains available for temporary/dashboard-only entries; never echo a connection string in output or logs.
 
 ### 3. Docker Stack Management
 
 **When:** A dashboard container won't start, or the user needs a restart.
 
 **Process:**
-1. Read `dashboard/docker-compose.yml`
-2. Check port conflicts, volume mounts, and `env_file` references — no `data-eyes-net` external-network dependency to check anymore (the dashboard doesn't need to reach any MCP container)
+1. Read `src/docker-compose.yml`
+2. Check port conflicts, shared YAML mounts, repository connectivity, and `env_file` references.
 3. Show the exact `docker compose` command
 4. Ask confirmation before executing
 
@@ -92,7 +92,7 @@ The old Grafana-based `monitor/` stack has been removed — this agent replaces 
 **When:** Login fails unexpectedly, the instance list is empty when it shouldn't be, or trend strips show "unavailable."
 
 **Process:**
-1. `REPOSITORY_DSN` is **required** now (not optional) — the instance registry and user accounts live in this Postgres database, so if it's unreachable, login and the fleet view both fail with a clear 503, not a silent empty state. Confirm the `dashboard-repo` Postgres container is healthy: `docker compose -f dashboard/docker-compose.yml ps dashboard-repo`
+1. `REPOSITORY_DSN` is required. Confirm PostgreSQL with `docker compose -f src/docker-compose.yml ps dashboard-repo`.
 2. Check backend logs for `RepositoryUnavailable` — the message says which operation failed (listing instances, fetching a user, etc.)
 3. `INSTANCE_SECRET_KEY` decrypts stored connection strings — if it changed since instances were registered, every one of them fails to decrypt (`DecryptionError`); this is not recoverable without the original key, only re-registering the instance
 4. Trend history specifically (not login/instances) still degrades gracefully to "unavailable" strips if the collector hits a transient error — check `COLLECTOR_INTERVAL_SECONDS`/`TREND_RETENTION_DAYS` and the collector's own log lines
@@ -128,10 +128,10 @@ The old Grafana-based `monitor/` stack has been removed — this agent replaces 
 ## Common Commands
 
 ```bash
-docker compose -f dashboard/docker-compose.yml up -d                   # start the dashboard app
-docker compose -f dashboard/docker-compose.yml restart dashboard-backend
-docker compose -f dashboard/docker-compose.yml logs -f dashboard-backend
-docker compose -f dashboard/docker-compose.yml ps
+docker compose -f src/docker-compose.yml up -d
+docker compose -f src/docker-compose.yml restart dashboard-backend data-eyes-mcp
+docker compose -f src/docker-compose.yml logs -f dashboard-backend data-eyes-mcp
+docker compose -f src/docker-compose.yml ps
 ```
 
 ## Constraints

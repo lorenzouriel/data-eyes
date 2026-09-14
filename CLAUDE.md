@@ -1,6 +1,6 @@
 # Data Eyes — SQL Server Monitoring, Performance & Maintenance Toolkit
 
-Open-source toolkit for complete visibility and best-practice automation on Microsoft SQL Server. The way to *see* a fleet is the custom `dashboard/` app (a DPA-style Main Page + per-database drill-down + embedded insights agent), which connects directly to each monitored SQL Server and manages its own database-backed instance registry and user accounts. `mcp/`'s `data-eyes-mcp` server is separate and agent-only — it's what Claude Code (and the dashboard's embedded insights agent, for trend-history lookups) talks to, not what the dashboard uses to render itself. The old Grafana-based `monitor/` stack has been removed; its panel categories all have live equivalents in `dashboard/` (see `.claude/knowledge-base/_static/taxonomy.md`).
+Open-source toolkit for complete visibility and best-practice automation on Microsoft SQL Server. The deployable system lives in `src/`: the dashboard, MCP gateway, PostgreSQL repository, and shared `src/instances.yaml` fleet configuration. The dashboard runs trusted fixed queries directly; MCP exposes the same configured fleet to agents and reads the shared trend repository. The old Grafana stack has been removed.
 
 ## Repository Structure
 ```
@@ -51,7 +51,7 @@ data-eyes/
 - Connection via $MSSQL_CONNECTION env var or manual credential prompt
 - Ola Hallengren parameters use @Databases, @Directory, @CleanupTime etc.
 - Prefer a live `data-eyes-mcp` tool call over reading a script as text whenever an MCP server is reachable — scripts remain the reference/copy-paste source, not the primary path (see `sql-server-dba` agent's Knowledge Resolution order)
-- `dashboard/` and `mcp/` use Docker Compose with `.env` for secrets (never display .env contents); the dashboard additionally encrypts stored SQL Server connection strings at rest (`app/crypto.py`) — never display or log a decrypted one outside `app/diagnostics.py`'s actual connection use
+- `src/docker-compose.yml` starts the dashboard, MCP, and PostgreSQL together; both SQL-facing services read `src/instances.yaml`. Never display `.env` contents or connection strings.
 
 ## SQL Naming Standards (Data Eyes Guidelines)
 
@@ -85,7 +85,7 @@ data-eyes/
 
 Two layers:
 
-- **Static domain KB** (`.claude/knowledge-base/_static/`) — thresholds, taxonomy, naming conventions, methodology, and the scripts index. Single source of truth for severity bands and the category ↔ tab ↔ script routing table; the actual `CASE WHEN` severity thresholds are duplicated (deliberately, a documented drift risk) between `mcp/`'s `dba_tools.py` and `dashboard/backend/app/diagnostics.py`, both driven by this KB. Consumed by the `sql-server-dba`/`dashboard-app` agents alike.
+- **Static domain KB** (`.claude/knowledge-base/_static/`) — thresholds, taxonomy, naming conventions, methodology, and the scripts index. Severity SQL is duplicated between `src/mcp/src/data_eyes_mcp/dba_tools.py` and `src/backend/app/diagnostics.py`; keep both synchronized with the KB.
 - **Per-database KB** (`.claude/knowledge-base/<database-name>.md`) — built by /sql-kb, consumed by /sql-pr-review. Contains:
   - Table volumes with SMALL/MEDIUM/HIGH/CRITICAL classification
   - Existing index inventory with usage stats

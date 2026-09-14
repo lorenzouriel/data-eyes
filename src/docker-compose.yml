@@ -1,0 +1,90 @@
+# Data Eyes — dashboard, MCP gateway, and repository as one stack.
+#
+# Both SQL-facing services consume ./instances.yaml. The dashboard keeps its
+# direct fixed-query path; MCP exposes the same fleet to external agents.
+#   docker compose -f src/docker-compose.yml up -d
+
+services:
+  # The dashboard's own database — trend history, the instance registry, and
+  # user accounts. Never a monitored SQL Server (see
+  # dashboard/repository/init.sql). Required, not optional: the backend's
+  # collector writes trend snapshots here, but login and the instance
+  # registry depend on it too.
+  dashboard-repo:
+    image: postgres:16-alpine
+    container_name: data-eyes-dashboard-repo
+    environment:
+      POSTGRES_DB: data_eyes_dashboard
+      POSTGRES_USER: data_eyes
+      POSTGRES_PASSWORD: ${DASHBOARD_REPO_PASSWORD:-change-me}
+    volumes:
+      - dashboard-repo-data:/var/lib/postgresql/data
+      - ./repository/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U data_eyes -d data_eyes_dashboard"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  dashboard-backend:
+    build: ./backend
+    image: data-eyes-dashboard-backend
+    container_name: data-eyes-dashboard-backend
+    env_file:
+      - ./backend/.env
+    environment:
+      INSTANCES_FILE: /app/instances.yaml
+      REPOSITORY_DSN: postgresql://data_eyes:${DASHBOARD_REPO_PASSWORD:-change-me}@dashboard-repo:5432/data_eyes_dashboard
+    volumes:
+      - ./instances.yaml:/app/instances.yaml:ro
+    ports:
+      - "8090:8090"
+    depends_on:
+      dashboard-repo:
+        condition: service_healthy
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8090/api/health')"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+
+  data-eyes-mcp:
+    build: ./mcp
+    image: data-eyes-mcp
+    container_name: data-eyes-mcp-server
+    command: ["python", "-m", "data_eyes_mcp.cli", "--transport", "http", "--bind", "0.0.0.0:8080"]
+    env_file:
+      - ./mcp/.env
+    environment:
+      INSTANCES_FILE: /app/instances.yaml
+      REPOSITORY_DSN: postgresql://data_eyes:${DASHBOARD_REPO_PASSWORD:-change-me}@dashboard-repo:5432/data_eyes_dashboard
+    volumes:
+      - ./instances.yaml:/app/instances.yaml:ro
+    ports:
+      - "8080:8080"
+    depends_on:
+      dashboard-repo:
+        condition: service_healthy
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+
+  dashboard-frontend:
+    build: ./frontend
+    image: data-eyes-dashboard-frontend
+    container_name: data-eyes-dashboard-frontend
+    ports:
+      - "8091:80"
+    depends_on:
+      - dashboard-backend
+    restart: unless-stopped
+
+volumes:
+  dashboard-repo-data:

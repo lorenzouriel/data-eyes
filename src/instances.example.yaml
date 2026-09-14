@@ -1,0 +1,16 @@
+# Copy this file to instances.yaml and replace the placeholders locally.
+# Never commit production credentials.
+
+instances:
+  - name: prod
+    label: "Prod SQL Server"
+    environment: production
+    mssql_connection_string: "Driver={ODBC Driver 17 for SQL Server};Server=prod-server,1433;Database=master;UID=user;PWD=change-me;TrustServerCertificate=yes"
+  - name: staging
+    label: "Staging SQL Server"
+    environment: staging
+    mssql_connection_string: "Driver={ODBC Driver 17 for SQL Server};Server=staging-server,1433;Database=master;UID=user;PWD=change-me;TrustServerCertificate=yes"
+  - name: dev
+    label: "Dev SQL Server"
+    environment: development
+    mssql_connection_string: "Driver={ODBC Driver 17 for SQL Server};Server=localhost,1433;Database=master;UID=user;PWD=change-me;TrustServerCertificate=yes"

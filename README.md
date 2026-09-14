@@ -1,5 +1,5 @@
 <div align="center">
-  <img src="assets/logo.svg" alt="Data Eyes logo" width="180">
+  <img src="assets/logo-gradient-nobg.png" alt="Data Eyes logo" width="180">
 </div>
 
 # SQL Server Monitoring, Performance & Maintenance Toolkit
@@ -20,7 +20,7 @@ Managing SQL Server effectively requires three critical capabilities:
 3. **Automation**: Ensuring consistent operational excellence (maintenance)
 
 ## Architecture Overview
-The **dashboard is the main service** — start there. Performance and Maintenance are standalone toolkits it works alongside; `.claude/` and `mcp/` are secondary, agent-only tooling for working on this repo with Claude Code, not something you need to run the dashboard:
+The deployable system now lives under `src/`: dashboard, MCP gateway, PostgreSQL repository, and one shared `src/instances.yaml` fleet definition. Performance and Maintenance remain supporting toolkits under `.claude/resources/`.
 ```bash
 ┌─────────────────────────────────────────────────────────┐
 │                  Data Eyes Ecosystem                     │
@@ -47,13 +47,12 @@ The **dashboard is the main service** — start there. Performance and Maintenan
                   │  DMVs & Logs         │
                   └──────────────────────┘
 
-  SECONDARY — agent tooling, not required to run the dashboard
+  AGENT INTERFACE — shares fleet configuration and trend history
   ┌────────────────────────────────────────────────────┐
   │  .claude/   commands, agents, knowledge base           │
   │       │ names an MCP tool / reads _static/ for routing │
   │       ▼                                                │
-  │  mcp/   data-eyes-mcp — read access to SQL Server(s)   │
-  │         (used by Claude Code only, not the dashboard)  │
+  │  src/mcp/   data-eyes-mcp — fleet-aware agent tools    │
   └────────────────────────────────────────────────────┘
 ```
 
@@ -73,7 +72,7 @@ The **dashboard is the main service** — start there. Performance and Maintenan
 
 ## Components
 ### 1. Dashboard App (custom, connects directly to SQL Server)
-**Location:** [dashboard/](dashboard/)
+**Location:** [src/](src/)
 
 **Purpose:** Real-time visibility and evaluated health status for SQL Server fleets — a DPA-style Fleet Status page and per-instance drill-down, not a generic panel dashboard
 
@@ -82,20 +81,20 @@ The **dashboard is the main service** — start there. Performance and Maintenan
 - **Per-instance drill-down** - Wait types, Blocking, Sessions & users, SQL statements (with real execution-plan time attribution), Resources, and Advisor
 - **Advisor** - On-demand, Claude-drafted root-cause findings over real diagnostic data (wait history, blocking chain, top query + plan, missing-index candidates) — never a fabricated "tested" or "modelled" claim, just a labeled estimate
 - **Ask the fleet** - Real multi-turn chat over the fleet's live health data
-- **Database-backed instance registry** - Self-service "Register instance" in the Admin panel; `instances.yaml` only seeds it once on first boot
+- **Shared fleet configuration** - `src/instances.yaml` configures both dashboard and MCP; the dashboard synchronizes it into its encrypted registry at startup
 - **Real user accounts** - One shared team, admin/member roles, no more single shared credential
 - **Trend history** - The dashboard's own Postgres database + persistent collector, independent of any monitored SQL Server
-- **Docker Compose stack** - `dashboard/docker-compose.yml`
+- **Docker Compose stack** - `src/docker-compose.yml`
 
 **Key Features:**
 - Real evaluated alerting (worst-of-category/instance/fleet severity rollup), not just static color thresholds
-- Talks directly to each monitored SQL Server — no MCP hop in the rendering/collection path (see `dashboard/README.md`'s "Why not MCP for the dashboard itself?")
+- Dashboard fixed queries use direct SQL; MCP exposes the same YAML-defined fleet to agents (see `src/README.md`)
 - Trend strips per category, backed by the dashboard's own database
 - Graceful degradation: the insights agent is fully optional and no-ops cleanly when unconfigured (the database itself, unlike earlier versions of this dashboard, is required — it backs login and the instance registry too, not just trend charts)
 
 **Technologies:** FastAPI, React + TypeScript, PostgreSQL, Docker, Microsoft SQL Server (direct connection, `pyodbc`)
 
-Separately, [`mcp/`](mcp/) runs its own `data-eyes-mcp` server for **agent use only** — Claude Code's `sql-server-dba` agent, not the dashboard (see the Documentation section below).
+[`src/mcp/`](src/mcp/) is the system's agent interface. It exposes the same YAML-defined fleet and can read trend history from the shared PostgreSQL repository.
 
 > The previous Grafana + Prometheus stack (`monitor/`) has been retired now that every panel category it covered has a live equivalent here — see `.claude/knowledge-base/_static/taxonomy.md` for the full mapping.
 
@@ -249,29 +248,21 @@ Not required to run the dashboard — the maintenance/performance scripts still 
 ### Prerequisites
 - **SQL Server:** 2012+ (2016+ recommended for Query Store)
 - **SQL Server Agent:** Running and enabled (for maintenance)
-- **Docker:** 20.10+ with Docker Compose 2.0+ (for the dashboard app; optional for `mcp/`, agent-only)
+- **Docker:** 20.10+ with Docker Compose 2.0+
 - **Permissions:** VIEW SERVER STATE, sysadmin for maintenance
 - **Tools:** SSMS (SQL Server Management Studio), Microsoft Excel
 
 ### Installation Steps
-#### 1. Set Up the Dashboard App (15 minutes)
+#### 1. Set up Data Eyes
 ```bash
-# Postgres first — the dashboard's own database (required: trend history,
-# instance registry, and login all live here). See dashboard/README.md.
-docker run -d --name data-eyes-dashboard-repo -p 5432:5432 \
-  -e POSTGRES_DB=data_eyes_dashboard -e POSTGRES_USER=data_eyes -e POSTGRES_PASSWORD=change-me \
-  -v "$(pwd)/dashboard/repository/init.sql:/docker-entrypoint-initdb.d/init.sql:ro" \
-  postgres:16-alpine
-
-cd dashboard/backend
-cp .env.example .env
-# set DASHBOARD_ADMIN_PASSWORD, SESSION_SECRET_KEY, REPOSITORY_DSN, and INSTANCE_SECRET_KEY
-uv run --with-editable . uvicorn app.main:app --reload --port 8090
-# Access the dashboard frontend per dashboard/README.md's quick start —
-# instances and additional user logins are added through the UI, not files
+cp src/instances.example.yaml src/instances.yaml
+cp src/backend/.env.example src/backend/.env
+cp src/mcp/.env.example src/mcp/.env
+# Configure src/instances.yaml and the required secrets in src/backend/.env.
+docker compose -f src/docker-compose.yml up -d --build
 ```
 
-(Optional, agent-only — not needed to run the dashboard: `mcp/` gives Claude Code live SQL Server access. See `mcp/README.md`.)
+The dashboard is at `http://localhost:8091`; MCP is at `http://localhost:8080/mcp`.
 
 #### 2. Deploy Performance Toolkit (10 minutes)
 ```bash
@@ -318,14 +309,14 @@ cd .claude/resources/maintenance/
 ## Documentation
 Each component includes comprehensive documentation:
 
-- **Dashboard:** [dashboard/README.md](dashboard/README.md)
+- **Application:** [src/README.md](src/README.md)
   - Architecture, quick start, and Docker Compose setup
   - Instance registry, user accounts, trend history, and embedded insights agent configuration
   - Health rollup
 
-- **MCP:** [mcp/README.md](mcp/README.md)
-  - `data-eyes-mcp` server setup (stdio + HTTP transports) — agent-only, not used by the dashboard
-  - Available diagnostic tools, plus the dashboard-repository trend tools (optional)
+- **MCP:** [src/mcp/README.md](src/mcp/README.md)
+  - Fleet-aware stdio and HTTP setup
+  - Live diagnostic tools and shared dashboard-repository trend tools
 
 - **Performance:** [.claude/resources/performance/README.md](.claude/resources/performance/README.md)
   - 10-step methodology detailed walkthrough
