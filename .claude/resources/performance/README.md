@@ -2,7 +2,7 @@
 
 A comprehensive, structured approach to SQL Server performance tuning with methodology, analysis scripts, and an interactive workbook. This toolkit helps DBAs identify bottlenecks, optimize queries, and improve database performance through systematic analysis.
 
-> Agent/machine-facing index: [`.claude/knowledge-base/_static/methodology.md`](../.claude/knowledge-base/_static/methodology.md) (compact step routing) and [`thresholds.yaml`](../.claude/knowledge-base/_static/thresholds.yaml) (canonical severity numbers — this README explains them, that file is the single source of truth for the actual values).
+> Agent/machine-facing index: [`.claude/knowledge-base/_static/methodology.md`](../../knowledge-base/_static/methodology.md) (compact step routing) and [`thresholds.yaml`](../../knowledge-base/_static/thresholds.yaml) (canonical severity numbers — this README explains them, that file is the single source of truth for the actual values).
 
 ## Table of Contents
 - [Overview](#overview)

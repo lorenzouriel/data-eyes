@@ -2,7 +2,7 @@
 
 A comprehensive, production-ready database maintenance automation solution for Microsoft SQL Server built on Ola Hallengren's industry-standard maintenance scripts. This solution provides automated backups, integrity checks, and index optimization through SQL Server Agent jobs.
 
-> Agent/machine-facing index: [`.claude/knowledge-base/_static/scripts-index.md`](../.claude/knowledge-base/_static/scripts-index.md) catalogs every script here (read-only vs. write, MCP-tool wrapping); [`thresholds.yaml`](../.claude/knowledge-base/_static/thresholds.yaml)'s `maintenance.*` keys are the canonical staleness/failure thresholds behind `maintenance/diagnostics/`'s severity output.
+> Agent/machine-facing index: [`.claude/knowledge-base/_static/scripts-index.md`](../../knowledge-base/_static/scripts-index.md) catalogs every script here (read-only vs. write, MCP-tool wrapping); [`thresholds.yaml`](../../knowledge-base/_static/thresholds.yaml)'s `maintenance.*` keys are the canonical staleness/failure thresholds behind `maintenance/diagnostics/`'s severity output.
 
 ## Table of Contents
 
@@ -39,7 +39,7 @@ This maintenance solution delivers automated operational tasks for SQL Server da
 
 The maintenance solution is the **automation component** of the Data Eyes ecosystem:
 
-1. **Monitoring** ([monitor/](../monitor/)) - Grafana/Prometheus dashboards for visibility
+1. **Monitoring** ([Data Eyes dashboard](../../../docs/dashboard.md)) - Live fleet visibility and trends
 2. **Performance** ([performance/](../performance/)) - Analysis and tuning guidance
 3. **Maintenance** (this solution) - Automated operational tasks
 

@@ -2,7 +2,7 @@
 
 This is where I save all my SQL Server scripts — a personal collection of reusable queries, utilities, and configurations organized by topic.
 
-> Agent/machine-facing routing: the `/sql-scripts` command (`.claude/commands/data-eyes/sql-scripts.md`) owns the keyword-to-subfolder routing table — this repository's own folder list below is kept in sync with it, not the other way around.
+> Agent/machine-facing routing: the [`/sql-scripts` command](../../commands/sql-scripts.md) owns the keyword-to-subfolder routing table — this repository's own folder list below is kept in sync with it, not the other way around.
 
 ### Repository Structure
 | Folder | Purpose |

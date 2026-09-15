@@ -2,12 +2,12 @@
 #
 # Both SQL-facing services consume ./instances.yaml. The dashboard keeps its
 # direct fixed-query path; MCP exposes the same fleet to external agents.
-#   docker compose -f src/docker-compose.yml up -d
+#   docker compose -f src/docker-compose.yml up -d --build
 
 services:
   # The dashboard's own database — trend history, the instance registry, and
   # user accounts. Never a monitored SQL Server (see
-  # dashboard/repository/init.sql). Required, not optional: the backend's
+  # repository/init.sql). Required, not optional: the backend's
   # collector writes trend snapshots here, but login and the instance
   # registry depend on it too.
   dashboard-repo:
