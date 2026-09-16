@@ -1,15 +1,21 @@
-import { useState, type FormEvent } from "react";
+import { useEffect, useState, type FormEvent } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../auth/AuthContext";
 import { ApiError } from "../api";
+import { getInitialTheme } from "../theme";
 
 export default function Login() {
   const { login } = useAuth();
   const navigate = useNavigate();
+  const [theme] = useState(getInitialTheme);
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
+
+  useEffect(() => {
+    document.documentElement.setAttribute("data-theme", theme);
+  }, [theme]);
 
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
@@ -28,9 +34,11 @@ export default function Login() {
   return (
     <div className="auth-shell">
       <form className="auth-card" onSubmit={handleSubmit}>
-        <span className="brand-mark" style={{ height: 28 }} aria-hidden="true" />
-        <h1>Data Eyes</h1>
-        <p className="auth-subtitle">Sign in to view your fleet</p>
+        <div className="auth-header">
+          <img className="brand-mark auth-logo" src="/logo.svg" alt="" aria-hidden="true" />
+          <h1>Data Eyes</h1>
+          <p className="auth-subtitle">Sign in to view your fleet</p>
+        </div>
 
         <label htmlFor="username">Username</label>
         <input

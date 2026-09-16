@@ -1,9 +1,12 @@
+import { useState } from "react";
 import { useInstanceTab } from "../../hooks/useInstanceTab";
 import { statusColorVar } from "../../strata";
 import type { SessionDimensions, SessionRow } from "../../types";
+import Pagination, { PAGE_SIZE } from "../Pagination";
 
 function DimensionCard({ title, rows }: { title: string; rows: { Dimension: string; WaitSeconds: number }[] }) {
-  const max = Math.max(...rows.map((r) => r.WaitSeconds), 1);
+  const topRows = [...rows].sort((a, b) => b.WaitSeconds - a.WaitSeconds).slice(0, 5);
+  const max = Math.max(...topRows.map((r) => r.WaitSeconds), 1);
   return (
     <div className="panel-card" style={{ flex: "1 1 300px", minWidth: 280, overflow: "hidden" }}>
       <div style={{ padding: "13px 17px", borderBottom: "1px solid var(--line)", display: "flex", alignItems: "baseline", justifyContent: "space-between" }}>
@@ -13,14 +16,12 @@ function DimensionCard({ title, rows }: { title: string; rows: { Dimension: stri
       {rows.length === 0 ? (
         <div className="table-empty">No active sessions right now.</div>
       ) : (
-        rows.map((r, i) => (
-          <div key={i} style={{ display: "flex", flexDirection: "column", gap: 7, padding: "11px 17px", borderBottom: "1px solid var(--line2)" }}>
-            <div style={{ display: "flex", alignItems: "baseline", gap: 10 }}>
-              <span className="mono" style={{ flex: 1, fontSize: 12, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{r.Dimension}</span>
-              <span className="mono" style={{ fontSize: 12, fontWeight: 500 }}>{r.WaitSeconds.toFixed(1)}s</span>
-            </div>
-            <div style={{ height: 5, borderRadius: 3, background: "var(--soft)", overflow: "hidden" }}>
-              <div style={{ height: "100%", width: `${(r.WaitSeconds / max) * 100}%`, background: "var(--accent)", borderRadius: 3 }} />
+        topRows.map((r, i) => (
+          <div key={`${r.Dimension}-${i}`} className="dimension-bar-row">
+            <div className="dimension-bar-track">
+              <div className="dimension-bar-fill" style={{ width: `${Math.max(3, (r.WaitSeconds / max) * 100)}%` }} />
+              <span className="dimension-bar-label mono" title={r.Dimension}>{r.Dimension || "Unknown"}</span>
+              <strong className="dimension-bar-value mono">{r.WaitSeconds.toFixed(1)}s</strong>
             </div>
           </div>
         ))
@@ -31,12 +32,16 @@ function DimensionCard({ title, rows }: { title: string; rows: { Dimension: stri
 
 export default function SessionsTab({ instanceName }: { instanceName: string }) {
   const { data, loading, error } = useInstanceTab(instanceName, "sessions");
+  const [sessionPage, setSessionPage] = useState(1);
 
   if (loading) return <div className="page-loading">Loading…</div>;
   if (error) return <div className="banner-error">{error}</div>;
 
   const dims = data?.dimensions?.data as unknown as SessionDimensions | null;
   const sessions = (data?.active_sessions?.data as unknown as SessionRow[] | null) ?? [];
+  const totalSessionPages = Math.max(1, Math.ceil(sessions.length / PAGE_SIZE));
+  const safeSessionPage = Math.min(sessionPage, totalSessionPages);
+  const visibleSessions = sessions.slice((safeSessionPage - 1) * PAGE_SIZE, safeSessionPage * PAGE_SIZE);
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
@@ -67,7 +72,7 @@ export default function SessionsTab({ instanceName }: { instanceName: string }) 
                 <span className="th-label th-label--right">WAIT</span>
                 <span className="th-label th-label--right">ELAPSED</span>
               </div>
-              {sessions.map((s) => (
+              {visibleSessions.map((s) => (
                 <div key={s.Pid} style={{ display: "grid", gridTemplateColumns: "70px 1.4fr 130px 150px 82px 86px", alignItems: "center", padding: "11px 18px", borderBottom: "1px solid var(--line2)" }}>
                   <span className="mono" style={{ fontSize: 11.5, color: "var(--mid)" }}>{s.Pid}</span>
                   <span className="mono" style={{ fontSize: 11.5, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", paddingRight: 18 }}>{s.SqlText || "—"}</span>
@@ -80,6 +85,7 @@ export default function SessionsTab({ instanceName }: { instanceName: string }) 
                   <span className="mono" style={{ fontSize: 12, color: "var(--mid)", textAlign: "right" }}>{s.ElapsedSeconds.toFixed(1)}s</span>
                 </div>
               ))}
+              <Pagination page={safeSessionPage} totalItems={sessions.length} onChange={setSessionPage} />
             </>
           )}
         </div>

@@ -75,6 +75,16 @@ export interface ChatMessage {
   content: string;
 }
 
+export interface AIStatus {
+  provider: "anthropic" | "openai" | "local" | string;
+  provider_label: string;
+  configured: boolean;
+  routine_model: string;
+  deep_model: string;
+  base_url: string | null;
+  reason: string | null;
+}
+
 export type Role = "admin" | "member";
 
 export interface InstanceSummary {

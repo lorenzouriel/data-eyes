@@ -1,5 +1,5 @@
 <div align="center">
-  <img src="assets/logo-gradient-nobg.png" alt="Data Eyes logo" width="180">
+  <img src="assets/logo.png" alt="Data Eyes logo" width="180">
 </div>
 
 # Data Eyes

@@ -22,14 +22,14 @@ for the known drift risk and its mitigation options.
 """
 
 import logging
-from typing import Optional, List, Tuple, Any, Dict
+from typing import Any, Dict, List, Optional, Tuple
 
 from mcp.server.fastmcp import Context
 
-from .tools import mcp, _connection_options
-from .db import execute_query, request_credentials, QueryResult
+from .db import QueryResult, execute_query, request_credentials
 from .metrics import MetricsContext
-from .utils import format_json, escape_sql_string
+from .tools import _connection_options, mcp
+from .utils import escape_sql_string, format_json
 
 logger = logging.getLogger(__name__)
 

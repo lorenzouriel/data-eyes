@@ -58,7 +58,7 @@ async def lifespan(app: FastAPI):
         logger.error("Could not seed bootstrap admin at startup: %s", e)
 
     # Starts the trend-history collector and the insights sweep (a no-op if
-    # ANTHROPIC_API_KEY isn't configured — see insights_sweep.start()), and
+    # the selected AI provider isn't configured — see insights_sweep.start()), and
     # tears both down cleanly on shutdown so the repository connection pool
     # doesn't leak.
     collector.start()

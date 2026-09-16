@@ -10,6 +10,11 @@ from data_eyes_mcp.tools import list_configured_instances
 def _write_fleet(path, duplicate: bool = False) -> None:
     second_name = "alpha" if duplicate else "beta"
     path.write_text(
+        "mcp_security:\n"
+        "  principals:\n"
+        "    test-agent:\n"
+        "      tools: ['list_configured_instances']\n"
+        "      instances: ['alpha', 'beta']\n"
         "instances:\n"
         "  - name: alpha\n"
         "    label: Alpha\n"
@@ -34,12 +39,16 @@ def fleet(tmp_path, monkeypatch):
     monkeypatch.setattr(config.settings, "MSSQL_PASSWORD", None)
     monkeypatch.setattr(config.settings, "MSSQL_TRUSTED_CONNECTION", None)
     monkeypatch.setattr(config.settings, "DEFAULT_DATABASE", None)
+    monkeypatch.setattr(config.settings, "DEFAULT_PRINCIPAL", "test-agent")
+    monkeypatch.setattr(config.settings, "DEPLOYMENT_ENVIRONMENT", None)
+    monkeypatch.setattr(config.settings, "INSTANCE_ALLOWLIST", "")
+    monkeypatch.setattr(config.settings, "SECURITY_ENFORCEMENT", True)
     return path
 
 
 @pytest.mark.asyncio
 async def test_list_configured_instances_never_returns_connection_strings(fleet):
-    result = json.loads(await list_configured_instances())
+    result = json.loads(await list_configured_instances())["rows"]
 
     assert [item["name"] for item in result] == ["alpha", "beta"]
     assert all("mssql_connection_string" not in item for item in result)

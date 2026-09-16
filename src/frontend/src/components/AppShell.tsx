@@ -1,16 +1,9 @@
 import { useEffect, useState, type ReactNode } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../auth/AuthContext";
+import { THEME_KEY, getInitialTheme } from "../theme";
 
 type NavId = "status" | "ask";
-
-const THEME_KEY = "data-eyes-theme";
-
-function initialTheme(): "light" | "dark" {
-  const stored = localStorage.getItem(THEME_KEY);
-  if (stored === "light" || stored === "dark") return stored;
-  return window.matchMedia?.("(prefers-color-scheme: dark)").matches ? "dark" : "light";
-}
 
 function initials(name: string): string {
   return name
@@ -28,7 +21,7 @@ function initials(name: string): string {
 export default function AppShell({ active, children }: { active: NavId; children: ReactNode }) {
   const { username, role, logout } = useAuth();
   const navigate = useNavigate();
-  const [theme, setTheme] = useState<"light" | "dark">(initialTheme);
+  const [theme, setTheme] = useState<"light" | "dark">(getInitialTheme);
   const [menuOpen, setMenuOpen] = useState(false);
 
   useEffect(() => {
@@ -37,7 +30,7 @@ export default function AppShell({ active, children }: { active: NavId; children
   }, [theme]);
 
   const navItems: { id: NavId; label: string; path: string }[] = [
-    { id: "status", label: "Status", path: "/" },
+    { id: "status", label: "Dashboard", path: "/" },
     { id: "ask", label: "Ask", path: "/ask" },
   ];
 
@@ -45,7 +38,7 @@ export default function AppShell({ active, children }: { active: NavId; children
     <div className="app-shell">
       <header className="topbar">
         <div className="topbar-brand" onClick={() => navigate("/")}>
-          <span className="brand-mark" aria-hidden="true" />
+          <img className="brand-mark" src="/logo.svg" alt="" aria-hidden="true" />
           <span className="brand-name">Data Eyes</span>
         </div>
         <nav className="topbar-nav">
@@ -60,8 +53,22 @@ export default function AppShell({ active, children }: { active: NavId; children
           ))}
         </nav>
         <div className="topbar-right">
-          <button className="theme-toggle" onClick={() => setTheme(theme === "light" ? "dark" : "light")}>
-            {theme === "light" ? "Dark" : "Light"}
+          <button
+            className="theme-toggle"
+            onClick={() => setTheme(theme === "light" ? "dark" : "light")}
+            aria-label={theme === "light" ? "Switch to dark theme" : "Switch to light theme"}
+            title={theme === "light" ? "Switch to dark theme" : "Switch to light theme"}
+          >
+            {theme === "light" ? (
+              <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79Z" />
+              </svg>
+            ) : (
+              <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <circle cx="12" cy="12" r="4" />
+                <path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41" />
+              </svg>
+            )}
           </button>
           <div className="account-menu">
             <button className="account-menu-trigger" onClick={() => setMenuOpen((v) => !v)}>

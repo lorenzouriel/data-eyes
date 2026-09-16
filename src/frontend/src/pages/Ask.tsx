@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import AppShell from "../components/AppShell";
 import { streamAsk, ApiError } from "../api";
 import type { ChatMessage } from "../types";
+import { useAIStatus } from "../hooks/useAIStatus";
 
 const SUGGESTED_PROMPTS = [
   "Which instances are critical right now?",
@@ -10,6 +11,7 @@ const SUGGESTED_PROMPTS = [
 ];
 
 export default function Ask() {
+  const { status, statusError } = useAIStatus();
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState("");
   const [sending, setSending] = useState(false);
@@ -27,7 +29,7 @@ export default function Ask() {
 
   const send = async (text: string) => {
     const question = text.trim();
-    if (!question || sending) return;
+    if (!question || sending || status?.configured === false) return;
 
     setError(null);
     const history = [...messages, { role: "user" as const, content: question }];
@@ -66,8 +68,15 @@ export default function Ask() {
             <h1 className="page-title">Ask the fleet</h1>
             <p className="page-subtitle">Plain-English questions over your registered instances' live health data.</p>
           </div>
+          {status && (
+            <span className="tag mono" title={status.deep_model}>
+              {status.provider_label} · {status.deep_model}
+            </span>
+          )}
         </div>
 
+        {statusError && <div className="banner-error">{statusError}</div>}
+        {status && !status.configured && <div className="banner-error">Ask is unavailable: {status.reason}</div>}
         {error && <div className="banner-error">{error}</div>}
 
         <div className="panel-card" style={{ display: "flex", flexDirection: "column", minHeight: 420, padding: 0 }}>
@@ -82,6 +91,7 @@ export default function Ask() {
                       className="btn-ghost"
                       style={{ textAlign: "left", width: "fit-content" }}
                       onClick={() => send(p)}
+                      disabled={status?.configured === false}
                     >
                       {p}
                     </button>
@@ -121,7 +131,7 @@ export default function Ask() {
               value={input}
               onChange={(e) => setInput(e.target.value)}
               placeholder="Ask about your fleet…"
-              disabled={sending}
+              disabled={sending || status?.configured === false}
               style={{
                 flex: 1,
                 padding: "9px 12px",
@@ -133,7 +143,7 @@ export default function Ask() {
                 fontFamily: "inherit",
               }}
             />
-            <button className="btn-primary" type="submit" disabled={sending || !input.trim()}>
+            <button className="btn-primary" type="submit" disabled={sending || !input.trim() || status?.configured === false}>
               {sending ? "Thinking…" : "Send"}
             </button>
           </form>

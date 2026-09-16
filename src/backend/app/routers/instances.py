@@ -54,6 +54,15 @@ class InstanceUpdateRequest(BaseModel):
     connection_string: Optional[str] = None
 
 
+class TestConnectionRequest(BaseModel):
+    connection_string: Optional[str] = None
+
+
+class TestConnectionResult(BaseModel):
+    ok: bool
+    message: str
+
+
 async def _find_instance(instance_name: str) -> InstanceConfig:
     try:
         instance = await repository.get_instance(instance_name)
@@ -88,6 +97,39 @@ async def create_instance(payload: InstanceCreateRequest, username: str = Depend
     except repository.RepositoryUnavailable as e:
         raise HTTPException(status_code=503, detail=f"Instance registry unavailable: {e}") from e
     return InstanceSummary.from_config(instance)
+
+
+@router.post("/test-connection", response_model=TestConnectionResult)
+async def test_connection(payload: TestConnectionRequest, _: str = Depends(require_auth)):
+    """Try a connection string before it's saved — used by the Add/Edit
+    instance form's "Test connection" button."""
+    if not payload.connection_string:
+        raise HTTPException(status_code=400, detail="connection_string is required")
+    try:
+        databases = await diagnostics.list_databases(payload.connection_string)
+    except MSSQLError as e:
+        return TestConnectionResult(ok=False, message=str(e))
+    count = len(databases) if isinstance(databases, list) else 0
+    return TestConnectionResult(ok=True, message=f"Connected — found {count} database{'s' if count != 1 else ''}")
+
+
+@router.post("/{instance_name}/test-connection", response_model=TestConnectionResult)
+async def test_instance_connection(
+    instance_name: str, payload: TestConnectionRequest, _: str = Depends(require_auth)
+):
+    """Same as /test-connection, but for the Edit form: when the connection
+    string field is left blank (keep the current one), fall back to the
+    already-registered string instead of requiring it to be retyped."""
+    connection_string = payload.connection_string
+    if not connection_string:
+        instance = await _find_instance(instance_name)
+        connection_string = instance.mssql_connection_string
+    try:
+        databases = await diagnostics.list_databases(connection_string)
+    except MSSQLError as e:
+        return TestConnectionResult(ok=False, message=str(e))
+    count = len(databases) if isinstance(databases, list) else 0
+    return TestConnectionResult(ok=True, message=f"Connected — found {count} database{'s' if count != 1 else ''}")
 
 
 @router.put("/{instance_name}", response_model=InstanceSummary)

@@ -5,7 +5,8 @@ Exports Prometheus metrics for monitoring queries, performance, and errors.
 """
 
 import logging
-from prometheus_client import Counter, Histogram, Gauge, CollectorRegistry
+
+from prometheus_client import CollectorRegistry, Counter, Gauge, Histogram
 
 logger = logging.getLogger(__name__)
 
@@ -101,7 +102,6 @@ def set_server_ready(ready: bool):
 
 def get_metrics_text() -> str:
     """Get Prometheus metrics in text format."""
-    from prometheus_client.exposition import REGISTRY as default_registry
     from prometheus_client import generate_latest
     return generate_latest(REGISTRY).decode("utf-8")
 
@@ -117,14 +117,20 @@ class MetricsContext:
 
     def __enter__(self):
         import time
+
+        from .security import set_tool
         self.start_time = time.time()
+        self._tool_token = set_tool(self.tool_name)
         active_queries.inc()
         return self
 
     def __exit__(self, exc_type, exc_val, exc_tb):
         import time
+
+        from .security import reset_tool
         duration = time.time() - self.start_time
         active_queries.dec()
+        reset_tool(self._tool_token)
 
         if exc_type is not None:
             error_type = exc_type.__name__

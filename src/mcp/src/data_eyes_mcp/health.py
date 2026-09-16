@@ -10,12 +10,13 @@ Provides HTTP endpoints for:
 
 import asyncio
 import logging
-from typing import Dict, Any
 from datetime import datetime
+from typing import Any, Dict
 
-from .db import check_connection, request_credentials
 from .config import load_instances, settings
+from .db import check_connection, request_credentials
 from .metrics import server_ready
+from .security import reset_tool, set_tool
 
 logger = logging.getLogger(__name__)
 
@@ -46,14 +47,22 @@ async def readiness_check() -> Dict[str, Any]:
     instances = load_instances()
 
     async def check_instance(name: str) -> tuple[str, bool]:
-        with request_credentials(instance=name):
-            return name, await check_connection()
+        token = set_tool("check_db_connection")
+        try:
+            with request_credentials(instance=name):
+                return name, await check_connection()
+        finally:
+            reset_tool(token)
 
     if instances:
         results = dict(await asyncio.gather(*(check_instance(item.name) for item in instances)))
         is_db_ready = all(results.values())
     else:
-        is_db_ready = await check_connection()
+        token = set_tool("check_db_connection")
+        try:
+            is_db_ready = await check_connection()
+        finally:
+            reset_tool(token)
         results = {"legacy_default": is_db_ready}
     is_ready = is_db_ready
 

@@ -4,7 +4,7 @@ Symmetric encryption for instance connection strings at rest.
 Connection strings (which embed SQL Server credentials — see the `instance`
 table in dashboard/repository/init.sql) are the one genuinely new secret
 this backend stores itself; everything else (session key, admin bootstrap
-password, Anthropic key) already lived in .env, never in a database row.
+password, AI provider keys) already lived in .env, never in a database row.
 Encrypted with Fernet (AES-128-CBC + HMAC, from the `cryptography` package),
 keyed by INSTANCE_SECRET_KEY.
 

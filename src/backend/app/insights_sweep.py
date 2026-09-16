@@ -13,6 +13,7 @@ import logging
 from typing import Dict, Optional, Tuple
 
 from . import diagnostics, insights_agent, insights_feed, repository
+from .ai_provider import get_ai_status
 from .config import settings
 from .mssql_client import MSSQLError
 
@@ -74,8 +75,9 @@ async def _run_forever() -> None:
 
 def start() -> None:
     global _task
-    if not settings.ANTHROPIC_API_KEY:
-        logger.info("ANTHROPIC_API_KEY not configured — insights sweep disabled")
+    status = get_ai_status()
+    if not status.configured:
+        logger.info("AI provider not configured — insights sweep disabled: %s", status.reason)
         return
     if _task is None:
         _task = asyncio.create_task(_run_forever())

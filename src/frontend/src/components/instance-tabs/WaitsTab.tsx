@@ -1,6 +1,8 @@
+import { useState } from "react";
 import { useInstanceTab } from "../../hooks/useInstanceTab";
 import { CATEGORY_COLOR, CATEGORY_LABEL } from "../../strata";
 import type { WaitCategoryPoint, WaitStatRow } from "../../types";
+import Pagination, { PAGE_SIZE } from "../Pagination";
 
 const CATEGORY_ORDER = ["cpu", "lock", "disk", "network", "other"];
 
@@ -77,8 +79,12 @@ function StackedChart({ points }: { points: WaitCategoryPoint[] }) {
 }
 
 function WaitTypesTable({ rows }: { rows: WaitStatRow[] }) {
+  const [page, setPage] = useState(1);
   if (rows.length === 0) return <div className="table-empty">No significant wait statistics found.</div>;
   const max = Math.max(...rows.map((r) => r.Percentage_WaitTime), 1);
+  const totalPages = Math.max(1, Math.ceil(rows.length / PAGE_SIZE));
+  const safePage = Math.min(page, totalPages);
+  const visibleRows = rows.slice((safePage - 1) * PAGE_SIZE, safePage * PAGE_SIZE);
   return (
     <div className="panel-card" style={{ overflowX: "auto" }}>
       <div style={{ padding: "14px 18px", borderBottom: "1px solid var(--line)", font: "500 13.5px 'Space Grotesk', sans-serif" }}>Wait types</div>
@@ -88,8 +94,8 @@ function WaitTypesTable({ rows }: { rows: WaitStatRow[] }) {
         <span className="th-label th-label--right">WAIT</span>
         <span className="th-label th-label--right">TASKS</span>
       </div>
-      {rows.map((r, i) => (
-        <div key={i} style={{ display: "grid", gridTemplateColumns: "1.4fr 1fr 84px 78px", alignItems: "center", padding: "11px 18px", borderBottom: "1px solid var(--line2)" }}>
+      {visibleRows.map((r) => (
+        <div key={r.Wait_Type} style={{ display: "grid", gridTemplateColumns: "1.4fr 1fr 84px 78px", alignItems: "center", padding: "11px 18px", borderBottom: "1px solid var(--line2)" }}>
           <div style={{ display: "flex", alignItems: "center", gap: 9, minWidth: 0 }}>
             <span style={{ width: 8, height: 8, borderRadius: 2, background: CATEGORY_COLOR[r.Category] ?? CATEGORY_COLOR.other, flex: "none" }} />
             <div style={{ display: "flex", flexDirection: "column", gap: 2, minWidth: 0 }}>
@@ -106,6 +112,7 @@ function WaitTypesTable({ rows }: { rows: WaitStatRow[] }) {
           <span className="mono" style={{ fontSize: 12, color: "var(--mid)", textAlign: "right" }}>{r.Waiting_Tasks_Count}</span>
         </div>
       ))}
+      <Pagination page={safePage} totalItems={rows.length} onChange={setPage} />
     </div>
   );
 }

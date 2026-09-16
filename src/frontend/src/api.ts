@@ -1,5 +1,6 @@
 import type {
   AdvisorReport,
+  AIStatus,
   AppUser,
   ChatMessage,
   FleetHealth,
@@ -119,6 +120,24 @@ export function deleteInstance(name: string) {
   return request<void>(`/api/instances/${encodeURIComponent(name)}`, { method: "DELETE" });
 }
 
+export interface TestConnectionResult {
+  ok: boolean;
+  message: string;
+}
+
+// Tries a connection string before it's saved. `instanceName` is passed for
+// the Edit form: when the connection-string field is left blank (keep the
+// current one), the backend falls back to the already-registered string.
+export function testConnection(connectionString: string, instanceName?: string) {
+  const path = instanceName
+    ? `/api/instances/${encodeURIComponent(instanceName)}/test-connection`
+    : "/api/instances/test-connection";
+  return request<TestConnectionResult>(path, {
+    method: "POST",
+    body: JSON.stringify({ connection_string: connectionString || undefined }),
+  });
+}
+
 // --- User management (admin-only, except changeMyPassword) ---
 
 export function getUsers() {
@@ -144,6 +163,10 @@ export function changeMyPassword(password: string) {
 }
 
 // --- Advisor + Ask the fleet (app/insights_agent.py's structured/chat paths) ---
+
+export function getAIStatus() {
+  return request<AIStatus>("/api/insights/status");
+}
 
 export function getAdvisorReport(instanceName: string, database?: string) {
   const query = database ? `?database=${encodeURIComponent(database)}` : "";
@@ -171,8 +194,18 @@ async function streamSse(url: string, body: unknown, onChunk: (text: string) => 
     body: JSON.stringify(body),
     signal,
   });
-  if (!res.ok || !res.body) {
-    throw new ApiError(res.status, res.statusText);
+  if (!res.ok) {
+    let detail = res.statusText;
+    try {
+      const body = await res.json();
+      detail = body.detail ?? detail;
+    } catch {
+      // Keep the HTTP status text for non-JSON provider/proxy failures.
+    }
+    throw new ApiError(res.status, detail);
+  }
+  if (!res.body) {
+    throw new ApiError(res.status, "The AI provider returned an empty stream.");
   }
 
   const reader = res.body.getReader();
@@ -186,9 +219,13 @@ async function streamSse(url: string, body: unknown, onChunk: (text: string) => 
     const frames = buffer.split("\n\n");
     buffer = frames.pop() ?? "";
     for (const frame of frames) {
+      const eventLine = frame.split("\n").find((line) => line.startsWith("event: "));
       const dataLine = frame.split("\n").find((line) => line.startsWith("data: "));
       if (!dataLine) continue;
       const parsed = JSON.parse(dataLine.slice("data: ".length));
+      if (eventLine === "event: error") {
+        throw new ApiError(502, parsed.error || "The AI provider request failed.");
+      }
       if (typeof parsed.text === "string") {
         onChunk(parsed.text);
       }

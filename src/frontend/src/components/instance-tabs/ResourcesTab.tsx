@@ -7,7 +7,7 @@ function CpuCard({ history }: { history: { TimestampMs: number; CpuPct: number }
   const latest = points[points.length - 1]?.CpuPct;
   const max = Math.max(...points.map((p) => p.CpuPct), 1);
   return (
-    <div className="panel-card" style={{ padding: "16px 17px", display: "flex", flexDirection: "column", gap: 12 }}>
+    <div className="panel-card resource-card" style={{ padding: "16px 17px", display: "flex", flexDirection: "column", gap: 12 }}>
       <span className="th-label">CPU UTILIZATION</span>
       <div style={{ display: "flex", alignItems: "baseline", gap: 7 }}>
         <span style={{ font: "600 25px 'Space Grotesk', sans-serif", letterSpacing: "-.8px" }}>{latest ?? "—"}</span>
@@ -25,7 +25,7 @@ function CpuCard({ history }: { history: { TimestampMs: number; CpuPct: number }
 
 function GaugeCard({ label, value, unit, note }: { label: string; value: number | string | null; unit: string; note: string }) {
   return (
-    <div className="panel-card" style={{ padding: "16px 17px", display: "flex", flexDirection: "column", gap: 12 }}>
+    <div className="panel-card resource-card" style={{ padding: "16px 17px", display: "flex", flexDirection: "column", gap: 12 }}>
       <span className="th-label">{label}</span>
       <div style={{ display: "flex", alignItems: "baseline", gap: 7 }}>
         <span style={{ font: "600 25px 'Space Grotesk', sans-serif", letterSpacing: "-.8px" }}>{value ?? "—"}</span>
@@ -38,7 +38,7 @@ function GaugeCard({ label, value, unit, note }: { label: string; value: number 
 
 function RateCard({ instanceName, category, label, unit }: { instanceName: string; category: string; label: string; unit: string }) {
   return (
-    <div className="panel-card" style={{ padding: "16px 17px", display: "flex", flexDirection: "column", gap: 12 }}>
+    <div className="panel-card resource-card" style={{ padding: "16px 17px", display: "flex", flexDirection: "column", gap: 12 }}>
       <span className="th-label">{label}</span>
       <div style={{ display: "flex", alignItems: "flex-end", gap: 2, height: 34 }}>
         <WaitSparkline instanceName={instanceName} category={category} height={34} />
@@ -61,7 +61,7 @@ export default function ResourcesTab({ instanceName }: { instanceName: string })
   if (!res) return <div className="table-empty">No resource data available.</div>;
 
   return (
-    <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(230px, 1fr))", gap: 14 }}>
+    <div className="resource-grid">
       <CpuCard history={res.cpu_history} />
       <GaugeCard label="BUFFER CACHE HIT" value={res.buffer_cache_hit_pct} unit="%" note="share of page requests served from memory" />
       <GaugeCard

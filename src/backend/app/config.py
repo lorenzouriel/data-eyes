@@ -49,12 +49,18 @@ class Settings(BaseSettings):
     COLLECTOR_INTERVAL_SECONDS: int = 60
     TREND_RETENTION_DAYS: int = 30
 
-    # Embedded insights agent (app/insights_agent.py, app/insights_sweep.py) —
-    # optional: if unset, every insight endpoint degrades to "no insight"
-    # rather than erroring, and the background sweep never starts. Model
-    # tiering matches the approved plan: a fast/cheap model for routine
-    # commentary, a stronger model only for on-demand deep explanations.
+    # Provider-neutral AI for Ask, Advisor, explanations, and insight sweeps.
+    # Supported providers: anthropic, openai ("chatgpt" alias), and local.
+    AI_PROVIDER: str = "anthropic"
+    AI_ROUTINE_MODEL: Optional[str] = None
+    AI_DEEP_MODEL: Optional[str] = None
+    AI_REQUEST_TIMEOUT_SECONDS: float = 120.0
+
     ANTHROPIC_API_KEY: Optional[str] = None
+    OPENAI_API_KEY: Optional[str] = None
+    OPENAI_BASE_URL: str = "https://api.openai.com/v1"
+    LOCAL_AI_BASE_URL: str = "http://host.docker.internal:11434/v1"
+    LOCAL_AI_API_KEY: Optional[str] = None
     INSIGHTS_SWEEP_INTERVAL_SECONDS: int = 600  # 10 min (plan's 5-15 min range)
     INSIGHTS_FEED_MAX_SIZE: int = 50
 

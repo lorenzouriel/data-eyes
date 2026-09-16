@@ -7,6 +7,7 @@ import {
   createInstance,
   updateInstance,
   deleteInstance,
+  testConnection,
   getUsers,
   createUser,
   deleteUser,
@@ -36,6 +37,8 @@ function InstanceForm({
   const [connectionString, setConnectionString] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [testing, setTesting] = useState(false);
+  const [testResult, setTestResult] = useState<{ ok: boolean; message: string } | null>(null);
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
@@ -47,6 +50,19 @@ function InstanceForm({
       setError(err instanceof ApiError ? err.message : "Failed to save instance");
     } finally {
       setSubmitting(false);
+    }
+  };
+
+  const handleTest = async () => {
+    setTestResult(null);
+    setTesting(true);
+    try {
+      const result = await testConnection(connectionString, initial?.name);
+      setTestResult(result);
+    } catch (err) {
+      setTestResult({ ok: false, message: err instanceof ApiError ? err.message : "Failed to test connection" });
+    } finally {
+      setTesting(false);
     }
   };
 
@@ -68,14 +84,32 @@ function InstanceForm({
       </div>
       <label>
         {initial ? "New connection string (leave blank to keep the current one)" : "SQL Server connection string"}
-        <input
-          className="mono"
-          value={connectionString}
-          onChange={(e) => setConnectionString(e.target.value)}
-          placeholder="Driver={ODBC Driver 17 for SQL Server};Server=...;Database=...;UID=...;PWD=..."
-          required={!initial}
-        />
+        <div style={{ display: "flex", gap: 8, marginTop: 6 }}>
+          <input
+            className="mono"
+            style={{ flex: 1, marginTop: 0 }}
+            value={connectionString}
+            onChange={(e) => {
+              setConnectionString(e.target.value);
+              setTestResult(null);
+            }}
+            placeholder="Driver={ODBC Driver 17 for SQL Server};Server=...;Database=...;UID=...;PWD=..."
+            required={!initial}
+          />
+          <button
+            type="button"
+            className="btn-ghost"
+            style={{ flex: "none" }}
+            onClick={handleTest}
+            disabled={testing || (!initial && !connectionString)}
+          >
+            {testing ? "Testing…" : "Test connection"}
+          </button>
+        </div>
       </label>
+      {testResult && (
+        <div className={testResult.ok ? "banner-success" : "banner-error"}>{testResult.message}</div>
+      )}
       {error && <div className="banner-error">{error}</div>}
       <div style={{ display: "flex", gap: 8 }}>
         <button type="submit" className="btn-primary" disabled={submitting}>

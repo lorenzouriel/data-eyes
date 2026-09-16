@@ -53,7 +53,7 @@ Use this rule:
 - Restart the backend and MCP after changing the YAML:
 
   ```powershell
-  docker compose -f src/docker-compose.yml up -d --build dashboard-backend data-eyes-mcp
+  docker compose -f src/docker-compose.yml up -d --build dashboard-backend data-eyes-mcp-dev
   ```
 
 ## Backend environment
@@ -83,10 +83,56 @@ Other backend settings include:
 | `COLLECTOR_INTERVAL_SECONDS` | `60` | Fleet collection interval |
 | `TREND_RETENTION_DAYS` | `30` | History retention window |
 | `CORS_ALLOW_ORIGINS` | `[]` | Allowed browser origins for split local development |
-| `ANTHROPIC_API_KEY` | unset | Enables optional Advisor, Ask, and explanation features |
+| `AI_PROVIDER` | `anthropic` | AI adapter: `anthropic`, `openai`/`chatgpt`, or `local` |
+| `AI_ROUTINE_MODEL` | provider default | Model for short insights and background sweeps |
+| `AI_DEEP_MODEL` | provider default | Model for Ask, Advisor, and detailed explanations |
+| `AI_REQUEST_TIMEOUT_SECONDS` | `120` | Provider request timeout |
+| `ANTHROPIC_API_KEY` | unset | Credential used when `AI_PROVIDER=anthropic` |
+| `OPENAI_API_KEY` | unset | Credential used when `AI_PROVIDER=openai` |
+| `OPENAI_BASE_URL` | OpenAI API | OpenAI-compatible hosted API base URL |
+| `LOCAL_AI_BASE_URL` | Ollama on Docker host | Local OpenAI-compatible API base URL |
+| `LOCAL_AI_API_KEY` | unset | Optional credential for a protected local endpoint |
 
 The bootstrap credentials are ignored after the first user is created. Manage
 later users through the admin UI or API.
+
+### AI provider examples
+
+Only one provider is active at a time. Ask, Advisor, deep explanations, and
+background insights all use the same adapter; the browser never receives an
+API key.
+
+Anthropic:
+
+```dotenv
+AI_PROVIDER=anthropic
+ANTHROPIC_API_KEY=replace-me
+AI_ROUTINE_MODEL=claude-haiku-4-5
+AI_DEEP_MODEL=claude-opus-5
+```
+
+OpenAI API (the `chatgpt` alias is also accepted):
+
+```dotenv
+AI_PROVIDER=openai
+OPENAI_API_KEY=replace-me
+AI_ROUTINE_MODEL=gpt-5-mini
+AI_DEEP_MODEL=gpt-5
+```
+
+Local Ollama or another server exposing `/v1/chat/completions`:
+
+```dotenv
+AI_PROVIDER=local
+LOCAL_AI_BASE_URL=http://host.docker.internal:11434/v1
+AI_ROUTINE_MODEL=llama3.2
+AI_DEEP_MODEL=llama3.2
+```
+
+Model names are configuration, not application logic. Set them to models that
+exist in the selected account or local runtime, then rebuild/restart the
+backend. The authenticated `/api/insights/status` endpoint reports the active
+provider and model names without returning credentials.
 
 ## MCP environment
 
@@ -95,16 +141,27 @@ Create `src/mcp/.env` from `.env.example`.
 | Variable | Default | Purpose |
 |---|---:|---|
 | `DEFAULT_INSTANCE` | first configured instance | Instance used when a tool omits `instance` |
+| `DEFAULT_PRINCIPAL` | unset | Local/stdio authorization principal; HTTP should receive a proxy-injected principal |
+| `DEPLOYMENT_ENVIRONMENT` | unset | Loads only instances in one environment |
+| `INSTANCE_ALLOWLIST` | unset | Additional comma-separated instance boundary |
 | `MSSQL_CONNECTION_TIMEOUT` | `30` | SQL connection timeout in seconds |
 | `MSSQL_QUERY_TIMEOUT` | `30` | SQL execution timeout in seconds |
 | `MAX_ROWS_PER_QUERY` | `50000` | Maximum returned rows |
 | `MAX_QUERY_LENGTH` | `50000` | Maximum submitted SQL length |
+| `MAX_RESPONSE_BYTES` | `2000000` | Hard cap on returned database content |
+| `MAX_CELL_LENGTH` | `4000` | Hard cap on each textual value |
+| `MAX_CONCURRENT_QUERIES` | `8` | Process-wide active-query ceiling |
 | `READ_ONLY` | `true` | Enables SQL write-blocking policy |
 | `ENABLE_WRITES` | `false` | Explicit write-mode switch; keep disabled for monitoring |
+| `SECURITY_ENFORCEMENT` | `true` | Enables default-deny principal and object policy |
+| `REQUIRE_SCOPED_CREDENTIALS` | `true` | Fails startup unless the deployment-specific SQL credentials exist |
+| `ALLOW_REQUEST_CREDENTIALS` | `false` | Disables caller-provided SQL credentials |
+| `DISABLE_ADHOC_ENVIRONMENTS` | `production,staging` | Environments where `execute_sql` is unavailable |
 | `ALLOWED_HOST` | unset | Additional HTTP host allowed by DNS-rebinding protection |
 | `LOG_LEVEL` | `INFO` | Application log level |
 | `LOG_FORMAT` | `json` | `json` or `text` logs |
-| `RATE_LIMIT_ENABLED` | `false` | Enables per-process request limiting |
+| `RATE_LIMIT_ENABLED` | `true` | Enables per-principal, per-process query limiting |
+| `RATE_LIMIT_QUERIES_PER_MINUTE` | `60` | Maximum queries per principal per minute |
 | `REPOSITORY_DSN` | Set by Compose | Lets MCP read dashboard trend history |
 
 `MSSQL_CONNECTION_STRING` remains available as a single-instance fallback for
@@ -128,7 +185,9 @@ data is disposable.
 
 ## SQL Server permissions
 
-Use a dedicated login with the minimum access required by the diagnostics you
-intend to run. Common monitoring queries require `VIEW SERVER STATE`; schema
-exploration requires read access to target databases. Keep MCP in read-only
-mode and use encrypted SQL connections whenever the server supports them.
+Use one dedicated login per deployment, configured through each instance's
+`credential_env_prefix`. Common monitoring queries require `VIEW SERVER STATE`;
+schema exploration requires read access to target databases. Start from
+`src/mcp/sql/provision-readonly-login.sql`, remove grants for tools you disabled,
+and use encrypted SQL connections whenever the server supports them. See
+[MCP security](mcp-security.md) for the complete authorization and isolation model.

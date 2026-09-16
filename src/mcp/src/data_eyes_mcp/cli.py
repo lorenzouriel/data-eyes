@@ -4,14 +4,14 @@ Command-line interface for Data Eyes MCP Server.
 Provides CLI entry point with argument parsing.
 """
 
-import asyncio
 import argparse
-import sys
+import asyncio
 import logging
+import sys
 
-from .server import create_server
 from .config import settings
 from .logging_config import setup_logging
+from .server import create_server
 
 
 def create_parser() -> argparse.ArgumentParser:
@@ -82,7 +82,7 @@ def parse_bind_address(bind_str: str) -> tuple[str, int]:
     try:
         port = int(port_str)
     except ValueError:
-        raise ValueError(f"Invalid port: {port_str}")
+        raise ValueError(f"Invalid port: {port_str}") from None
 
     return host, port
 

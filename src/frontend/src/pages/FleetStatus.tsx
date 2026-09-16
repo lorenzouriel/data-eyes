@@ -3,8 +3,8 @@ import { useNavigate } from "react-router-dom";
 import AppShell from "../components/AppShell";
 import StatusBadge from "../components/StatusBadge";
 import WaitSparkline from "../components/WaitSparkline";
-import { getFleetHealth, getInstanceOverview } from "../api";
-import type { FleetHealth, InstanceHealth, ServerOverview } from "../types";
+import { getFleetHealth } from "../api";
+import type { FleetHealth, InstanceHealth } from "../types";
 import { statusColorVar, tagStyle } from "../strata";
 
 const POLL_INTERVAL_MS = 30_000;
@@ -23,68 +23,13 @@ function alertCount(instance: InstanceHealth): number {
   return Object.values(instance.categories).filter((s) => s === "WARNING" || s === "CRITICAL").length;
 }
 
-function RowDetail({ instance }: { instance: InstanceHealth }) {
-  const navigate = useNavigate();
-  const [overview, setOverview] = useState<ServerOverview | null | undefined>(undefined);
-
-  useEffect(() => {
-    getInstanceOverview(instance.name)
-      .then((res) => setOverview(res.server.data))
-      .catch(() => setOverview(null));
-  }, [instance.name]);
-
-  return (
-    <div
-      style={{
-        display: "flex",
-        flexWrap: "wrap",
-        gap: 26,
-        alignItems: "flex-start",
-        margin: "12px 0 4px 24px",
-        padding: "14px 16px",
-        background: "var(--panel)",
-        border: "1px solid var(--line)",
-        borderRadius: 8,
-      }}
-    >
-      {overview === undefined ? (
-        <span style={{ color: "var(--muted)", fontSize: 12 }}>Loading server details…</span>
-      ) : overview === null ? (
-        <span style={{ color: "var(--muted)", fontSize: 12 }}>Server details unavailable — instance unreachable.</span>
-      ) : (
-        <>
-          <div style={{ display: "flex", flexDirection: "column", gap: 8, minWidth: 190 }}>
-            <span className="th-label">ENGINE</span>
-            <span className="mono" style={{ fontSize: 12 }}>
-              {overview.ProductVersion ?? "—"} {overview.Edition ? `(${overview.Edition})` : ""}
-            </span>
-            <span className="mono" style={{ fontSize: 10.5, color: "var(--muted)" }}>
-              {overview.MachineName ?? "—"}
-            </span>
-          </div>
-          <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-            <span className="th-label">MEMORY</span>
-            <span className="mono" style={{ fontSize: 12 }}>{overview.TotalMemoryGB ? `${overview.TotalMemoryGB} GB` : "—"}</span>
-          </div>
-          <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-            <span className="th-label">DISK</span>
-            <span className="mono" style={{ fontSize: 12 }}>{overview.TotalDiskGB ? `${overview.TotalDiskGB} GB` : "—"}</span>
-          </div>
-          <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-            <span className="th-label">CORES</span>
-            <span className="mono" style={{ fontSize: 12 }}>{overview.Cores ?? "—"}</span>
-          </div>
-        </>
-      )}
-      <button className="btn-primary" style={{ marginLeft: "auto" }} onClick={() => navigate(`/instances/${encodeURIComponent(instance.name)}`)}>
-        Open instance
-      </button>
-    </div>
-  );
-}
-
-function FleetTable({ instances, expanded, onToggle }: { instances: InstanceHealth[]; expanded: string | null; onToggle: (name: string) => void }) {
-  const navigate = useNavigate();
+function FleetTable({
+  instances,
+  onSelect,
+}: {
+  instances: InstanceHealth[];
+  onSelect: (name: string) => void;
+}) {
   return (
     <div className="panel-card" style={{ overflowX: "auto" }}>
       <div style={{ minWidth: 980, padding: "9px 16px", borderBottom: "1px solid var(--line)" }}>
@@ -99,33 +44,29 @@ function FleetTable({ instances, expanded, onToggle }: { instances: InstanceHeal
         </div>
       </div>
       {instances.map((instance) => {
-        const isOpen = expanded === instance.name;
         const alerts = alertCount(instance);
         const waitPct = instance.metrics["wait_stats.Percentage_WaitTime"];
         return (
           <div key={instance.name}>
             <div
-              onClick={() => onToggle(instance.name)}
+              onClick={() => onSelect(instance.name)}
               style={{
                 cursor: "pointer",
                 minWidth: 980,
                 padding: "10px 16px",
                 borderBottom: "1px solid var(--line2)",
-                background: isOpen ? "var(--soft)" : "transparent",
+                background: "transparent",
               }}
             >
               <div className="fleet-row-grid">
-                <span style={{ fontFamily: "JetBrains Mono, monospace", fontSize: 9, color: "var(--muted)", transform: `rotate(${isOpen ? 90 : 0}deg)`, transition: "transform .12s" }}>
-                  ▶
+                <span style={{ fontFamily: "JetBrains Mono, monospace", fontSize: 12, color: "var(--muted)" }}>
+                  ›
                 </span>
                 <div style={{ display: "flex", alignItems: "center", gap: 9, minWidth: 0 }}>
                   <span className="status-dot" style={{ background: statusColorVar(instance.overall_severity) }} />
                   <div style={{ display: "flex", flexDirection: "column", gap: 2, minWidth: 0 }}>
                     <span
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        navigate(`/instances/${encodeURIComponent(instance.name)}`);
-                      }}
+                      onClick={(e) => { e.stopPropagation(); onSelect(instance.name); }}
                       style={{ font: "500 12.5px 'Space Grotesk', sans-serif", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}
                     >
                       {instance.label}
@@ -138,7 +79,7 @@ function FleetTable({ instances, expanded, onToggle }: { instances: InstanceHeal
                 <span className="tag" style={{ justifySelf: "start", ...tagStyle(instance.reachable ? "var(--status-ok)" : "var(--muted)") }}>
                   {instance.reachable ? "ON" : "OFF"}
                 </span>
-                <div style={{ display: "flex", alignItems: "center", gap: 9 }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 9, minWidth: 0, overflow: "hidden" }}>
                   <WaitSparkline instanceName={instance.name} />
                   {waitPct !== undefined && (
                     <span className="mono" style={{ fontSize: 12.5, fontWeight: 500, flex: "none" }}>
@@ -164,7 +105,6 @@ function FleetTable({ instances, expanded, onToggle }: { instances: InstanceHeal
                 </span>
               </div>
             </div>
-            {isOpen && <RowDetail instance={instance} />}
           </div>
         );
       })}
@@ -172,14 +112,13 @@ function FleetTable({ instances, expanded, onToggle }: { instances: InstanceHeal
   );
 }
 
-function FleetTiles({ instances }: { instances: InstanceHealth[] }) {
-  const navigate = useNavigate();
+function FleetTiles({ instances, onSelect }: { instances: InstanceHealth[]; onSelect: (name: string) => void }) {
   return (
     <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(268px, 1fr))", gap: 12 }}>
       {instances.map((instance) => (
         <div
           key={instance.name}
-          onClick={() => navigate(`/instances/${encodeURIComponent(instance.name)}`)}
+          onClick={() => onSelect(instance.name)}
           className="panel-card"
           style={{
             borderLeft: `3px solid ${statusColorVar(instance.overall_severity)}`,
@@ -208,12 +147,12 @@ function FleetTiles({ instances }: { instances: InstanceHealth[] }) {
 }
 
 export default function FleetStatus() {
+  const navigate = useNavigate();
   const [fleet, setFleet] = useState<FleetHealth | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
   const [mode, setMode] = useState<Mode>("table");
   const [filter, setFilter] = useState<Filter>("All");
-  const [expanded, setExpanded] = useState<string | null>(null);
 
   const refresh = useCallback(async () => {
     try {
@@ -241,12 +180,16 @@ export default function FleetStatus() {
   };
   const visible = instances.filter((i) => matchesFilter(i, filter));
 
+  const selectInstance = (name: string) => {
+    navigate(`/instances/${encodeURIComponent(name)}`);
+  };
+
   return (
     <AppShell active="status">
-      <div className="page-inner">
+      <div id="dashboard-top" className="page-inner">
         <div className="page-header-row">
           <div>
-            <h1 className="page-title">Status</h1>
+            <h1 className="page-title">Fleet dashboard</h1>
             <p className="page-subtitle">
               {instances.length} monitored instance{instances.length === 1 ? "" : "s"}
               {lastUpdated && ` · updated ${lastUpdated.toLocaleTimeString()}`}
@@ -318,9 +261,14 @@ export default function FleetStatus() {
         )}
 
         {fleet && visible.length > 0 && mode === "table" && (
-          <FleetTable instances={visible} expanded={expanded} onToggle={(name) => setExpanded(expanded === name ? null : name)} />
+          <FleetTable
+            instances={visible}
+            onSelect={selectInstance}
+          />
         )}
-        {fleet && visible.length > 0 && mode === "tiles" && <FleetTiles instances={visible} />}
+        {fleet && visible.length > 0 && mode === "tiles" && (
+          <FleetTiles instances={visible} onSelect={selectInstance} />
+        )}
       </div>
     </AppShell>
   );

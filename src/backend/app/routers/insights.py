@@ -11,21 +11,21 @@ Insights API — the embedded real-time agent's HTTP surface.
 - POST /api/insights/instances/{name}/advisor/dismiss: persist a dismissed finding.
 - POST /api/insights/ask (SSE): multi-turn "Ask the fleet" chat.
 
-Every endpoint degrades to "no insight" rather than an error when
-ANTHROPIC_API_KEY isn't configured — this feature is additive, never a
-dependency for the rest of the dashboard to function.
+Routine commentary degrades to no insight when AI is disabled. Explicit Ask
+and Advisor requests return a clear configuration error.
 """
 
 import asyncio
 import json
 import logging
-from typing import Any, AsyncIterator, Awaitable, List, Optional
+from typing import Any, AsyncIterator, Awaitable, List, Literal, Optional
 
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 
 from .. import diagnostics, insights_agent, insights_feed, repository
+from ..ai_provider import AIProviderError, get_ai_status
 from ..auth import require_auth
 from ..config import InstanceConfig
 from ..health_score import get_fleet_health
@@ -35,6 +35,12 @@ from .instance_tabs import TAB_BUILDERS
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/insights", tags=["insights"])
+
+
+@router.get("/status")
+async def ai_status(_: str = Depends(require_auth)):
+    """Public provider metadata only; credentials are never returned."""
+    return get_ai_status().public_dict()
 
 
 async def _find_instance(instance_name: str) -> InstanceConfig:
@@ -56,10 +62,13 @@ async def _safe(coro: Awaitable[Any]) -> Optional[Any]:
 
 
 async def _sse(text_iter: AsyncIterator[str]):
-    async for chunk in text_iter:
-        if chunk:
-            yield f"data: {json.dumps({'text': chunk})}\n\n"
-    yield "event: done\ndata: {}\n\n"
+    try:
+        async for chunk in text_iter:
+            if chunk:
+                yield f"data: {json.dumps({'text': chunk})}\n\n"
+        yield "event: done\ndata: {}\n\n"
+    except AIProviderError as exc:
+        yield f"event: error\ndata: {json.dumps({'error': str(exc)})}\n\n"
 
 
 @router.get("/feed")
@@ -124,6 +133,9 @@ async def explain(payload: ExplainRequest, _: str = Depends(require_auth)):
 
 @router.post("/instances/{instance_name}/advisor")
 async def generate_advisor(instance_name: str, database: Optional[str] = None, _: str = Depends(require_auth)):
+    status = get_ai_status()
+    if not status.configured:
+        raise HTTPException(status_code=503, detail=f"Advisor is unavailable: {status.reason}")
     instance = await _find_instance(instance_name)
     conn_str = instance.mssql_connection_string
 
@@ -152,7 +164,7 @@ async def generate_advisor(instance_name: str, database: Optional[str] = None, _
     if report is None:
         raise HTTPException(
             status_code=503,
-            detail="Advisor is unavailable right now (no ANTHROPIC_API_KEY configured, or the model call failed).",
+            detail=f"Advisor is unavailable because {status.provider_label} could not generate a valid report.",
         )
 
     dismissed = await _safe(repository.get_dismissed_advisor_findings(instance_name)) or set()
@@ -174,7 +186,7 @@ async def dismiss_advisor_finding(instance_name: str, payload: DismissRequest, _
 
 
 class ChatMessage(BaseModel):
-    role: str
+    role: Literal["user", "assistant"]
     content: str
 
 
@@ -184,6 +196,9 @@ class AskRequest(BaseModel):
 
 @router.post("/ask")
 async def ask_fleet(payload: AskRequest, _: str = Depends(require_auth)):
+    status = get_ai_status()
+    if not status.configured:
+        raise HTTPException(status_code=503, detail=f"Ask is unavailable: {status.reason}")
     try:
         instances = await repository.list_instances()
     except repository.RepositoryUnavailable:

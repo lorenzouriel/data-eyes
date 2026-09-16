@@ -10,6 +10,7 @@ The canonical guide is [docs/mcp.md](../../docs/mcp.md). Related guides:
 - [Shared configuration](../../docs/configuration.md)
 - [Deployment](../../docs/deployment.md)
 - [Development](../../docs/development.md)
+- [MCP security model](../../docs/mcp-security.md)
 
 ## Quick local start
 

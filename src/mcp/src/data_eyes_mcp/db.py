@@ -7,13 +7,25 @@ Uses pyodbc with connection pooling and thread-safe execution via asyncio.to_thr
 
 import asyncio
 import logging
+import os
+import re
 from contextlib import contextmanager
 from contextvars import ContextVar
 from dataclasses import dataclass, field
-from typing import List, Tuple, Iterator, Optional, Any, Dict
+from typing import Any, Dict, List, Optional, Tuple
+
 import pyodbc
 
 from .config import get_instance, load_instances, settings
+from .security import (
+    audit,
+    authorize,
+    enforce_rate_limit,
+    reset_instance,
+    reset_principal,
+    set_instance,
+    set_principal,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -29,34 +41,61 @@ _request_credentials: ContextVar[Optional[Dict[str, Any]]] = ContextVar(
 
 @contextmanager
 def request_credentials(user: Optional[str] = None, password: Optional[str] = None,
-                        trusted: Optional[bool] = None, instance: Optional[str] = None):
+                        trusted: Optional[bool] = None, instance: Optional[str] = None,
+                        principal: Optional[str] = None):
     """Bind per-request SQL credentials and fleet instance for one call.
 
     A no-op when all three are unset, so callers can wrap unconditionally.
     """
-    if not user and not password and trusted is None and not instance:
-        yield
-        return
+    if (user or password or trusted is not None) and not settings.ALLOW_REQUEST_CREDENTIALS:
+        raise PermissionError("per-request SQL credentials are disabled")
     token = _request_credentials.set(
         {"user": user, "password": password, "trusted": trusted, "instance": instance}
     )
+    principal_token = set_principal(principal)
+    instance_token = set_instance(instance or settings.DEFAULT_INSTANCE)
     try:
         yield
     finally:
+        reset_instance(instance_token)
+        reset_principal(principal_token)
         _request_credentials.reset(token)
 
 
 def _effective_credentials() -> Tuple[Optional[str], Optional[str], Optional[bool]]:
     """Return (user, password, trusted): per-request override if set, else settings."""
     req = _request_credentials.get()
-    if req is not None:
+    if req is not None and (req.get("user") or req.get("password") or req.get("trusted") is not None):
         return req.get("user"), req.get("password"), req.get("trusted")
+    configured = get_instance(_effective_instance())
+    if configured and configured.credential_env_prefix:
+        prefix = configured.credential_env_prefix
+        user = os.getenv(f"{prefix}_MSSQL_USER")
+        password = os.getenv(f"{prefix}_MSSQL_PASSWORD")
+        trusted_value = os.getenv(f"{prefix}_MSSQL_TRUSTED_CONNECTION")
+        trusted = None if trusted_value is None else trusted_value.lower() in ("1", "true", "yes", "on")
+        if user or password or trusted is not None:
+            return user, password, trusted
     return settings.MSSQL_USER, settings.MSSQL_PASSWORD, settings.MSSQL_TRUSTED_CONNECTION
 
 
 def _effective_instance() -> Optional[str]:
     req = _request_credentials.get()
     return req.get("instance") if req is not None else None
+
+
+def resolve_database(database: Optional[str] = None) -> Optional[str]:
+    """Resolve the real initial catalog without exposing the connection string."""
+    if database:
+        return database
+    if settings.DEFAULT_DATABASE:
+        return settings.DEFAULT_DATABASE
+    instance = get_instance(_effective_instance())
+    base = instance.mssql_connection_string if instance else settings.MSSQL_CONNECTION_STRING
+    if not base:
+        return None
+    match = re.search(r"(?:^|;)\s*(?:Database|Initial Catalog)\s*=\s*([^;]+)", base, re.I)
+    return match.group(1).strip().strip("{}") if match else None
 
 
 @dataclass
@@ -73,9 +112,18 @@ class QueryResult:
     rows: List[Tuple[Any, ...]] = field(default_factory=list)
     truncated: bool = False
     rowcount: int = -1
+    response_bytes: int = 0
 
 # Enable ODBC connection pooling for better resource management
 pyodbc.pooling = True
+_query_semaphore: Optional[asyncio.Semaphore] = None
+
+
+def _get_query_semaphore() -> asyncio.Semaphore:
+    global _query_semaphore
+    if _query_semaphore is None:
+        _query_semaphore = asyncio.Semaphore(settings.MAX_CONCURRENT_QUERIES)
+    return _query_semaphore
 
 
 class DatabaseError(Exception):
@@ -93,7 +141,15 @@ class ConnectionError(DatabaseError):
     pass
 
 
-def _fetch_rows(cursor, max_rows: int, batch_size: int = 1000) -> Tuple[List[Tuple[Any, ...]], bool]:
+def _safe_cell(value: Any) -> Any:
+    if isinstance(value, str) and len(value) > settings.MAX_CELL_LENGTH:
+        return value[: settings.MAX_CELL_LENGTH] + "…[TRUNCATED_UNTRUSTED_DATA]"
+    if isinstance(value, (bytes, bytearray)):
+        return b"<binary>"
+    return value
+
+
+def _fetch_rows(cursor, max_rows: int, batch_size: int = 1000) -> Tuple[List[Tuple[Any, ...]], bool, int]:
     """Fetch up to max_rows rows from a cursor, reporting truncation.
 
     Allows the row count to exceed max_rows before trimming so that a result
@@ -103,16 +159,24 @@ def _fetch_rows(cursor, max_rows: int, batch_size: int = 1000) -> Tuple[List[Tup
     """
     rows: List[Tuple[Any, ...]] = []
     truncated = False
+    response_bytes = 0
     while True:
         batch = cursor.fetchmany(batch_size)
         if not batch:
             break
-        rows.extend(batch)
+        for raw_row in batch:
+            row = tuple(_safe_cell(value) for value in raw_row)
+            row_bytes = sum(len(str(value).encode("utf-8", errors="replace")) for value in row)
+            if response_bytes + row_bytes > settings.MAX_RESPONSE_BYTES or len(rows) >= max_rows:
+                truncated = True
+                return rows, truncated, response_bytes
+            rows.append(row)
+            response_bytes += row_bytes
         if len(rows) > max_rows:
             rows = rows[:max_rows]
             truncated = True
             break
-    return rows, truncated
+    return rows, truncated, response_bytes
 
 
 def _quote_odbc_value(value: str) -> str:
@@ -122,7 +186,7 @@ def _quote_odbc_value(value: str) -> str:
     return value
 
 
-def build_connection_string(database: Optional[str] = None) -> str:
+def build_connection_string(database: Optional[str] = None) -> str:  # noqa: C901
     """Build the effective connection string, applying optional overrides.
 
     Credentials come from the per-request override if one is bound (see
@@ -217,7 +281,7 @@ def get_connection(database: Optional[str] = None):
         yield conn
     except pyodbc.Error as e:
         logger.exception("Database connection error: %s", e)
-        raise ConnectionError(f"Failed to connect to database: {e}") from e
+        raise ConnectionError("Failed to connect to database") from e
     finally:
         if conn:
             try:
@@ -226,7 +290,7 @@ def get_connection(database: Optional[str] = None):
                 logger.warning("Error closing connection: %s", e)
 
 
-async def execute_query(
+async def execute_query(  # noqa: C901
     sql: str,
     params: Tuple = (),
     timeout: Optional[int] = None,
@@ -254,15 +318,27 @@ async def execute_query(
         QueryTimeoutError: If query exceeds timeout
         DatabaseError: For other database errors
     """
-    if timeout is None:
-        timeout = settings.MSSQL_QUERY_TIMEOUT
-    if max_rows is None:
-        max_rows = settings.MAX_ROWS_PER_QUERY
+    timeout = settings.MSSQL_QUERY_TIMEOUT if timeout is None else timeout
+    max_rows = settings.MAX_ROWS_PER_QUERY if max_rows is None else max_rows
+    if timeout < 1 or timeout > settings.MSSQL_QUERY_TIMEOUT:
+        raise DatabaseError(f"timeout must be between 1 and {settings.MSSQL_QUERY_TIMEOUT} seconds")
+    if max_rows < 1 or max_rows > settings.MAX_ROWS_PER_QUERY:
+        raise DatabaseError(f"max_rows must be between 1 and {settings.MAX_ROWS_PER_QUERY}")
+
+    enforce_rate_limit()
+    configured_instance = get_instance(_effective_instance() or settings.DEFAULT_INSTANCE)
+    selected_instance = configured_instance.name if configured_instance else _effective_instance()
+    effective_database = resolve_database(database)
+    authorize(instance=selected_instance, database=effective_database)
+    started = __import__("time").monotonic()
+    cursor_holder: Dict[str, Any] = {}
 
     def _sync_execute() -> QueryResult:
         """Synchronous query execution in thread."""
         with get_connection(database) as conn:
             cursor = conn.cursor()
+            cursor.timeout = timeout
+            cursor_holder["cursor"] = cursor
             try:
                 cursor.execute(sql, params)
                 # Extract column names from cursor description
@@ -271,8 +347,13 @@ async def execute_query(
                 if columns:
                     # Fetch rows with batch processing for memory efficiency,
                     # flagging truncation when more than max_rows are available.
-                    rows, truncated = _fetch_rows(cursor, max_rows)
-                    return QueryResult(columns=columns, rows=rows, truncated=truncated)
+                    rows, truncated, response_bytes = _fetch_rows(cursor, max_rows)
+                    return QueryResult(
+                        columns=columns,
+                        rows=rows,
+                        truncated=truncated,
+                        response_bytes=response_bytes,
+                    )
                 else:
                     # No result set: write statement (INSERT/UPDATE/DELETE) or USE.
                     # Capture affected rows and commit the transaction.
@@ -281,26 +362,67 @@ async def execute_query(
                     return QueryResult(columns=[], rows=[], rowcount=rowcount)
             except pyodbc.Error as e:
                 logger.exception("Query execution error: %s", e)
-                raise DatabaseError(f"Query execution failed: {e}") from e
+                raise DatabaseError("Query execution failed") from e
             finally:
+                cursor_holder.pop("cursor", None)
                 try:
                     cursor.close()
                 except Exception as e:
                     logger.warning("Error closing cursor: %s", e)
 
-    # Execute in thread with timeout
+    # Execute in a bounded worker slot with both driver-level and cooperative
+    # cancellation. The queue wait is intentionally outside the DB timeout.
+    semaphore = _get_query_semaphore()
+    await semaphore.acquire()
     try:
-        coro = asyncio.to_thread(_sync_execute)
-        result = await asyncio.wait_for(coro, timeout=timeout)
+        task = asyncio.create_task(asyncio.to_thread(_sync_execute))
+        result = await asyncio.wait_for(asyncio.shield(task), timeout=timeout + 1)
+        audit(
+            "allow",
+            "query_completed",
+            database=effective_database,
+            duration_ms=round((__import__("time").monotonic() - started) * 1000, 2),
+            rows=len(result.rows),
+            response_bytes=result.response_bytes,
+        )
         return result
     except asyncio.TimeoutError:
+        cursor = cursor_holder.get("cursor")
+        if cursor is not None:
+            try:
+                await asyncio.to_thread(cursor.cancel)
+            except Exception:
+                logger.exception("ODBC cursor cancellation failed")
+        try:
+            await asyncio.wait_for(asyncio.shield(task), timeout=2)
+        except Exception:
+            # Cancellation commonly surfaces as an ODBC error; the public
+            # outcome remains the original query timeout.
+            pass
         logger.error("Query timeout after %d seconds", timeout)
+        audit("deny", "query_timeout_cancelled", database=effective_database, duration_ms=timeout * 1000)
         raise QueryTimeoutError(f"Query execution exceeded {timeout}s timeout") from None
     except Exception as e:
         if isinstance(e, (DatabaseError, QueryTimeoutError)):
+            audit(
+                "deny",
+                "query_error",
+                database=effective_database,
+                duration_ms=round((__import__("time").monotonic() - started) * 1000, 2),
+                error_type=type(e).__name__,
+            )
             raise
         logger.exception("Unexpected error during query execution: %s", e)
-        raise DatabaseError(f"Unexpected error: {e}") from e
+        audit(
+            "deny",
+            "query_error",
+            database=effective_database,
+            duration_ms=round((__import__("time").monotonic() - started) * 1000, 2),
+            error_type=type(e).__name__,
+        )
+        raise DatabaseError("Unexpected database error") from e
+    finally:
+        semaphore.release()
 
 
 async def execute_schema_query(sql: str, timeout: Optional[int] = None,
@@ -312,7 +434,12 @@ async def execute_schema_query(sql: str, timeout: Optional[int] = None,
     """
     if timeout is None:
         timeout = settings.MSSQL_QUERY_TIMEOUT
-    return await execute_query(sql, timeout=timeout, max_rows=10000, database=database)
+    return await execute_query(
+        sql,
+        timeout=timeout,
+        max_rows=min(10000, settings.MAX_ROWS_PER_QUERY),
+        database=database,
+    )
 
 
 async def get_database_info() -> dict:
@@ -329,7 +456,7 @@ async def get_database_info() -> dict:
         """
         result = await execute_schema_query(sql)
         if result.rows:
-            return dict(zip(result.columns, result.rows[0]))
+            return dict(zip(result.columns, result.rows[0], strict=False))
         return {}
     except Exception as e:
         logger.exception("Error fetching database info: %s", e)

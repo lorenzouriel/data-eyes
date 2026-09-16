@@ -3,6 +3,7 @@ import { useInstanceTab } from "../../hooks/useInstanceTab";
 import { getQueryPlan } from "../../api";
 import { statusColorVar } from "../../strata";
 import type { PlanNode, QueryPlan, TopQueryRow } from "../../types";
+import Pagination, { PAGE_SIZE } from "../Pagination";
 
 function PlanDetail({ instanceName, row, onBack }: { instanceName: string; row: TopQueryRow; onBack: () => void }) {
   const [plan, setPlan] = useState<QueryPlan | null | undefined>(undefined);
@@ -102,11 +103,15 @@ function PlanDetail({ instanceName, row, onBack }: { instanceName: string; row: 
 export default function SqlTab({ instanceName }: { instanceName: string }) {
   const { data, loading, error } = useInstanceTab(instanceName, "sql");
   const [selected, setSelected] = useState<TopQueryRow | null>(null);
+  const [page, setPage] = useState(1);
 
   if (loading) return <div className="page-loading">Loading…</div>;
   if (error) return <div className="banner-error">{error}</div>;
 
   const rows = (data?.top_queries?.data as unknown as TopQueryRow[] | null) ?? [];
+  const totalPages = Math.max(1, Math.ceil(rows.length / PAGE_SIZE));
+  const safePage = Math.min(page, totalPages);
+  const visibleRows = rows.slice((safePage - 1) * PAGE_SIZE, safePage * PAGE_SIZE);
 
   if (selected) {
     return <PlanDetail instanceName={instanceName} row={selected} onBack={() => setSelected(null)} />;
@@ -127,9 +132,9 @@ export default function SqlTab({ instanceName }: { instanceName: string }) {
         <span className="th-label th-label--right">CALLS</span>
         <span className="th-label th-label--right">READS</span>
       </div>
-      {rows.map((r, i) => (
+      {visibleRows.map((r) => (
         <div
-          key={i}
+          key={`${r.PlanHandle}-${r.QueryText}`}
           onClick={() => setSelected(r)}
           style={{ display: "grid", gridTemplateColumns: "1.8fr 92px 88px 92px", alignItems: "center", padding: "12px 18px", borderBottom: "1px solid var(--line2)", cursor: "pointer" }}
         >
@@ -144,6 +149,7 @@ export default function SqlTab({ instanceName }: { instanceName: string }) {
           <span className="mono" style={{ fontSize: 12, color: "var(--mid)", textAlign: "right" }}>{r.AvgLogicalReads.toFixed(0)}</span>
         </div>
       ))}
+      <Pagination page={safePage} totalItems={rows.length} onChange={setPage} />
     </div>
   );
 }

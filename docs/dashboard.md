@@ -9,14 +9,14 @@ repository.
 
 Source: [`src/frontend/`](../src/frontend/)
 
-The frontend uses React, TypeScript, React Router, and Vite. Its primary pages
-are:
+The frontend uses React, TypeScript, React Router, and Vite. The fleet index is
+kept separate from each instance's scrollable dashboard:
 
 | Page | Responsibility |
 |---|---|
 | Login | Authenticates against the backend session API |
-| Fleet Status | Displays instance and category severity across the fleet |
-| Instance Detail | Presents Waits, Blocking, Sessions, SQL, Resources, and Advisor tabs |
+| Fleet index | Displays and filters configured instances, then opens the selected instance |
+| Instance dashboard | One continuous page for Resources, Waits, Blocking, Sessions, SQL, and Advisor |
 | Ask | Runs optional multi-turn fleet analysis |
 | Account | Changes the current user's password |
 | Admin | Manages users and dashboard registry entries |
@@ -45,7 +45,8 @@ Major modules:
 | `app/repository.py` | PostgreSQL access for users, registry, trends, and events |
 | `app/collector.py` | Periodic health and trend collection |
 | `app/auth.py` | Login, logout, sessions, and authorization dependencies |
-| `app/insights_agent.py` | Optional generated explanations and fleet questions |
+| `app/ai_provider.py` | Provider adapters for Anthropic, OpenAI, and local models |
+| `app/insights_agent.py` | Provider-neutral prompts, explanations, and fleet questions |
 | `app/insights_sweep.py` | Optional background insights generation |
 
 ## API areas
@@ -104,6 +105,9 @@ server does not stop the fleet loop. Retention pruning uses
 
 ## Optional insights
 
-Advisor, Ask, explanations, and the background insight sweep require
-`ANTHROPIC_API_KEY`. If it is unset, monitoring, authentication, registry, and
-history continue normally; insight endpoints degrade without inventing data.
+Advisor, Ask, explanations, and the background insight sweep use the provider
+selected by `AI_PROVIDER`. Anthropic and OpenAI require their matching API key;
+local mode targets an OpenAI-compatible endpoint such as Ollama. If the
+selected provider is not configured, monitoring, authentication, registry, and
+history continue normally. Ask and Advisor show a configuration message rather
+than an empty generated result.

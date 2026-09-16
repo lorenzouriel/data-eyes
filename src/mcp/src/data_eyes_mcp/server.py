@@ -6,17 +6,15 @@ and lifecycle management.
 """
 
 import asyncio
-import logging
-from typing import Optional
 
-from mcp.server.fastmcp import FastMCP
-
+from . import (
+    dba_tools,  # noqa: F401 — import registers the DBA diagnostic tools on tools_mcp
+    repository_tools,  # noqa: F401 — import registers the dashboard-repository trend tools
+)
 from .config import settings, validate_settings
-from .logging_config import setup_logging, get_logger
-from .health import health_check, readiness_check, get_server_info, get_metrics_endpoint
+from .health import get_metrics_endpoint, get_server_info, health_check, readiness_check
+from .logging_config import get_logger, setup_logging
 from .tools import mcp as tools_mcp
-from . import dba_tools  # noqa: F401 — import registers the DBA diagnostic tools on tools_mcp
-from . import repository_tools  # noqa: F401 — import registers the dashboard-repository trend tools
 
 logger = get_logger(__name__)
 
@@ -77,8 +75,8 @@ class MSSQLMCPServer:
         )
 
         try:
-            from starlette.responses import Response, JSONResponse
             from starlette.requests import Request
+            from starlette.responses import JSONResponse, Response
 
             # Configure FastMCP with the desired host and port
             tools_mcp.settings.host = settings.HTTP_BIND_HOST

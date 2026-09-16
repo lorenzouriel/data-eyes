@@ -6,10 +6,10 @@ Supports .env file for local development.
 """
 
 from pathlib import Path
-from typing import List, Optional
+from typing import Dict, List, Optional
 
-import yaml
-from pydantic import BaseModel
+import yaml  # type: ignore[import-untyped]
+from pydantic import BaseModel, Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -69,6 +69,20 @@ class Settings(BaseSettings):
     ADMIN_CONFIRM: str = ""  # must be set to a specific token to enable writes
     MAX_ROWS_PER_QUERY: int = 50000
     MAX_QUERY_LENGTH: int = 50000  # characters
+    MAX_RESPONSE_BYTES: int = 2_000_000
+    MAX_CELL_LENGTH: int = 4000
+    MAX_CONCURRENT_QUERIES: int = 8
+
+    # Authorization is deliberately independent of authentication. HTTP
+    # deployments must put this service behind a trusted identity-aware proxy.
+    SECURITY_ENFORCEMENT: bool = True
+    DEFAULT_PRINCIPAL: Optional[str] = None
+    PRINCIPAL_HEADER: str = "X-Data-Eyes-Principal"
+    ALLOW_REQUEST_CREDENTIALS: bool = False
+    REQUIRE_SCOPED_CREDENTIALS: bool = True
+    DEPLOYMENT_ENVIRONMENT: Optional[str] = None
+    INSTANCE_ALLOWLIST: str = ""
+    DISABLE_ADHOC_ENVIRONMENTS: str = "production,staging"
 
     # Feature flags
     ENABLE_METRICS: bool = True
@@ -96,7 +110,7 @@ class Settings(BaseSettings):
 
     # Rate limiting
     RATE_LIMIT_QUERIES_PER_MINUTE: int = 1000
-    RATE_LIMIT_ENABLED: bool = False
+    RATE_LIMIT_ENABLED: bool = True
 
     model_config = SettingsConfigDict(
         env_file=".env",
@@ -118,6 +132,28 @@ class InstanceConfig(BaseModel):
     label: str
     mssql_connection_string: str
     environment: Optional[str] = None
+    credential_env_prefix: Optional[str] = None
+
+
+class ObjectGrant(BaseModel):
+    """Allowed object pattern. Omitted lists mean no access, `*` means all."""
+
+    databases: List[str] = Field(default_factory=list)
+    schemas: List[str] = Field(default_factory=list)
+    tables: List[str] = Field(default_factory=list)
+    columns: List[str] = Field(default_factory=list)
+
+
+class PrincipalPolicy(BaseModel):
+    """Default-deny grants for one asserted principal."""
+
+    tools: List[str] = Field(default_factory=list)
+    instances: List[str] = Field(default_factory=list)
+    objects: List[ObjectGrant] = Field(default_factory=list)
+
+
+class SecurityConfig(BaseModel):
+    principals: Dict[str, PrincipalPolicy] = Field(default_factory=dict)
 
 
 def instances_file_path() -> Path:
@@ -140,11 +176,27 @@ def load_instances() -> List[InstanceConfig]:
     with path.open("r", encoding="utf-8") as stream:
         data = yaml.safe_load(stream) or {}
     instances = [InstanceConfig(**item) for item in data.get("instances", [])]
+    environment = settings.DEPLOYMENT_ENVIRONMENT
+    allowlist = {item.strip() for item in settings.INSTANCE_ALLOWLIST.split(",") if item.strip()}
+    if environment:
+        instances = [item for item in instances if item.environment == environment]
+    if allowlist:
+        instances = [item for item in instances if item.name in allowlist]
     names = [instance.name for instance in instances]
     duplicates = sorted({name for name in names if names.count(name) > 1})
     if duplicates:
         raise ValueError(f"Duplicate instance name(s): {', '.join(duplicates)}")
     return instances
+
+
+def load_security_config() -> SecurityConfig:
+    """Load MCP authorization rules from the same fleet configuration file."""
+    path = instances_file_path()
+    if not path.exists():
+        return SecurityConfig()
+    with path.open("r", encoding="utf-8") as stream:
+        data = yaml.safe_load(stream) or {}
+    return SecurityConfig(**(data.get("mcp_security") or {}))
 
 
 def get_instance(name: Optional[str] = None) -> Optional[InstanceConfig]:
@@ -166,7 +218,7 @@ def get_settings() -> Settings:
     return settings
 
 
-def validate_settings() -> tuple[bool, Optional[str]]:
+def validate_settings() -> tuple[bool, Optional[str]]:  # noqa: C901
     """
     Validate critical settings. Returns (is_valid, error_message).
     """
@@ -191,5 +243,36 @@ def validate_settings() -> tuple[bool, Optional[str]]:
 
     if settings.MAX_ROWS_PER_QUERY < 1:
         return False, "MAX_ROWS_PER_QUERY must be >= 1"
+
+    if settings.MAX_RESPONSE_BYTES < 1024:
+        return False, "MAX_RESPONSE_BYTES must be >= 1024"
+
+    for name in ("MAX_CELL_LENGTH", "MAX_CONCURRENT_QUERIES"):
+        if getattr(settings, name) < 1:
+            return False, f"{name} must be >= 1"
+
+    if settings.SECURITY_ENFORCEMENT:
+        try:
+            security = load_security_config()
+        except Exception as e:
+            return False, f"Could not load mcp_security policy: {e}"
+        if not security.principals:
+            return False, "SECURITY_ENFORCEMENT=true requires at least one mcp_security principal"
+
+    if settings.REQUIRE_SCOPED_CREDENTIALS:
+        import os
+
+        for instance in instances:
+            prefix = instance.credential_env_prefix
+            if not prefix:
+                return False, f"Instance '{instance.name}' needs credential_env_prefix"
+            trusted = os.getenv(f"{prefix}_MSSQL_TRUSTED_CONNECTION", "").lower()
+            if trusted not in ("1", "true", "yes", "on") and not (
+                os.getenv(f"{prefix}_MSSQL_USER") and os.getenv(f"{prefix}_MSSQL_PASSWORD")
+            ):
+                return False, (
+                    f"Instance '{instance.name}' requires {prefix}_MSSQL_USER and "
+                    f"{prefix}_MSSQL_PASSWORD (or trusted connection)"
+                )
 
     return True, None

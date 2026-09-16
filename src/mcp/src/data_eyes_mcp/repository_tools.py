@@ -19,9 +19,12 @@ from datetime import datetime, timedelta, timezone
 from typing import Optional
 
 import asyncpg
+from mcp.server.fastmcp import Context
 
 from .config import settings
-from .tools import mcp
+from .db import request_credentials
+from .security import audit, authorize, enforce_rate_limit
+from .tools import _connection_options, mcp
 from .utils import format_json
 
 logger = logging.getLogger(__name__)
@@ -48,7 +51,7 @@ async def _get_pool() -> Optional[asyncpg.Pool]:
 
 
 @mcp.tool()
-async def list_tracked_instances() -> str:
+async def list_tracked_instances(ctx: Optional[Context] = None) -> str:
     """
     List every instance registered in the Data Eyes dashboard's own instance
     registry — reads the dashboard's repository database, not a live SQL
@@ -59,6 +62,9 @@ async def list_tracked_instances() -> str:
         JSON list of {name, label, environment}, or a message if
         REPOSITORY_DSN isn't configured on this MCP server.
     """
+    with request_credentials(**_connection_options(ctx, None)):
+        authorize(tool="list_tracked_instances")
+        enforce_rate_limit()
     pool = await _get_pool()
     if pool is None:
         return _NOT_CONFIGURED
@@ -72,11 +78,13 @@ async def list_tracked_instances() -> str:
         return "No instances registered in the dashboard."
     columns = ["name", "label", "environment"]
     data = [tuple(row[c] for c in columns) for row in rows]
+    with request_credentials(**_connection_options(ctx, None)):
+        audit("allow", "repository_query_completed", tool="list_tracked_instances", rows=len(data))
     return format_json(columns, data)
 
 
 @mcp.tool()
-async def get_severity_trend(instance_name: str, category: str, hours: int = 24) -> str:
+async def get_severity_trend(instance_name: str, category: str, hours: int = 24, ctx: Optional[Context] = None) -> str:
     """
     Severity/metric history for one instance+category from the dashboard's
     trend-history repository (collected on the dashboard backend's own
@@ -96,6 +104,9 @@ async def get_severity_trend(instance_name: str, category: str, hours: int = 24)
         JSON list of {captured_at, severity, metric_value}, oldest first, or
         a message if REPOSITORY_DSN isn't configured or there's no history yet.
     """
+    with request_credentials(**_connection_options(ctx, instance_name)):
+        authorize(instance=instance_name, tool="get_severity_trend")
+        enforce_rate_limit()
     pool = await _get_pool()
     if pool is None:
         return _NOT_CONFIGURED
@@ -120,11 +131,18 @@ async def get_severity_trend(instance_name: str, category: str, hours: int = 24)
         return f"No trend history for instance={instance_name!r} category={category!r} in the last {hours}h."
     columns = ["captured_at", "severity", "metric_value"]
     data = [tuple(row[c] for c in columns) for row in rows]
+    with request_credentials(**_connection_options(ctx, instance_name)):
+        audit(
+            "allow",
+            "repository_query_completed",
+            tool="get_severity_trend",
+            rows=len(data),
+        )
     return format_json(columns, data)
 
 
 @mcp.tool()
-async def get_latest_snapshot(instance_name: str) -> str:
+async def get_latest_snapshot(instance_name: str, ctx: Optional[Context] = None) -> str:
     """
     Most recent severity + headline metric per category for one instance, as
     of the dashboard's last collection cycle — not a live query (may be up
@@ -140,6 +158,9 @@ async def get_latest_snapshot(instance_name: str) -> str:
         row per category, or a message if REPOSITORY_DSN isn't configured or
         nothing has been collected for this instance yet.
     """
+    with request_credentials(**_connection_options(ctx, instance_name)):
+        authorize(instance=instance_name, tool="get_latest_snapshot")
+        enforce_rate_limit()
     pool = await _get_pool()
     if pool is None:
         return _NOT_CONFIGURED
@@ -161,4 +182,11 @@ async def get_latest_snapshot(instance_name: str) -> str:
         return f"No snapshots collected yet for instance={instance_name!r}."
     columns = ["category", "severity", "metric_value", "captured_at"]
     data = [tuple(row[c] for c in columns) for row in rows]
+    with request_credentials(**_connection_options(ctx, instance_name)):
+        audit(
+            "allow",
+            "repository_query_completed",
+            tool="get_latest_snapshot",
+            rows=len(data),
+        )
     return format_json(columns, data)

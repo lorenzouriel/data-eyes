@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { getAdvisorReport, dismissAdvisorFinding, ApiError } from "../../api";
 import { statusColorVar, tagStyle } from "../../strata";
 import type { AdvisorFinding, AdvisorReport, Severity } from "../../types";
+import { useAIStatus } from "../../hooks/useAIStatus";
 
 function normalizeSeverity(raw: string): Severity {
   const upper = raw.toUpperCase();
@@ -101,18 +102,30 @@ function FindingCard({
   );
 }
 
-export default function AdvisorTab({ instanceName }: { instanceName: string }) {
-  const [report, setReport] = useState<AdvisorReport | null | undefined>(undefined);
+export default function AdvisorTab({ instanceName, autoLoad = true }: { instanceName: string; autoLoad?: boolean }) {
+  const { status, statusError } = useAIStatus();
+  const [report, setReport] = useState<AdvisorReport | null | undefined>(autoLoad ? undefined : null);
   const [error, setError] = useState<string | null>(null);
   const [refreshKey, setRefreshKey] = useState(0);
 
   useEffect(() => {
+    if (!status) return;
+    if (!status.configured) {
+      setReport(null);
+      setError(null);
+      return;
+    }
+    if (!autoLoad && refreshKey === 0) {
+      setReport(null);
+      setError(null);
+      return;
+    }
     setReport(undefined);
     setError(null);
     getAdvisorReport(instanceName)
       .then(setReport)
       .catch((e) => setError(e instanceof ApiError ? e.message : "Advisor request failed."));
-  }, [instanceName, refreshKey]);
+  }, [instanceName, refreshKey, autoLoad, status]);
 
   const dismiss = (findingKey: string) => {
     setReport((prev) => (prev ? { ...prev, findings: prev.findings.filter((f) => f.finding_key !== findingKey) } : prev));
@@ -122,15 +135,21 @@ export default function AdvisorTab({ instanceName }: { instanceName: string }) {
     <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
         <p style={{ margin: 0, fontSize: 12.5, color: "var(--muted)" }}>
-          Drafted by Claude from this instance's live wait, blocking, top-query, and missing-index data — reviewed
-          suggestions, not applied or benchmarked changes.
+          Drafted by {status?.provider_label ?? "the configured AI provider"} from this instance's live wait, blocking,
+          top-query, and missing-index data — reviewed suggestions, not applied or benchmarked changes.
         </p>
-        <button className="btn-ghost" onClick={() => setRefreshKey((k) => k + 1)} disabled={report === undefined}>
-          Regenerate
+        <button className="btn-ghost" onClick={() => setRefreshKey((k) => k + 1)} disabled={report === undefined || status?.configured === false}>
+          {report ? "Regenerate" : "Generate report"}
         </button>
       </div>
 
+      {statusError && <div className="banner-error">{statusError}</div>}
+      {status && !status.configured && <div className="banner-error">Advisor is unavailable: {status.reason}</div>}
+
       {report === undefined && <div className="page-loading">Drafting advisor report…</div>}
+      {report === null && !error && (
+        <div className="empty-state">Generate an Advisor report when you want a deeper analysis of the live evidence.</div>
+      )}
       {error && <div className="banner-error">{error}</div>}
       {report && (
         <>

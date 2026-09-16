@@ -5,11 +5,11 @@ Implements configurable rules for allowed SQL, read-only enforcement,
 row limits, rate limiting, and audit logging.
 """
 
-import re
 import hashlib
 import logging
-from typing import Tuple, Optional, List
+import re
 from enum import Enum
+from typing import Optional, Tuple
 
 from .config import settings
 
@@ -45,10 +45,17 @@ ALWAYS_BANNED_PATTERNS = [
     r"\bsp_\w+",  # system stored procedures (some are risky)
     r"\bKILL\b",
     r"\bSHUTDOWN\b",
+    r"\bSELECT\s+(?:TOP\s*\([^)]*\)\s+|TOP\s+\d+\s+)?(?:DISTINCT\s+)?(?:.|\s)*?\bINTO\b",
+    r"\bOPENROWSET\b",
+    r"\bOPENDATASOURCE\b",
+    r"\bOPENQUERY\b",
+    r"\bBULK\b",
+    r"\bWAITFOR\b",
+    r"\bUSE\b",
 ]
 
 # Whitelist for allowed system stored procedures (empty by default, can be configured)
-ALLOWED_SYSTEM_PROCEDURES = set()
+ALLOWED_SYSTEM_PROCEDURES: set[str] = set()
 
 
 def hash_sql(sql: str) -> str:
@@ -61,7 +68,7 @@ def normalize_sql(sql: str) -> str:
     return " ".join(sql.split()).upper()
 
 
-def is_allowed_sql(
+def is_allowed_sql(  # noqa: C901
     sql: str,
     mode: QueryMode = QueryMode.READ_ONLY,
     client_id: Optional[str] = None,
@@ -176,6 +183,15 @@ def explain_policy() -> dict:
         "max_rows_per_query": settings.MAX_ROWS_PER_QUERY,
         "query_timeout_seconds": settings.MSSQL_QUERY_TIMEOUT,
         "max_query_length_chars": settings.MAX_QUERY_LENGTH,
+        "max_response_bytes": settings.MAX_RESPONSE_BYTES,
+        "max_cell_length": settings.MAX_CELL_LENGTH,
+        "max_concurrent_queries": settings.MAX_CONCURRENT_QUERIES,
+        "authorization_default_deny": settings.SECURITY_ENFORCEMENT,
+        "adhoc_disabled_environments": [
+            item.strip()
+            for item in settings.DISABLE_ADHOC_ENVIRONMENTS.split(",")
+            if item.strip()
+        ],
         "allowed_tools": [
             "execute_sql",
             "list_configured_instances",
@@ -209,4 +225,5 @@ def explain_policy() -> dict:
         ],
         "banned_patterns": READ_ONLY_BANNED_PATTERNS if mode == QueryMode.READ_ONLY else [],
         "rate_limiting_enabled": settings.RATE_LIMIT_ENABLED,
+        "rate_limit_queries_per_minute": settings.RATE_LIMIT_QUERIES_PER_MINUTE,
     }

@@ -3,6 +3,34 @@ import { getTrend } from "../api";
 import { statusColorVar } from "../strata";
 import type { TrendPoint } from "../types";
 
+const MAX_BARS = 48;
+
+const severityRank: Record<string, number> = {
+  UNKNOWN: 0,
+  OK: 1,
+  WARNING: 2,
+  CRITICAL: 3,
+};
+
+// A collector can produce more than a thousand points over 24 hours. Rendering
+// every point with its own width and gap makes the row thousands of pixels wide.
+// Keep the worst-severity point from each time bucket so alerts remain visible
+// while the chart stays compact.
+function compactPoints(points: TrendPoint[], limit = MAX_BARS): TrendPoint[] {
+  if (points.length <= limit) return points;
+
+  return Array.from({ length: limit }, (_, bucket) => {
+    const start = Math.floor((bucket * points.length) / limit);
+    const end = Math.max(start + 1, Math.floor(((bucket + 1) * points.length) / limit));
+    return points.slice(start, end).reduce((selected, point) => {
+      const pointRank = severityRank[point.severity] ?? 0;
+      const selectedRank = severityRank[selected.severity] ?? 0;
+      if (pointRank !== selectedRank) return pointRank > selectedRank ? point : selected;
+      return (point.metric_value ?? 0) >= (selected.metric_value ?? 0) ? point : selected;
+    });
+  });
+}
+
 // A compact bar-per-sample sparkline, colored by that sample's severity —
 // real trend-history data (GET /api/instances/:name/trend/:category),
 // not the design mock's synthetic series.
@@ -37,17 +65,23 @@ export default function WaitSparkline({
     return <div style={{ height, flex: 1 }} />;
   }
 
-  const max = Math.max(...points.map((p) => p.metric_value ?? 0), 1);
+  const visiblePoints = compactPoints(points);
+  const max = Math.max(...visiblePoints.map((p) => p.metric_value ?? 0), 1);
 
   return (
-    <div style={{ flex: 1, display: "flex", alignItems: "flex-end", gap: 1.5, height }}>
-      {points.map((p, i) => (
+    <div
+      className="sparkline"
+      style={{ height }}
+      role="img"
+      aria-label={`${category.replace(/_/g, " ")} trend over ${hours} hours`}
+    >
+      {visiblePoints.map((p, i) => (
         <div
           key={i}
+          className="sparkline-bar"
           title={`${new Date(p.captured_at).toLocaleString()} — ${p.severity}`}
           style={{
             flex: 1,
-            minWidth: 2,
             height: `${Math.max(8, ((p.metric_value ?? 0) / max) * 100)}%`,
             background: statusColorVar(p.severity),
             opacity: 0.35 + 0.65 * ((p.metric_value ?? 0) / max),

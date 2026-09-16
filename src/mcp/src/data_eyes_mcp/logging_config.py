@@ -5,11 +5,12 @@ Sets up structured JSON logging with optional Sentry integration.
 Redacts sensitive information from logs.
 """
 
-import logging
 import json
+import logging
+import os
 import sys
 
-from .config import settings
+from .config import load_instances, settings
 
 
 class SensitiveDataFilter(logging.Filter):
@@ -31,16 +32,35 @@ class SensitiveDataFilter(logging.Filter):
         "secret",
     }
 
+    def __init__(self) -> None:
+        super().__init__()
+        self.secrets = {settings.MSSQL_CONNECTION_STRING, settings.MSSQL_PASSWORD}
+        try:
+            self.secrets.update(item.mssql_connection_string for item in load_instances())
+        except Exception:
+            pass
+        self.secrets.update(
+            value
+            for key, value in os.environ.items()
+            if value and (key.endswith("_MSSQL_PASSWORD") or key.endswith("_CONNECTION_STRING"))
+        )
+        self.secrets.discard(None)
+
+    def _redact(self, value):
+        if not isinstance(value, str):
+            return value
+        for secret in self.secrets:
+            value = value.replace(secret, "***REDACTED***")
+        return value
+
     def filter(self, record: logging.LogRecord) -> bool:
         """Redact sensitive fields from log record."""
         if hasattr(record, "msg") and isinstance(record.msg, str):
-            for key in self.SENSITIVE_KEYS:
-                if key.lower() in record.msg.lower():
-                    # Redact known secret values from the message.
-                    for secret in (settings.MSSQL_CONNECTION_STRING, settings.MSSQL_PASSWORD):
-                        if secret:
-                            record.msg = record.msg.replace(secret, "***REDACTED***")
-                    break
+            record.msg = self._redact(record.msg)
+        if isinstance(record.args, tuple):
+            record.args = tuple(self._redact(value) for value in record.args)
+        elif isinstance(record.args, dict):
+            record.args = {key: self._redact(value) for key, value in record.args.items()}
         return True
 
 
@@ -100,6 +120,7 @@ def setup_logging() -> None:
     console_handler.addFilter(sensitive_filter)
 
     # Set formatter based on config
+    formatter: logging.Formatter
     if settings.LOG_FORMAT.lower() == "json":
         formatter = JSONFormatter()
     else:

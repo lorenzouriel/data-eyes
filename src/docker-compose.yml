@@ -51,20 +51,99 @@ services:
       retries: 3
       start_period: 10s
 
-  data-eyes-mcp:
+  data-eyes-mcp-dev:
     build: ./mcp
     image: data-eyes-mcp
-    container_name: data-eyes-mcp-server
+    container_name: data-eyes-mcp-dev
     command: ["python", "-m", "data_eyes_mcp.cli", "--transport", "http", "--bind", "0.0.0.0:8080"]
     env_file:
-      - ./mcp/.env
+      - path: ./mcp/.env
+      - path: ./mcp/.env.dev
+        required: false
     environment:
       INSTANCES_FILE: /app/instances.yaml
+      DEPLOYMENT_ENVIRONMENT: development
+      INSTANCE_ALLOWLIST: dev
+      DEFAULT_PRINCIPAL: development-agent
+      STAGING_MSSQL_USER: ""
+      STAGING_MSSQL_PASSWORD: ""
+      PROD_MSSQL_USER: ""
+      PROD_MSSQL_PASSWORD: ""
       REPOSITORY_DSN: postgresql://data_eyes:${DASHBOARD_REPO_PASSWORD:-change-me}@dashboard-repo:5432/data_eyes_dashboard
     volumes:
       - ./instances.yaml:/app/instances.yaml:ro
     ports:
       - "8080:8080"
+    depends_on:
+      dashboard-repo:
+        condition: service_healthy
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+
+  data-eyes-mcp-staging:
+    profiles: ["staging"]
+    build: ./mcp
+    image: data-eyes-mcp
+    container_name: data-eyes-mcp-staging
+    command: ["python", "-m", "data_eyes_mcp.cli", "--transport", "http", "--bind", "0.0.0.0:8080"]
+    env_file:
+      - path: ./mcp/.env
+      - path: ./mcp/.env.staging
+        required: false
+    environment:
+      INSTANCES_FILE: /app/instances.yaml
+      DEPLOYMENT_ENVIRONMENT: staging
+      INSTANCE_ALLOWLIST: staging
+      DEFAULT_PRINCIPAL: staging-agent
+      DEV_MSSQL_USER: ""
+      DEV_MSSQL_PASSWORD: ""
+      PROD_MSSQL_USER: ""
+      PROD_MSSQL_PASSWORD: ""
+      REPOSITORY_DSN: postgresql://data_eyes:${DASHBOARD_REPO_PASSWORD:-change-me}@dashboard-repo:5432/data_eyes_dashboard
+    volumes:
+      - ./instances.yaml:/app/instances.yaml:ro
+    ports:
+      - "8081:8080"
+    depends_on:
+      dashboard-repo:
+        condition: service_healthy
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+
+  data-eyes-mcp-prod:
+    profiles: ["production"]
+    build: ./mcp
+    image: data-eyes-mcp
+    container_name: data-eyes-mcp-prod
+    command: ["python", "-m", "data_eyes_mcp.cli", "--transport", "http", "--bind", "0.0.0.0:8080"]
+    env_file:
+      - path: ./mcp/.env
+      - path: ./mcp/.env.production
+        required: false
+    environment:
+      INSTANCES_FILE: /app/instances.yaml
+      DEPLOYMENT_ENVIRONMENT: production
+      INSTANCE_ALLOWLIST: prod
+      DEFAULT_PRINCIPAL: production-agent
+      DEV_MSSQL_USER: ""
+      DEV_MSSQL_PASSWORD: ""
+      STAGING_MSSQL_USER: ""
+      STAGING_MSSQL_PASSWORD: ""
+      REPOSITORY_DSN: postgresql://data_eyes:${DASHBOARD_REPO_PASSWORD:-change-me}@dashboard-repo:5432/data_eyes_dashboard
+    volumes:
+      - ./instances.yaml:/app/instances.yaml:ro
+    ports:
+      - "8082:8080"
     depends_on:
       dashboard-repo:
         condition: service_healthy
@@ -83,8 +162,21 @@ services:
     ports:
       - "8091:80"
     depends_on:
-      - dashboard-backend
+      dashboard-backend:
+        condition: service_healthy
     restart: unless-stopped
+
+  loadgen:
+    profiles: ["loadtest"]
+    build: ./mcp
+    image: data-eyes-mcp
+    entrypoint: ["python", "/app/loadgen/run.py"]
+    environment:
+      PYTHONUNBUFFERED: "1"
+    volumes:
+      - ./instances.yaml:/app/instances.yaml:ro
+      - ./loadgen:/app/loadgen:ro
+    restart: "no"
 
 volumes:
   dashboard-repo-data:

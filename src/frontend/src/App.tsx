@@ -3,7 +3,7 @@ import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { AuthProvider, useAuth } from "./auth/AuthContext";
 import Login from "./pages/Login";
 import FleetStatus from "./pages/FleetStatus";
-import InstanceDetail from "./pages/InstanceDetail";
+import InstanceDashboard from "./pages/InstanceDashboard";
 import Admin from "./pages/Admin";
 import Ask from "./pages/Ask";
 import Account from "./pages/Account";
@@ -33,7 +33,7 @@ export default function App() {
             path="/instances/:instanceName/:tab?"
             element={
               <ProtectedRoute>
-                <InstanceDetail />
+                <InstanceDashboard />
               </ProtectedRoute>
             }
           />

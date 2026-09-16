@@ -1,16 +1,25 @@
 services:
-  data-eyes-mcp:
+  data-eyes-mcp-dev:
     build: .
     image: data-eyes-mcp
-    container_name: data-eyes-mcp-server
+    container_name: data-eyes-mcp-dev
     # The image defaults to stdio transport; run HTTP for a networked container.
     command: ["python", "-m", "data_eyes_mcp.cli", "--transport", "http", "--bind", "0.0.0.0:8080"]
     ports:
       - "8080:8080"
     env_file:
-      - .env
+      - path: .env
+      - path: .env.dev
+        required: false
     environment:
       INSTANCES_FILE: /app/instances.yaml
+      DEPLOYMENT_ENVIRONMENT: development
+      INSTANCE_ALLOWLIST: dev
+      DEFAULT_PRINCIPAL: development-agent
+      STAGING_MSSQL_USER: ""
+      STAGING_MSSQL_PASSWORD: ""
+      PROD_MSSQL_USER: ""
+      PROD_MSSQL_PASSWORD: ""
     volumes:
       - ../instances.yaml:/app/instances.yaml:ro
     restart: unless-stopped

@@ -143,11 +143,15 @@ code,
 }
 
 .brand-mark {
-  width: 8px;
-  height: 20px;
-  border-radius: 2px;
-  background: var(--accent);
+  width: 28px;
+  height: 28px;
+  object-fit: contain;
   flex-shrink: 0;
+}
+
+.auth-logo {
+  width: 54px;
+  height: 54px;
 }
 
 .brand-name {
@@ -210,13 +214,22 @@ code,
 }
 
 .theme-toggle {
-  font: 500 11.5px "Space Grotesk", sans-serif;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
   color: var(--mid);
   background: transparent;
   border: 1px solid var(--line);
   border-radius: 6px;
-  padding: 6px 11px;
+  padding: 0;
   cursor: pointer;
+}
+
+.theme-toggle:hover {
+  color: var(--text);
+  background: var(--soft);
 }
 
 .account-menu {
@@ -415,6 +428,14 @@ code,
   font-size: 13px;
 }
 
+.banner-success {
+  padding: 10px 14px;
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--status-ok) 12%, transparent);
+  color: var(--status-ok);
+  font-size: 13px;
+}
+
 /* --- Auth --- */
 .auth-shell {
   min-height: 100vh;
@@ -432,6 +453,13 @@ code,
   border-radius: 12px;
   display: flex;
   flex-direction: column;
+}
+
+.auth-header {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
 }
 
 .auth-card h1 {
@@ -560,10 +588,308 @@ code,
   text-align: center;
 }
 
+.table-pagination {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  min-width: 420px;
+  padding: 9px 18px;
+  color: var(--muted);
+  font: 500 10.5px "JetBrains Mono", monospace;
+  border-top: 1px solid var(--line2);
+}
+
+.table-pagination > div {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+}
+
+.table-pagination button {
+  width: 27px;
+  height: 25px;
+  padding: 0;
+  color: var(--mid);
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 5px;
+  cursor: pointer;
+}
+
+.table-pagination button:hover:not(:disabled) {
+  color: var(--accent);
+  border-color: var(--accent);
+}
+
+.table-pagination button:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+
+.dimension-bar-row {
+  padding: 7px 12px;
+  border-bottom: 1px solid var(--line2);
+}
+
+.dimension-bar-track {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  height: 31px;
+  padding: 0 9px;
+  overflow: hidden;
+  background: var(--soft);
+  border-radius: 5px;
+}
+
+.dimension-bar-fill {
+  position: absolute;
+  inset: 0 auto 0 0;
+  min-width: 3px;
+  background: var(--accentSoft);
+  border-right: 2px solid var(--accent);
+  border-radius: 5px;
+}
+
+.dimension-bar-label,
+.dimension-bar-value {
+  position: relative;
+  z-index: 1;
+}
+
+.dimension-bar-label {
+  flex: 1;
+  overflow: hidden;
+  color: var(--text);
+  font-size: 10.5px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.dimension-bar-value {
+  flex: none;
+  color: var(--mid);
+  font-size: 10.5px;
+}
+
 /* --- Fleet Status table --- */
 .fleet-row-grid {
   display: grid;
   grid-template-columns: 24px minmax(180px, 1.5fr) 70px 220px 78px 140px 96px;
   column-gap: 16px;
   align-items: center;
+}
+
+/* Compact trend charts must never contribute their sample count to layout
+   width. WaitSparkline already buckets long series; these constraints keep the
+   remaining bars inside table cells and metric cards at every viewport size. */
+.sparkline {
+  flex: 1 1 auto;
+  display: flex;
+  align-items: flex-end;
+  gap: 2px;
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
+  overflow: hidden;
+}
+
+.sparkline-bar {
+  min-width: 0;
+}
+
+.resource-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(230px, 100%), 1fr));
+  gap: 14px;
+  min-width: 0;
+}
+
+.resource-card {
+  min-width: 0;
+  overflow: hidden;
+}
+
+/* --- Unified fleet + instance dashboard --- */
+.instance-page-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.instance-dashboard {
+  display: flex;
+  flex-direction: column;
+  gap: 22px;
+  padding-top: 8px;
+  scroll-margin-top: 14px;
+}
+
+.instance-dashboard-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 24px;
+  padding: 20px;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  box-shadow: var(--shadow);
+}
+
+.eyebrow {
+  display: block;
+  margin-bottom: 7px;
+  color: var(--muted);
+  font: 500 9.5px "JetBrains Mono", monospace;
+  letter-spacing: 0.1em;
+}
+
+.instance-dashboard-title {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+}
+
+.instance-dashboard-title h2 {
+  margin: 0;
+  font: 600 22px "Space Grotesk", sans-serif;
+  letter-spacing: -0.5px;
+}
+
+.instance-dashboard-header p {
+  margin: 6px 0 0 18px;
+  color: var(--muted);
+  font-size: 11.5px;
+}
+
+.instance-kpis {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(72px, 1fr));
+  gap: 8px;
+}
+
+.instance-kpis div {
+  min-width: 76px;
+  padding: 9px 11px;
+  background: var(--soft);
+  border-radius: 7px;
+}
+
+.instance-kpis span {
+  display: block;
+  margin-bottom: 3px;
+  color: var(--muted);
+  font: 500 8.5px "JetBrains Mono", monospace;
+  letter-spacing: 0.08em;
+}
+
+.instance-kpis strong {
+  font: 600 17px "Space Grotesk", sans-serif;
+}
+
+.category-strip {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+}
+
+.category-chip {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 7px 9px;
+  color: var(--mid);
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  font-size: 10.5px;
+  text-transform: capitalize;
+}
+
+.category-chip strong {
+  color: var(--muted);
+  font: 500 8.5px "JetBrains Mono", monospace;
+}
+
+.dashboard-jump-nav {
+  position: sticky;
+  top: 0;
+  z-index: 8;
+  display: flex;
+  gap: 4px;
+  padding: 7px;
+  overflow-x: auto;
+  background: color-mix(in srgb, var(--panel) 94%, transparent);
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  box-shadow: var(--shadow);
+  backdrop-filter: blur(10px);
+}
+
+.dashboard-jump-nav a {
+  padding: 6px 10px;
+  color: var(--mid);
+  border-radius: 6px;
+  font-size: 11.5px;
+  white-space: nowrap;
+}
+
+.dashboard-jump-nav a:hover {
+  color: var(--accent);
+  background: var(--accentSoft);
+  text-decoration: none;
+}
+
+.dashboard-section {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding-top: 6px;
+  scroll-margin-top: 58px;
+}
+
+.dashboard-section-heading {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 16px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--line);
+}
+
+.dashboard-section-heading h2 {
+  margin: 0;
+  font: 600 17px "Space Grotesk", sans-serif;
+  letter-spacing: -0.25px;
+}
+
+.dashboard-section-heading p {
+  margin: 3px 0 0;
+  color: var(--muted);
+  font-size: 11.5px;
+}
+
+.dashboard-back-link {
+  flex: none;
+  color: var(--muted);
+  font-size: 10.5px;
+}
+
+@media (max-width: 820px) {
+  .instance-dashboard-header {
+    flex-direction: column;
+  }
+
+  .instance-kpis {
+    width: 100%;
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  .dashboard-back-link {
+    display: none;
+  }
 }
