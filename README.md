@@ -23,6 +23,7 @@ consistently to both interfaces.
 1. Copy the example configuration files:
 
    ```powershell
+   Copy-Item src/.env.example src/.env
    Copy-Item src/instances.example.yaml src/instances.yaml
    Copy-Item src/backend/.env.example src/backend/.env
    Copy-Item src/mcp/.env.example src/mcp/.env
@@ -37,7 +38,7 @@ consistently to both interfaces.
    docker compose -f src/docker-compose.yml up -d --build
    ```
 
-4. Open the dashboard at <http://localhost:8091>.
+4. Open the dashboard at <https://localhost:8443>.
 
 See the [deployment guide](docs/deployment.md) for validation, updates,
 troubleshooting, and non-Docker development.
@@ -68,8 +69,8 @@ project. Start with:
 
 | Service | Default address |
 |---|---|
-| Dashboard | <http://localhost:8091> |
-| Backend health | <http://localhost:8090/api/health> |
+| Dashboard | <https://localhost:8443> |
+| Backend health | <https://localhost:8443/api/health> |
 | MCP endpoint | <http://localhost:8080/mcp> |
 | MCP liveness | <http://localhost:8080/health> |
 | MCP readiness | <http://localhost:8080/ready> |
