@@ -19,7 +19,7 @@ APIs, which don't depend on it.
 import asyncio
 import hashlib
 import logging
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Dict, Optional, Tuple
 
 from . import diagnostics, repository
@@ -368,12 +368,11 @@ async def _collect_deadlocks(instance) -> None:
 
 
 async def _collect_once() -> None:
+    cycle_started = datetime.now(timezone.utc)
     try:
         instances = await repository.list_instances()
     except RepositoryUnavailable as e:
         logger.warning("Collector: repository unavailable this cycle: %s", e)
-        return
-    if not instances:
         return
     try:
         await asyncio.gather(
@@ -385,6 +384,11 @@ async def _collect_once() -> None:
             *(_collect_deadlocks(i) for i in instances),
             *(_collect_error_rate(i) for i in instances),
         )
+        from .notifications import dispatcher
+        try:
+            await dispatcher.evaluate(since=cycle_started)
+        except Exception:
+            logger.warning("Collector: notification evaluation unavailable this cycle")
     except RepositoryUnavailable as e:
         logger.warning("Collector: repository unavailable this cycle: %s", e)
 

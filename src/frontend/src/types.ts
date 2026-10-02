@@ -243,3 +243,37 @@ export interface ResourceUtilization {
   disk_read_bytes_total: number | null;
   batch_requests_total: number | null;
 }
+export type NotificationChannelType = "slack" | "teams" | "email" | "sms";
+export interface NotificationChannel {
+  id: number;
+  name: string;
+  type: NotificationChannelType;
+  enabled: boolean;
+  config: Record<string, string | number | boolean | string[]>;
+}
+export interface NotificationRule {
+  id: number;
+  name: string;
+  channel_id: number;
+  enabled: boolean;
+  instance: string | null;
+  category: string | null;
+  severities: string[];
+  recovery: boolean;
+  cooldown_seconds: number | null;
+  quiet_start: number | null;
+  quiet_end: number | null;
+  group_by_instance: boolean;
+}
+export interface NotificationLog {
+  id: number;
+  channel_id: number | null;
+  rule_id: number | null;
+  instance_name: string;
+  category: string;
+  status: "pending" | "sending" | "sent" | "failed" | "suppressed";
+  message: string;
+  attempts: number;
+  created_at: string;
+  event: { old_severity: string | null; new_severity: string; metric_value: number | null };
+}

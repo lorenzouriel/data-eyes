@@ -58,6 +58,18 @@ class Settings(BaseSettings):
     # strictly the dashboard's own store, separate from every system it watches.
     REPOSITORY_DSN: str
     COLLECTOR_INTERVAL_SECONDS: int = 60
+    PUBLIC_BASE_URL: str = "http://localhost:5173"
+    NOTIFICATION_COOLDOWN_SECONDS: int = Field(default=900, ge=0, le=604800)
+
+    @field_validator("PUBLIC_BASE_URL")
+    @classmethod
+    def _public_url(cls, value: str) -> str:
+        from urllib.parse import urlsplit
+        url = urlsplit(value)
+        if url.scheme not in ("http", "https") or not url.hostname or url.username or url.password or url.query or url.fragment:
+            raise ValueError("PUBLIC_BASE_URL must be an absolute HTTP(S) URL without credentials, query or fragment")
+        return value.rstrip("/")
+
     TREND_RETENTION_DAYS: int = 30
     # activity_sample is written every few seconds per instance, so it keeps a
     # much shorter window than the minute-cadence trend tables.

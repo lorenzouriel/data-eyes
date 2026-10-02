@@ -7,6 +7,7 @@ import InstanceDashboard from "./pages/InstanceDashboard";
 import Admin from "./pages/Admin";
 import Ask from "./pages/Ask";
 import Account from "./pages/Account";
+import Notifications from "./pages/Notifications";
 
 function ProtectedRoute({ children }: { children: JSX.Element }) {
   const { username, loading } = useAuth();
@@ -20,6 +21,7 @@ export default function App() {
     <AuthProvider>
       <BrowserRouter>
         <Routes>
+          <Route path="/notifications" element={<ProtectedRoute><Notifications /></ProtectedRoute>} />
           <Route path="/login" element={<Login />} />
           <Route
             path="/"

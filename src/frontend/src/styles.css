@@ -522,6 +522,17 @@ code,
 }
 
 /* --- Generic form controls (Admin, Advisor input, etc.) --- */
+.notifications-page .data-table { width: 100%; border-collapse: collapse; text-align: left; font-size: 13px; margin: 12px 0 24px; }
+.notifications-page .data-table th, .notifications-page .data-table td { padding: 12px; border-bottom: 1px solid var(--line); }
+.notifications-page .data-table th { color: var(--muted); font-weight: 500; white-space: nowrap; }
+.notifications-page button { padding: 7px 12px; border: 1px solid var(--line); border-radius: 8px; background: var(--bg); color: var(--text); cursor: pointer; margin: 2px 0; }
+.notifications-page button[type="submit"] { background: var(--accent); color: white; }
+.notifications-page button:disabled { opacity: .5; cursor: default; }
+.notifications-page .field label:has(input[type="checkbox"]) { flex-direction: row; align-items: center; gap: 8px; }
+.notifications-page input[type="checkbox"] { width: auto; margin: 0; accent-color: var(--accent); }
+.notifications-page fieldset { border: 1px solid var(--line); border-radius: 8px; display: flex; flex-wrap: wrap; gap: 12px; }
+.notifications-page .error { color: var(--status-crit); }
+
 .field label {
   display: flex;
   flex-direction: column;

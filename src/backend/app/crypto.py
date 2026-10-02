@@ -1,10 +1,8 @@
 """
-Symmetric encryption for instance connection strings at rest.
+Symmetric encryption for instance connection strings and notification configs.
 
-Connection strings (which embed SQL Server credentials — see the `instance`
-table in dashboard/repository/init.sql) are the one genuinely new secret
-this backend stores itself; everything else (session key, admin bootstrap
-password, AI provider keys) already lived in .env, never in a database row.
+Connection strings and notification configuration (webhooks, SMTP credentials,
+and SMS provider tokens) are encrypted before being stored in the repository.
 Encrypted with Fernet (AES-128-CBC + HMAC, from the `cryptography` package),
 keyed by INSTANCE_SECRET_KEY.
 
@@ -22,7 +20,7 @@ from .config import settings
 
 
 class DecryptionError(Exception):
-    """Raised when a stored connection string can't be decrypted — usually
+    """Raised when a stored secret can't be decrypted — usually
     means INSTANCE_SECRET_KEY changed since it was written."""
 
 
@@ -40,5 +38,5 @@ def decrypt(ciphertext: bytes) -> str:
         return _fernet().decrypt(bytes(ciphertext)).decode()
     except InvalidToken as e:
         raise DecryptionError(
-            "Could not decrypt a stored connection string — INSTANCE_SECRET_KEY may have changed"
+            "Could not decrypt a stored secret — INSTANCE_SECRET_KEY may have changed"
         ) from e

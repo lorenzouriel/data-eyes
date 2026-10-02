@@ -3,7 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { useAuth } from "../auth/AuthContext";
 import { THEME_KEY, getInitialTheme } from "../theme";
 
-type NavId = "status" | "ask";
+type NavId = "status" | "ask" | "notifications";
 
 function initials(name: string): string {
   return name
@@ -33,6 +33,7 @@ export default function AppShell({ active, children }: { active: NavId; children
     { id: "status", label: "Dashboard", path: "/" },
     { id: "ask", label: "Ask", path: "/ask" },
   ];
+  if (role === "admin") navItems.push({ id: "notifications", label: "Notifications", path: "/notifications" });
 
   return (
     <div className="app-shell">

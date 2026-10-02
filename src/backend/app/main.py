@@ -32,6 +32,7 @@ from .routers.instance_tabs import router as instance_tabs_router
 from .routers.instances import router as instances_router
 from .routers.trends import router as trends_router
 from .routers.users import router as users_router
+from .routers.notifications import router as notifications_router
 
 logger = logging.getLogger(__name__)
 logging.basicConfig(level=logging.INFO)
@@ -40,6 +41,7 @@ logging.basicConfig(level=logging.INFO)
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     await repository.ensure_security_schema()
+    await repository.ensure_notification_schema()
     # Security schema migration above requires a healthy repository and fails
     # closed. Synchronize YAML instances and seed an admin only for an empty
     # user table. Later seed errors are logged so existing registry data remains
@@ -98,3 +100,4 @@ app.include_router(instance_tabs_router)
 app.include_router(trends_router)
 app.include_router(activity_router)
 app.include_router(insights_router)
+app.include_router(notifications_router)
