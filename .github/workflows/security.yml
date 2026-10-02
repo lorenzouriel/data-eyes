@@ -1,0 +1,58 @@
+name: Security checks
+on: [push, pull_request]
+permissions:
+  contents: read
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: astral-sh/setup-uv@v6
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Audit locked Python dependencies
+        run: |
+          uv export --project src/backend --frozen --no-dev --no-emit-project --format requirements-txt > /tmp/backend.txt
+          uv export --project src/mcp --frozen --no-dev --no-emit-project --format requirements-txt > /tmp/mcp.txt
+          uvx pip-audit --disable-pip -r /tmp/backend.txt
+          uvx pip-audit --disable-pip -r /tmp/mcp.txt
+      - name: Audit frontend dependencies
+        working-directory: src/frontend
+        run: npm audit --audit-level=moderate
+      - uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITLEAKS_LICENSE: ${{ secrets.GITLEAKS_LICENSE }}
+  regressions:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_DB: data_eyes_security_test
+          POSTGRES_USER: review
+          POSTGRES_PASSWORD: synthetic-ci-password
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U review -d data_eyes_security_test"
+          --health-interval 5s --health-timeout 5s --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: sudo apt-get update && sudo apt-get install -y unixodbc
+      - name: Backend tests with disposable PostgreSQL
+        env:
+          SECURITY_TEST_POSTGRES_DSN: postgresql://review:synthetic-ci-password@localhost:5432/data_eyes_security_test
+        run: uv run --project src/backend --frozen --extra dev pytest src/backend/tests -q -o asyncio_mode=auto
+      - name: MCP tests
+        run: uv run --project src/mcp --frozen --extra dev pytest src/mcp/tests -q -o addopts=
+      - name: Frontend build
+        working-directory: src/frontend
+        run: npm ci && npm run build

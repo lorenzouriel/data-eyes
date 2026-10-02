@@ -1,3 +1,5 @@
+> **Security upgrade:** Read the [setup and migration guide](security-hardening.md) before starting this version. HTTP MCP requires bearer tokens; ad-hoc SQL is disabled; the dashboard uses HTTPS on port 8443.
+
 # Configuration
 
 Data Eyes separates fleet configuration from service behavior:
@@ -169,12 +171,13 @@ standalone MCP usage. In the unified stack, prefer `src/instances.yaml`.
 
 ## PostgreSQL password
 
-Compose accepts `DASHBOARD_REPO_PASSWORD` and uses `change-me` only as a local
-fallback. Set it before first deployment, for example in the shell that starts
+Compose requires independent `DASHBOARD_REPO_PASSWORD` and `MCP_REPO_PASSWORD`; there is no insecure
+fallback. Set both before first deployment, for example in the shell that starts
 Compose:
 
 ```powershell
 $env:DASHBOARD_REPO_PASSWORD = "replace-with-a-long-random-password"
+$env:MCP_REPO_PASSWORD = "replace-with-an-independent-random-password"
 docker compose -f src/docker-compose.yml up -d --build
 ```
 

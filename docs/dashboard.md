@@ -1,3 +1,5 @@
+> **Security upgrade:** Read the [setup and migration guide](security-hardening.md) before starting this version. HTTP MCP requires bearer tokens; ad-hoc SQL is disabled; the dashboard uses HTTPS on port 8443.
+
 # Dashboard
 
 The dashboard is the human-facing interface to Data Eyes. It consists of a
@@ -29,7 +31,7 @@ must allow that origin.
 
 Source: [`src/backend/`](../src/backend/)
 
-The backend uses FastAPI, `pyodbc`, `asyncpg`, Pydantic settings, encrypted
+The backend uses FastAPI, `pyodbc`, `asyncpg`, Pydantic settings, signed session
 cookies, bcrypt password hashes, and Fernet encryption for stored connection
 strings.
 
@@ -63,7 +65,8 @@ Major modules:
 | `/api/insights` | Feed, streams, Advisor, Explain, and Ask |
 
 Interactive API documentation is available from FastAPI at
-`http://localhost:8090/docs` while the backend is exposed directly.
+`http://127.0.0.1:8090/docs` when running the backend locally for development.
+Compose does not publish the backend port.
 
 ## Health model
 
@@ -86,7 +89,10 @@ or API. The supported roles are:
 - `admin`: user and instance-registry administration plus normal dashboard use
 - `member`: normal authenticated dashboard use
 
-Sessions use a signed HTTP-only cookie. Use a strong `SESSION_SECRET_KEY`, and
+Sessions use an opaque ID in a signed Secure/HttpOnly/SameSite=Strict cookie.
+PostgreSQL validates each session and current role. Logout revokes that session;
+password changes revoke all sessions and require the current password.
+Use a strong `SESSION_SECRET_KEY`, and
 terminate TLS at a trusted reverse proxy in deployed environments.
 
 ## Instance registry behavior
@@ -111,3 +117,21 @@ local mode targets an OpenAI-compatible endpoint such as Ollama. If the
 selected provider is not configured, monitoring, authentication, registry, and
 history continue normally. Ask and Advisor show a configuration message rather
 than an empty generated result.
+
+
+### Fleet severity interpretation
+
+Fleet health uses Critical > Warning > Unknown > OK. A failed diagnostic is
+Unknown, and Unknown instances have their own filter rather than being counted
+as Healthy.
+
+Accumulated wait percentages describe the distribution of waits, not current
+utilization or distress. They remain available for analysis but do not generate
+Warning/Critical alerts. Internal SOS_WORK_DISPATCHER waits are excluded.
+Blocking and other operational diagnostics retain their alert thresholds.
+
+Backup history is local to each monitored SQL Server. For an availability-group
+database, missing or stale local history is Unknown because a different replica
+may have performed the backup. This check does not yet consolidate histories
+across replicas; verify them before concluding a backup was missed. Standalone
+backup thresholds remain enforced. Unknown CHECKDB history also remains visible.

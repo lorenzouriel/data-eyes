@@ -1,3 +1,5 @@
+> **Security upgrade:** Read the [setup and migration guide](security-hardening.md) before starting this version. HTTP MCP requires bearer tokens; ad-hoc SQL is disabled; the dashboard uses HTTPS on port 8443.
+
 # Development
 
 This guide covers source layout and local workflows. For the integrated runtime
@@ -37,7 +39,7 @@ cd src/backend
 python -m venv .venv
 .\.venv\Scripts\Activate.ps1
 python -m pip install -e ".[dev]"
-uvicorn app.main:app --reload --host 0.0.0.0 --port 8090
+uvicorn app.main:app --reload --host 127.0.0.1 --port 8090
 ```
 
 The backend requires the values documented in

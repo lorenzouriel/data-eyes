@@ -13,6 +13,7 @@ README of the resource being documented.
 | [Dashboard](dashboard.md) | Frontend, backend API, collection, health evaluation, and insights |
 | [MCP server](mcp.md) | Transports, tool groups, safety policy, fleet routing, and health endpoints |
 | [Repository](repository.md) | PostgreSQL responsibilities, stored data, encryption, and retention |
+| [Security hardening](security-hardening.md) | Changes, rationale, token/TLS setup, upgrade steps, and limits |
 | [Deployment](deployment.md) | Docker Compose startup, verification, updates, and troubleshooting |
 | [Development](development.md) | Local setup, source layout, tests, and common workflows |
 

@@ -1,3 +1,5 @@
+> **Security upgrade:** Read the [setup and migration guide](security-hardening.md) before starting this version. HTTP MCP requires bearer tokens; ad-hoc SQL is disabled; the dashboard uses HTTPS on port 8443.
+
 # Deployment
 
 The supported integrated deployment uses
@@ -10,14 +12,15 @@ the official image.
 - Docker Desktop or Docker Engine with Compose v2
 - Network access from Docker containers to every monitored SQL Server
 - SQL Server credentials with the required monitoring permissions
-- Free host ports 8080, 8090, and 8091
+- Free host ports 8080 (loopback MCP) and 8443 (HTTPS gateway)
 
 ## First startup
 
 From the repository root:
 
 ```powershell
-Copy-Item src/instances.example.yaml src/instances.yaml
+Copy-Item src/.env.example src/.env
+   Copy-Item src/instances.example.yaml src/instances.yaml
 Copy-Item src/backend/.env.example src/backend/.env
 Copy-Item src/mcp/.env.example src/mcp/.env
 ```
@@ -47,8 +50,8 @@ public images to pull from a registry.
 | Compose service | Container | Host port | Dependency |
 |---|---|---:|---|
 | `dashboard-repo` | `data-eyes-dashboard-repo` | internal only | PostgreSQL volume and schema |
-| `dashboard-backend` | `data-eyes-dashboard-backend` | 8090 | healthy repository |
-| `dashboard-frontend` | `data-eyes-dashboard-frontend` | 8091 | backend |
+| `dashboard-backend` | `data-eyes-dashboard-backend` | internal only | healthy repository |
+| `dashboard-frontend` | `data-eyes-dashboard-frontend` | internal only | backend |
 | `data-eyes-mcp` | `data-eyes-mcp-server` | 8080 | healthy repository |
 
 Both SQL-facing containers mount the same host file at
@@ -65,10 +68,10 @@ docker compose -f src/docker-compose.yml ps
 Check application endpoints:
 
 ```powershell
-curl.exe http://localhost:8090/api/health
+curl.exe https://localhost:8443/api/health
 curl.exe http://localhost:8080/health
 curl.exe http://localhost:8080/ready
-curl.exe -I http://localhost:8091/
+curl.exe -I https://localhost:8443/
 ```
 
 The backend and MCP containers should be healthy. MCP readiness can be

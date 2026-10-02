@@ -1,3 +1,5 @@
+> **Security upgrade:** Read the [setup and migration guide](security-hardening.md) before starting this version. HTTP MCP requires bearer tokens; ad-hoc SQL is disabled; the dashboard uses HTTPS on port 8443.
+
 # MCP server
 
 The Data Eyes MCP server is the agent-facing interface to the configured SQL
@@ -24,7 +26,7 @@ default instance is unknown.
 |---|---|
 | `list_configured_instances` | Lists YAML-defined instances without exposing credentials |
 | `check_db_connection` | Tests the selected SQL Server connection |
-| `execute_sql` | Runs policy-approved SQL with result and size limits |
+| `execute_sql` | Disabled; use fixed diagnostic/discovery tools |
 | `list_databases` | Lists accessible databases |
 | `list_schemas` | Lists schemas in a database |
 | `list_tables` | Lists tables with optional schema filtering |
@@ -74,9 +76,9 @@ connection string.
 
 ## Safety model
 
-MCP is read-only by default. Before `execute_sql` reaches SQL Server, the policy
-layer checks statement type, banned operations, query length, row limits, and
-write-mode settings. Timeouts bound both connection and execution work.
+MCP uses dedicated read-only SQL logins. Ad-hoc SQL is disabled in every
+environment. Fixed tools enforce authorization, row/byte limits, timeouts, and
+concurrency limits. HTTP requests require verified bearer tokens.
 
 Application policy is defense in depth, not a substitute for SQL Server
 permissions. Use a dedicated login that cannot modify schema or data.
