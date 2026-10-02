@@ -10,17 +10,18 @@ Instance registry API.
                                         (the database picker between the Main
                                         Page and a per-database drill-down)
 
-Any logged-in user can manage instances — one shared team, not per-user
+Only administrators can manage or test instances — one shared team, not per-user
 ownership (see app/auth.py's docstring for the tenancy model this assumes).
 """
 
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException
-from pydantic import BaseModel
+from pydantic import BaseModel, Field, field_validator
 
 from .. import diagnostics, repository
-from ..auth import require_auth
+from ..auth import require_auth, require_admin
+from ..connection_policy import validate_connection_string
 from ..config import InstanceConfig
 from ..mssql_client import MSSQLError
 
@@ -44,19 +45,25 @@ class InstanceCreateRequest(BaseModel):
     name: str
     label: str
     environment: Optional[str] = None
-    connection_string: str
+    connection_string: str = Field(max_length=4096)
+
+    _validate_connection = field_validator("connection_string")(validate_connection_string)
 
 
 class InstanceUpdateRequest(BaseModel):
     label: Optional[str] = None
     environment: Optional[str] = None
     clear_environment: bool = False
-    connection_string: Optional[str] = None
+    connection_string: Optional[str] = Field(default=None, max_length=4096)
+
+    @field_validator("connection_string")
+    @classmethod
+    def validate_connection(cls, value):
+        return validate_connection_string(value) if value is not None else None
 
 
-class TestConnectionRequest(BaseModel):
-    connection_string: Optional[str] = None
-
+class TestConnectionRequest(InstanceUpdateRequest):
+    connection_string: Optional[str] = Field(default=None, max_length=4096)
 
 class TestConnectionResult(BaseModel):
     ok: bool
@@ -83,7 +90,7 @@ async def list_instances(_: str = Depends(require_auth)):
 
 
 @router.post("", response_model=InstanceSummary, status_code=201)
-async def create_instance(payload: InstanceCreateRequest, username: str = Depends(require_auth)):
+async def create_instance(payload: InstanceCreateRequest, username: str = Depends(require_admin)):
     try:
         instance = await repository.create_instance(
             name=payload.name,
@@ -100,7 +107,7 @@ async def create_instance(payload: InstanceCreateRequest, username: str = Depend
 
 
 @router.post("/test-connection", response_model=TestConnectionResult)
-async def test_connection(payload: TestConnectionRequest, _: str = Depends(require_auth)):
+async def test_connection(payload: TestConnectionRequest, _: str = Depends(require_admin)):
     """Try a connection string before it's saved — used by the Add/Edit
     instance form's "Test connection" button."""
     if not payload.connection_string:
@@ -115,7 +122,7 @@ async def test_connection(payload: TestConnectionRequest, _: str = Depends(requi
 
 @router.post("/{instance_name}/test-connection", response_model=TestConnectionResult)
 async def test_instance_connection(
-    instance_name: str, payload: TestConnectionRequest, _: str = Depends(require_auth)
+    instance_name: str, payload: TestConnectionRequest, _: str = Depends(require_admin)
 ):
     """Same as /test-connection, but for the Edit form: when the connection
     string field is left blank (keep the current one), fall back to the
@@ -134,7 +141,7 @@ async def test_instance_connection(
 
 @router.put("/{instance_name}", response_model=InstanceSummary)
 async def update_instance(
-    instance_name: str, payload: InstanceUpdateRequest, _: str = Depends(require_auth)
+    instance_name: str, payload: InstanceUpdateRequest, _: str = Depends(require_admin)
 ):
     try:
         instance = await repository.update_instance(
@@ -152,7 +159,7 @@ async def update_instance(
 
 
 @router.delete("/{instance_name}", status_code=204)
-async def delete_instance(instance_name: str, _: str = Depends(require_auth)):
+async def delete_instance(instance_name: str, _: str = Depends(require_admin)):
     try:
         deleted = await repository.delete_instance(instance_name)
     except repository.RepositoryUnavailable as e:

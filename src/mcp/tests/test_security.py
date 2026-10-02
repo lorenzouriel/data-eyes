@@ -213,6 +213,8 @@ async def test_timeout_cancels_odbc_cursor(monkeypatch):
     original_wait_for = asyncio.wait_for
 
     async def immediate_timeout(awaitable, timeout):
+        if timeout == 1:
+            return await original_wait_for(awaitable, timeout)
         await asyncio.sleep(0.02)
         raise asyncio.TimeoutError
 
@@ -224,4 +226,8 @@ async def test_timeout_cancels_odbc_cursor(monkeypatch):
     with pytest.raises(db.QueryTimeoutError):
         await execute_query("SELECT 1")
     monkeypatch.setattr(asyncio, "wait_for", original_wait_for)
+    for _ in range(100):
+        if cursor.cancelled:
+            break
+        await asyncio.sleep(0.01)
     assert cursor.cancelled

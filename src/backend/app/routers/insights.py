@@ -22,11 +22,12 @@ from typing import Any, AsyncIterator, Awaitable, List, Literal, Optional
 
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import StreamingResponse
-from pydantic import BaseModel
+from pydantic import BaseModel, Field, model_validator
 
 from .. import diagnostics, insights_agent, insights_feed, repository
 from ..ai_provider import AIProviderError, get_ai_status
 from ..auth import require_auth
+from ..security_limits import quota
 from ..config import InstanceConfig
 from ..health_score import get_fleet_health
 from ..mssql_client import MSSQLError
@@ -35,6 +36,10 @@ from .instance_tabs import TAB_BUILDERS
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/insights", tags=["insights"])
+
+
+async def ai_budget(username: str = Depends(require_auth)):
+    await quota("ai-user-hour", username, 30, 3600)
 
 
 @router.get("/status")
@@ -76,7 +81,7 @@ async def get_feed(_: str = Depends(require_auth)):
     return {"insights": insights_feed.get_feed()}
 
 
-@router.get("/fleet/stream")
+@router.get("/fleet/stream", dependencies=[Depends(ai_budget)])
 async def stream_fleet_insight(_: str = Depends(require_auth)):
     try:
         instances = await repository.list_instances()
@@ -87,7 +92,7 @@ async def stream_fleet_insight(_: str = Depends(require_auth)):
     return StreamingResponse(_sse(insights_agent.stream_insight(context)), media_type="text/event-stream")
 
 
-@router.get("/instances/{instance_name}/tabs/{tab_name}/stream")
+@router.get("/instances/{instance_name}/tabs/{tab_name}/stream", dependencies=[Depends(ai_budget)])
 async def stream_tab_insight(
     instance_name: str, tab_name: str, database: Optional[str] = None, _: str = Depends(require_auth)
 ):
@@ -104,10 +109,10 @@ class ExplainRequest(BaseModel):
     instance_name: str
     tab_name: Optional[str] = None
     database: Optional[str] = None
-    question: Optional[str] = None
+    question: Optional[str] = Field(default=None, max_length=4000)
 
 
-@router.post("/explain")
+@router.post("/explain", dependencies=[Depends(ai_budget)])
 async def explain(payload: ExplainRequest, _: str = Depends(require_auth)):
     instance = await _find_instance(payload.instance_name)
     context: dict = {}
@@ -131,7 +136,7 @@ async def explain(payload: ExplainRequest, _: str = Depends(require_auth)):
     )
 
 
-@router.post("/instances/{instance_name}/advisor")
+@router.post("/instances/{instance_name}/advisor", dependencies=[Depends(ai_budget)])
 async def generate_advisor(instance_name: str, database: Optional[str] = None, _: str = Depends(require_auth)):
     status = get_ai_status()
     if not status.configured:
@@ -187,14 +192,20 @@ async def dismiss_advisor_finding(instance_name: str, payload: DismissRequest, _
 
 class ChatMessage(BaseModel):
     role: Literal["user", "assistant"]
-    content: str
+    content: str = Field(max_length=4000)
 
 
 class AskRequest(BaseModel):
-    messages: List[ChatMessage]
+    messages: List[ChatMessage] = Field(min_length=1, max_length=20)
+
+    @model_validator(mode="after")
+    def bound_history(self):
+        if sum(len(message.content) for message in self.messages) > 12000:
+            raise ValueError("Chat history exceeds 12000 characters")
+        return self
 
 
-@router.post("/ask")
+@router.post("/ask", dependencies=[Depends(ai_budget)])
 async def ask_fleet(payload: AskRequest, _: str = Depends(require_auth)):
     status = get_ai_status()
     if not status.configured:

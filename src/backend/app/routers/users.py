@@ -1,17 +1,17 @@
 """
 User management API — admin-only except for changing your own password.
 
-One shared team: any user can see/manage the same instance registry
-(app/routers/instances.py); `role` only gates this router and nothing else.
+One shared fleet: members can read diagnostics; admins manage users and instances.
 """
 
 from datetime import datetime, timezone
 
-from fastapi import APIRouter, Depends, HTTPException
-from pydantic import BaseModel, Field
+from fastapi import APIRouter, Depends, HTTPException, Request
+from pydantic import BaseModel, Field, field_validator
 
 from .. import passwords, repository
 from ..auth import require_admin, require_auth
+from ..security_limits import password_work, quota
 
 router = APIRouter(prefix="/api/users", tags=["users"])
 
@@ -22,14 +22,25 @@ class UserSummary(BaseModel):
     created_at: str
 
 
+def _fits_bcrypt(value: str) -> str:
+    if len(value.encode()) > 72:
+        raise ValueError("Password must be at most 72 UTF-8 bytes")
+    return value
+
+
 class CreateUserRequest(BaseModel):
-    username: str
-    password: str = Field(min_length=8)
+    username: str = Field(min_length=1, max_length=128)
+    password: str = Field(min_length=12, max_length=72)
     role: str = "member"
+
+    _check_password = field_validator("password")(_fits_bcrypt)
 
 
 class ChangePasswordRequest(BaseModel):
-    password: str = Field(min_length=8)
+    current_password: str = Field(min_length=1, max_length=256)
+    password: str = Field(min_length=12, max_length=72)
+
+    _check_password = field_validator("password")(_fits_bcrypt)
 
 
 @router.get("", response_model=list[UserSummary])
@@ -44,7 +55,7 @@ async def list_users(_: str = Depends(require_admin)):
 async def create_user(payload: CreateUserRequest, _: str = Depends(require_admin)):
     if payload.role not in ("admin", "member"):
         raise HTTPException(status_code=422, detail="role must be 'admin' or 'member'")
-    password_hash = passwords.hash_password(payload.password)
+    password_hash = await password_work(passwords.hash_password, payload.password)
     try:
         user = await repository.create_user(payload.username, password_hash, role=payload.role)
     except repository.UsernameConflict as e:
@@ -58,12 +69,18 @@ async def create_user(payload: CreateUserRequest, _: str = Depends(require_admin
 
 
 @router.post("/me/password")
-async def change_own_password(payload: ChangePasswordRequest, username: str = Depends(require_auth)):
-    password_hash = passwords.hash_password(payload.password)
+async def change_own_password(payload: ChangePasswordRequest, request: Request, username: str = Depends(require_auth)):
+    await quota("password-change", username, 5, 300)
+    expected_hash = request.state.user["password_hash"]
+    if not await password_work(passwords.verify_password, payload.current_password, expected_hash):
+        raise HTTPException(403, "Current password is incorrect")
+    password_hash = await password_work(passwords.hash_password, payload.password)
     try:
-        await repository.update_user_password(username, password_hash)
-    except repository.RepositoryUnavailable as e:
-        raise HTTPException(status_code=503, detail=f"User registry unavailable: {e}") from e
+        if not await repository.update_user_password(username, password_hash, expected_hash):
+            raise HTTPException(409, "Credentials changed; sign in again")
+    except repository.RepositoryUnavailable:
+        raise HTTPException(503, "User registry unavailable") from None
+    request.session.clear()
     return {"ok": True}
 
 

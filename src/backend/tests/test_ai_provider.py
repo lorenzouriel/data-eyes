@@ -71,7 +71,9 @@ class AIStatusTests(unittest.TestCase):
         error = provider._http_error(
             httpx.HTTPStatusError("unauthorized", request=request, response=response)
         )
-        self.assertIn("lacks model-completion permission", str(error))
+        self.assertIn("missing_scope", str(error))
+        self.assertIn("Model capabilities: Request", str(error))
+        self.assertIn("project role", str(error))
 
 
 class StructuredOutputTests(unittest.IsolatedAsyncioTestCase):

@@ -1,8 +1,8 @@
 # Copy this file to instances.yaml and replace the placeholders locally.
 # Never commit production credentials.
 
-# MCP authorization is default-deny. Principals are asserted by a trusted proxy
-# (HTTP) or DEFAULT_PRINCIPAL (stdio/local). This is authorization, not authentication.
+# HTTP bearer tokens map to principals through HTTP_TOKEN_HASHES.
+# Only stdio uses DEFAULT_PRINCIPAL. Ad-hoc SQL is disabled in every environment.
 mcp_security:
   principals:
     development-agent:
@@ -76,14 +76,14 @@ instances:
     credential_env_prefix: PROD
     label: "Prod SQL Server"
     environment: production
-    mssql_connection_string: "Driver={ODBC Driver 17 for SQL Server};Server=prod-server,1433;Database=master;UID=user;PWD=change-me;TrustServerCertificate=yes"
+    mssql_connection_string: "Driver={ODBC Driver 18 for SQL Server};Server=prod-server,1433;Database=master;UID=user;PWD=change-me;Encrypt=yes;TrustServerCertificate=no"
   - name: staging
     credential_env_prefix: STAGING
     label: "Staging SQL Server"
     environment: staging
-    mssql_connection_string: "Driver={ODBC Driver 17 for SQL Server};Server=staging-server,1433;Database=master;UID=user;PWD=change-me;TrustServerCertificate=yes"
+    mssql_connection_string: "Driver={ODBC Driver 18 for SQL Server};Server=staging-server,1433;Database=master;UID=user;PWD=change-me;Encrypt=yes;TrustServerCertificate=no"
   - name: dev
     credential_env_prefix: DEV
     label: "Dev SQL Server"
     environment: development
-    mssql_connection_string: "Driver={ODBC Driver 17 for SQL Server};Server=localhost,1433;Database=master;UID=user;PWD=change-me;TrustServerCertificate=yes"
+    mssql_connection_string: "Driver={ODBC Driver 18 for SQL Server};Server=localhost,1433;Database=master;UID=user;PWD=change-me;Encrypt=yes;TrustServerCertificate=no"

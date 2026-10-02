@@ -38,5 +38,8 @@ dev = [
     "httpx>=0.27.0",
 ]
 
-[tool.setuptools]
-packages = ["app"]
+[tool.setuptools.packages.find]
+include = ["app*"]
+
+[tool.setuptools.package-data]
+app = ["*.sql"]

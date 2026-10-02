@@ -1,9 +1,6 @@
-"""Default-deny MCP authorization, rate limiting, and security audit context.
+"""Default-deny authorization and audit context after transport authentication.
 
-Authentication is intentionally out of scope for now. A principal from an HTTP
-header is trustworthy only when a protected upstream proxy removes caller-sent
-copies and injects the verified identity. Stdio deployments should use
-DEFAULT_PRINCIPAL.
+HTTP identity is verified by http_auth; stdio uses DEFAULT_PRINCIPAL.
 """
 
 from __future__ import annotations
@@ -11,7 +8,6 @@ from __future__ import annotations
 import fnmatch
 import json
 import logging
-import re
 import time
 from collections import defaultdict, deque
 from contextvars import ContextVar
@@ -183,45 +179,10 @@ def split_qualified_name(value: str, default_database: Optional[str] = None):
     raise AuthorizationError("four-part and external object names are not allowed")
 
 
-_FROM_JOIN = re.compile(
-    r"\b(?:FROM|JOIN)\s+((?:\[[^]]+\]|[A-Za-z_][\w$#]*)(?:\s*\.\s*(?:\[[^]]+\]|[A-Za-z_][\w$#]*)){0,3})",
-    re.IGNORECASE,
-)
-
-
 def authorize_adhoc_sql(sql: str, database: Optional[str], instance: Optional[str]) -> None:
-    """Authorize every base object referenced by an already validated SELECT.
+    """Fail closed until a full T-SQL parser can authorize every reference.
 
-    Sensitive deployments disable ad-hoc SQL entirely. This extractor is then
-    only a secondary object-authorization check for enabled environments; SQL
-    Server grants remain the final boundary.
+    Regex cannot safely authorize unions, subqueries, joins or predicates.
+    Fixed tools remain available and SQL Server grants remain mandatory.
     """
-    authorize(instance=instance, database=database, tool="execute_sql")
-    refs = _FROM_JOIN.findall(sql)
-    if not refs:
-        raise AuthorizationError("ad-hoc query must reference an authorized table")
-    projection_match = re.match(r"\s*SELECT\s+(?:TOP\s*(?:\([^)]*\)|\d+)\s+)?(.*?)\s+FROM\s", sql, re.I | re.S)
-    if not projection_match:
-        raise AuthorizationError("ad-hoc SELECT projection could not be safely analyzed")
-    projection = projection_match.group(1).strip()
-    if "*" in projection:
-        requested_columns = ["*"]
-    else:
-        requested_columns = []
-        for item in projection.split(","):
-            expression = re.sub(r"\s+AS\s+.+$", "", item.strip(), flags=re.I)
-            # Only direct column references are accepted by this conservative
-            # secondary parser. Use fixed tools for expressions/aggregates.
-            if not re.fullmatch(r"(?:\[[^]]+\]|[A-Za-z_]\w*)(?:\.(?:\[[^]]+\]|[A-Za-z_]\w*))*", expression):
-                raise AuthorizationError("ad-hoc SELECT must use explicit direct columns")
-            requested_columns.append(expression.split(".")[-1].strip("[]"))
-    for ref in refs:
-        db, schema, table = split_qualified_name(re.sub(r"\s+", "", ref), database)
-        authorize(
-            instance=instance,
-            database=db,
-            schema=schema,
-            table=table,
-            columns=requested_columns,
-            tool="execute_sql",
-        )
+    raise AuthorizationError("Ad-hoc SQL is disabled; use the fixed diagnostic and discovery tools")

@@ -1,0 +1,3 @@
+
+# PostgreSQL initialization scripts must work after a Windows checkout.
+*.sh text eol=lf

@@ -2,3 +2,8 @@
 lab/
 src/instances.yaml
 src/loadgen/
+src/.env
+
+.uv-review-cache/
+.security-venv/
+references/

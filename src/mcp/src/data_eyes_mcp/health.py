@@ -16,7 +16,7 @@ from typing import Any, Dict
 from .config import load_instances, settings
 from .db import check_connection, request_credentials
 from .metrics import server_ready
-from .security import reset_tool, set_tool
+from .security import reset_tool, set_tool, is_authorized
 
 logger = logging.getLogger(__name__)
 
@@ -35,7 +35,7 @@ async def health_check() -> Dict[str, Any]:
     }
 
 
-async def readiness_check() -> Dict[str, Any]:
+async def readiness_check(principal=None) -> Dict[str, Any]:
     """
     Readiness probe - check if server is ready to serve requests.
 
@@ -44,12 +44,13 @@ async def readiness_check() -> Dict[str, Any]:
     Returns:
         Readiness status dict
     """
-    instances = load_instances()
+    with request_credentials(principal=principal):
+        instances = [item for item in load_instances() if is_authorized(instance=item.name, tool="check_db_connection")]
 
     async def check_instance(name: str) -> tuple[str, bool]:
         token = set_tool("check_db_connection")
         try:
-            with request_credentials(instance=name):
+            with request_credentials(instance=name, principal=principal):
                 return name, await check_connection()
         finally:
             reset_tool(token)
@@ -60,7 +61,8 @@ async def readiness_check() -> Dict[str, Any]:
     else:
         token = set_tool("check_db_connection")
         try:
-            is_db_ready = await check_connection()
+            with request_credentials(principal=principal):
+                is_db_ready = await check_connection()
         finally:
             reset_tool(token)
         results = {"legacy_default": is_db_ready}

@@ -178,6 +178,7 @@ def explain_policy() -> dict:
     mode = get_query_mode()
     return {
         "query_mode": mode.value,
+        "adhoc_sql_enabled": False,
         "read_only": settings.READ_ONLY,
         "enable_writes": settings.ENABLE_WRITES,
         "max_rows_per_query": settings.MAX_ROWS_PER_QUERY,
@@ -193,7 +194,6 @@ def explain_policy() -> dict:
             if item.strip()
         ],
         "allowed_tools": [
-            "execute_sql",
             "list_configured_instances",
             "list_databases",
             "list_schemas",

@@ -12,9 +12,16 @@ RUN apt-get update \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
 
-COPY pyproject.toml /app/
+COPY --from=ghcr.io/astral-sh/uv:0.11.24 /uv /usr/local/bin/uv
+WORKDIR /app
+COPY pyproject.toml uv.lock /app/
 COPY src /app/src
 
-RUN pip install -e /app
+COPY README.md /app/
+RUN uv sync --frozen --no-dev --no-editable
+
+ENV PATH="/app/.venv/bin:$PATH"
+RUN useradd --uid 10001 --create-home appuser
+USER 10001:10001
 
 CMD ["python", "-m", "data_eyes_mcp.cli"]

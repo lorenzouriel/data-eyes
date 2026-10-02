@@ -24,6 +24,7 @@ from . import collector, insights_sweep, repository
 from .auth import ensure_bootstrap_admin
 from .auth import router as auth_router
 from .config import load_seed_instances, settings
+from .routers.activity import router as activity_router
 from .routers.fleet import router as fleet_router
 from .routers.health import router as health_router
 from .routers.insights import router as insights_router
@@ -38,13 +39,11 @@ logging.basicConfig(level=logging.INFO)
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # One-time startup seeding: instances.yaml -> instance table (only
-    # inserts entries not already registered — see
-    # repository.seed_instances_from_yaml()), and the bootstrap admin
-    # account if the user table is empty (see auth.ensure_bootstrap_admin()).
-    # A repository outage at boot is logged, not fatal — the app still
-    # starts, just with whatever the DB currently holds (nothing, on a first
-    # boot against a cold Postgres that isn't ready yet).
+    await repository.ensure_security_schema()
+    # Security schema migration above requires a healthy repository and fails
+    # closed. Synchronize YAML instances and seed an admin only for an empty
+    # user table. Later seed errors are logged so existing registry data remains
+    # usable after a transient failure.
     try:
         seeded = await repository.seed_instances_from_yaml(load_seed_instances())
         if seeded:
@@ -77,7 +76,8 @@ app.add_middleware(
     SessionMiddleware,
     secret_key=settings.SESSION_SECRET_KEY,
     max_age=settings.SESSION_MAX_AGE_SECONDS,
-    same_site="lax",
+    same_site="strict",
+    https_only=settings.SESSION_HTTPS_ONLY,
 )
 
 if settings.CORS_ALLOW_ORIGINS:
@@ -96,4 +96,5 @@ app.include_router(fleet_router)
 app.include_router(instances_router)
 app.include_router(instance_tabs_router)
 app.include_router(trends_router)
+app.include_router(activity_router)
 app.include_router(insights_router)

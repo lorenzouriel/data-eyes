@@ -1,10 +1,10 @@
 """
 Per-instance tabbed drill-down API — the Strata-design IA pivot from the
 previous per-*database* drill-down (routers/databases.py) to per-*instance*.
-Most diagnostics are already instance-wide (blocking, sessions, resources) or
-optionally database-scoped (wait stats, top queries) — this router serves
-the instance-first view; a `database` query param narrows individual
-sections where that's meaningful, it's no longer the top-level unit.
+Serves the Databases and Resources tabs; a `database` query param narrows
+Resources where that's meaningful. Waits/Blocking/Sessions/SQL statements
+moved to routers/activity.py's Top-N history (and live drill-down) instead
+of a live-snapshot tab here.
 
 Same TAB_BUILDERS / _safe_call / _gather_named pattern as
 routers/databases.py: every sub-call is independently error-handled, a
@@ -68,39 +68,9 @@ def tab(name: str):
     return decorator
 
 
-@tab("waits")
-async def _waits(conn_str: str, instance_name: str, database: Optional[str]) -> Dict[str, Any]:
-    return await _gather_named(
-        {
-            "wait_stats": diagnostics.wait_stats(conn_str, database=database),
-            "wait_category_history": repository.get_wait_category_history(instance_name),
-        }
-    )
-
-
-@tab("blocking")
-async def _blocking(conn_str: str, instance_name: str, database: Optional[str]) -> Dict[str, Any]:
-    return await _gather_named(
-        {
-            "blocking": diagnostics.blocking_snapshot(conn_str),
-            "blocking_events": repository.get_blocking_events(instance_name),
-        }
-    )
-
-
-@tab("sessions")
-async def _sessions(conn_str: str, instance_name: str, database: Optional[str]) -> Dict[str, Any]:
-    return await _gather_named(
-        {
-            "active_sessions": diagnostics.active_sessions(conn_str),
-            "dimensions": diagnostics.session_dimensions(conn_str),
-        }
-    )
-
-
-@tab("sql")
-async def _sql(conn_str: str, instance_name: str, database: Optional[str]) -> Dict[str, Any]:
-    return await _gather_named({"top_queries": diagnostics.top_queries(conn_str, database=database)})
+@tab("databases")
+async def _databases(conn_str: str, instance_name: str, database: Optional[str]) -> Dict[str, Any]:
+    return await _gather_named({"databases": diagnostics.database_status(conn_str)})
 
 
 @tab("resources")
@@ -139,12 +109,3 @@ async def get_instance_overview(instance_name: str, _: str = Depends(require_aut
         }
     )
     return result
-
-
-@router.get("/plan")
-async def get_query_plan(instance_name: str, plan_handle: str = Query(...), _: str = Depends(require_auth)):
-    instance = await _find_instance(instance_name)
-    try:
-        return await diagnostics.query_plan(instance.mssql_connection_string, plan_handle)
-    except MSSQLError as e:
-        raise HTTPException(status_code=502, detail=str(e)) from e

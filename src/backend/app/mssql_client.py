@@ -20,9 +20,13 @@ free for other requests — same reasoning as the MCP server's db.py.
 
 import asyncio
 import logging
+import threading
+from .config import settings
+from .connection_policy import parse_connection_string
 from contextlib import contextmanager
+from contextvars import ContextVar
 from dataclasses import dataclass, field
-from typing import Any, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 
 import pyodbc
 
@@ -60,17 +64,10 @@ def _apply_database(connection_string: str, database: Optional[str]) -> str:
     Leaves the base string untouched when database is None."""
     if not database:
         return connection_string
-    drop = {"database", "initial catalog"}
-    kept = []
-    for part in connection_string.split(";"):
-        if not part.strip():
-            continue
-        key = part.split("=", 1)[0].strip().lower()
-        if key in drop:
-            continue
-        kept.append(part.strip())
-    kept.append(f"Database={_quote_odbc_value(database)}")
-    return ";".join(kept) + ";"
+    options = parse_connection_string(connection_string)
+    options["database"] = database
+    return ";".join(f"{key}={_quote_odbc_value(value)}" for key, value in options.items()) + ";"
+
 
 
 @contextmanager
@@ -91,7 +88,7 @@ def _get_connection(connection_string: str, database: Optional[str] = None, conn
         conn.setdecoding(pyodbc.SQL_WMETADATA, encoding=MSSQL_WIDE_ENCODING)
         yield conn
     except pyodbc.Error as e:
-        raise MSSQLError(f"Failed to connect: {e}") from e
+        raise MSSQLError("SQL Server connection failed; check server and credentials") from e
     finally:
         if conn:
             try:
@@ -100,60 +97,97 @@ def _get_connection(connection_string: str, database: Optional[str] = None, conn
                 logger.warning("Error closing SQL Server connection", exc_info=True)
 
 
-def _fetch_rows(cursor, max_rows: int, batch_size: int = 1000) -> Tuple[List[Tuple[Any, ...]], bool]:
-    rows: List[Tuple[Any, ...]] = []
+def _fetch_rows(cursor, max_rows: int, batch_size: int = 100) -> Tuple[List[Tuple[Any, ...]], bool]:
+    rows = []
+    size = 0
     truncated = False
     while True:
         batch = cursor.fetchmany(batch_size)
         if not batch:
             break
-        rows.extend(batch)
-        if len(rows) > max_rows:
-            rows = rows[:max_rows]
-            truncated = True
-            break
+        for raw in batch:
+            if len(rows) >= max_rows:
+                return rows, True
+            row = []
+            for value in raw:
+                if isinstance(value, (str, bytes, bytearray)) and len(value) > settings.SQL_MAX_CELL_LENGTH:
+                    value = value[:settings.SQL_MAX_CELL_LENGTH]
+                    truncated = True
+                row.append(value)
+            cost = sum(len(str(value).encode("utf-8")) for value in row)
+            if size + cost > settings.SQL_MAX_RESPONSE_BYTES:
+                return rows, True
+            size += cost
+            rows.append(tuple(row))
     return rows, truncated
 
 
-async def execute_query(
-    connection_string: str,
-    sql: str,
-    database: Optional[str] = None,
-    timeout: int = DEFAULT_QUERY_TIMEOUT,
-    max_rows: int = DEFAULT_MAX_ROWS,
-) -> QueryResult:
-    """Execute a read-only diagnostic query against one instance's SQL Server.
+# Interactive requests (fleet rollup, tabs) and background collectors draw from
+# separate pools so the 3s activity sampler can't starve user-facing queries.
+# The collector sets the lane once per loop; asyncio.gather children inherit it.
+query_lane: ContextVar[str] = ContextVar("query_lane", default="interactive")
+_query_slots: Dict[str, asyncio.Semaphore] = {}
 
-    Every query app/diagnostics.py builds is a fixed, parameter-free SELECT —
-    there's no policy-gate/write-mode concept here, unlike mcp/'s general-
-    purpose execute_sql tool, which has to defend against arbitrary LLM-issued
-    SQL. This client only ever runs the queries diagnostics.py builds.
-    """
 
-    def _sync_execute() -> QueryResult:
-        with _get_connection(connection_string, database) as conn:
+async def execute_query(connection_string: str, sql: str, database: Optional[str] = None,
+                        timeout: int = DEFAULT_QUERY_TIMEOUT, max_rows: int = DEFAULT_MAX_ROWS) -> QueryResult:
+    if not 1 <= timeout <= DEFAULT_QUERY_TIMEOUT or not 1 <= max_rows <= DEFAULT_MAX_ROWS:
+        raise MSSQLError("Query limits exceed server limits")
+    lane = query_lane.get()
+    slots = _query_slots.get(lane)
+    if slots is None:
+        size = settings.SQL_MAX_BACKGROUND_QUERIES if lane == "background" else settings.SQL_MAX_CONCURRENT_QUERIES
+        slots = _query_slots[lane] = asyncio.Semaphore(size)
+    try:
+        await asyncio.wait_for(slots.acquire(), timeout=settings.SQL_QUEUE_TIMEOUT_SECONDS)
+    except asyncio.TimeoutError:
+        raise MSSQLError("SQL query capacity exhausted; retry shortly") from None
+    cancelled = threading.Event()
+    cursors = []
+
+    def run():
+        with _get_connection(connection_string, database, connect_timeout=min(timeout, 10)) as conn:
+            # pyodbc statement timeout belongs to the connection, not Cursor.
+            conn.timeout = timeout
             cursor = conn.cursor()
+            cursors.append(cursor)
             try:
+                if cancelled.is_set():
+                    return QueryResult()
                 cursor.execute(sql)
                 columns = [desc[0] for desc in cursor.description] if cursor.description else []
                 if not columns:
                     return QueryResult()
                 rows, truncated = _fetch_rows(cursor, max_rows)
                 return QueryResult(columns=columns, rows=rows, truncated=truncated)
-            except pyodbc.Error as e:
-                raise MSSQLError(f"Query failed: {e}") from e
+            except pyodbc.Error as exc:
+                raise MSSQLError("SQL diagnostic query failed") from exc
             finally:
-                try:
-                    cursor.close()
-                except Exception:
-                    logger.warning("Error closing cursor", exc_info=True)
+                cursor.close()
 
+    def cancel():
+        if cursors:
+            try:
+                cursors[0].cancel()
+            except Exception:
+                pass  # It may already have closed.
+
+    task = asyncio.create_task(asyncio.to_thread(run))
+    def finished(task):
+        slots.release()  # Keep capacity reserved until the ODBC thread exits.
+        if not task.cancelled():
+            task.exception()
+    task.add_done_callback(finished)
     try:
-        coro = asyncio.to_thread(_sync_execute)
-        return await asyncio.wait_for(coro, timeout=timeout)
-    except asyncio.TimeoutError:
+        return await asyncio.wait_for(asyncio.shield(task), timeout=timeout + 1)
+    except (asyncio.TimeoutError, asyncio.CancelledError) as exc:
+        cancelled.set()
+        cancel_task = asyncio.create_task(asyncio.to_thread(cancel))
+        cancel_task.add_done_callback(lambda task: task.exception() if not task.cancelled() else None)
+        if isinstance(exc, asyncio.CancelledError):
+            raise
         raise MSSQLError(f"Query exceeded {timeout}s timeout") from None
     except MSSQLError:
         raise
-    except Exception as e:
-        raise MSSQLError(f"Unexpected error: {e}") from e
+    except Exception as exc:
+        raise MSSQLError("SQL diagnostic failed") from exc

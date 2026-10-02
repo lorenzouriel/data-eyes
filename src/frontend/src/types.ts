@@ -1,5 +1,30 @@
 export type Severity = "OK" | "WARNING" | "CRITICAL" | "UNKNOWN";
 
+export interface CardCpu {
+  sql_pct: number | null;
+  os_pct: number | null;
+  history: { TimestampMs: number; CpuPct: number }[];
+}
+
+export interface CardWorkers {
+  MaxWorkers: number | null;
+  CreatedWorkers: number | null;
+  IdleWorkers: number | null;
+}
+
+export interface CardMemory {
+  SqlMemoryKB: number | null;
+  TargetMemoryKB: number | null;
+  FreeMemoryKB: number | null;
+  PageFaults: number | null;
+}
+
+export interface CardDrive {
+  free_gb: number | null;
+  io_bytes_per_sec?: number;
+  latency_ms?: number;
+}
+
 export interface InstanceHealth {
   name: string;
   label: string;
@@ -9,7 +34,21 @@ export interface InstanceHealth {
   categories: Record<string, Severity>;
   metrics: Record<string, number>;
   database_count: number | null;
+  database_status?: {
+    name: string;
+    updateability: string | null;
+    in_availability_group: boolean;
+    availability_group: string | null;
+    replica_role: string | null;
+  }[] | null;
   error: string | null;
+  // Fleet Cards data — best-effort, any of these can be null/absent even
+  // when the instance is reachable (see health_score.py's read_card_extras).
+  server?: ServerOverview | null;
+  cpu?: CardCpu | null;
+  workers?: CardWorkers | null;
+  memory?: CardMemory | null;
+  disk?: Record<string, CardDrive> | null;
 }
 
 export interface FleetHealth {
@@ -115,90 +154,6 @@ export interface InstanceOverview {
   health: TabResult<{ overall_severity: Severity; categories: Record<string, Severity>; metrics: Record<string, number> }>;
 }
 
-export interface WaitStatRow {
-  Wait_Type: string;
-  Wait_Time_Seconds: number;
-  Waiting_Tasks_Count: number;
-  Percentage_WaitTime: number;
-  Category: string;
-  severity: Severity;
-}
-
-export interface WaitCategoryPoint {
-  captured_at: string;
-  category: string;
-  seconds: number;
-}
-
-export interface BlockingRow {
-  BlockedSessionID: number;
-  BlockingSessionID: number;
-  WaitType: string;
-  WaitTimeSeconds: number;
-  WaitResource: string;
-  DatabaseName: string;
-  BlockedLoginName: string;
-  BlockedHostName: string;
-  BlockedQueryText: string;
-  BlockingSessionIsHeadBlocker: number;
-  severity: Severity;
-}
-
-export interface BlockingEvent {
-  captured_at: string;
-  root_sql: string | null;
-  lock_type: string | null;
-  blocked_count: number;
-  duration_seconds: number;
-}
-
-export interface SessionRow {
-  Pid: number;
-  SqlText: string;
-  LoginName: string;
-  ProgramName: string;
-  HostName: string;
-  State: string;
-  WaitSeconds: number;
-  ElapsedSeconds: number;
-}
-
-export interface SessionDimensions {
-  users: { Dimension: string; WaitSeconds: number }[];
-  programs: { Dimension: string; WaitSeconds: number }[];
-  hosts: { Dimension: string; WaitSeconds: number }[];
-}
-
-export interface TopQueryRow {
-  DatabaseName: string;
-  PlanHandle: string;
-  ExecutionCount: number;
-  AvgElapsedTimeMs: number;
-  AvgCpuTimeMs: number;
-  AvgLogicalReads: number;
-  MaxElapsedTimeMs: number;
-  LastExecutionTime: string;
-  QueryText: string;
-  severity: Severity;
-}
-
-export interface PlanNode {
-  depth: number;
-  physical_op: string;
-  logical_op: string;
-  estimated_rows: string | null;
-  cost_share: number;
-  estimated_time_ms: number;
-}
-
-export interface QueryPlan {
-  available: boolean;
-  execution_count?: number;
-  avg_elapsed_ms?: number;
-  avg_logical_reads?: number;
-  nodes: PlanNode[];
-}
-
 export interface AGHealthRow {
   DatabaseName: string;
   Replica: string;
@@ -208,6 +163,77 @@ export interface AGHealthRow {
   LogSendQueueKB: number;
   RedoQueueKB: number;
   severity: Severity;
+}
+
+// --- Top-N historical activity (routers/activity.py) ---
+
+export type ActivityDimension =
+  | "waits"
+  | "programs"
+  | "databases"
+  | "machines"
+  | "db_users"
+  | "plans"
+  | "sql_statements"
+  | "files"
+  | "drives"
+  | "blocking_statements"
+  | "deadlocks";
+
+export interface TopDimensionPoint {
+  day: string;
+  value: number;
+}
+
+export interface TopDimensionSeries {
+  key: string;
+  label: string;
+  points: TopDimensionPoint[];
+}
+
+export interface TopDimensionResponse {
+  series: TopDimensionSeries[];
+  other: TopDimensionPoint[];
+  available: boolean;
+}
+
+// Raw drill-down rows for the Specific-Day view — shape depends on which
+// dimension was requested (see app/repository.py's get_dimension_log):
+// activity_sample-shaped for waits/programs/databases/machines/db_users/
+// plans/sql_statements, file_io_snapshot-shaped for files/drives,
+// blocking_event-shaped for blocking_statements, deadlock_event-shaped for
+// deadlocks. Every field is optional since no single dimension populates them all.
+export interface DimensionLogRow {
+  captured_at?: string;
+  occurred_at?: string;
+  database_name?: string | null;
+  program_name?: string | null;
+  host_name?: string | null;
+  login_name?: string | null;
+  wait_type?: string | null;
+  wait_category?: string | null;
+  wait_time_ms?: number | null;
+  elapsed_time_ms?: number | null;
+  plan_handle?: string | null;
+  sql_text?: string | null;
+  file_name?: string | null;
+  drive?: string | null;
+  io_stall_ms?: number | null;
+  root_sql?: string | null;
+  lock_type?: string | null;
+  blocked_count?: number | null;
+  duration_seconds?: number | null;
+  victim_login?: string | null;
+  victim_host?: string | null;
+  victim_program?: string | null;
+  resource_description?: string | null;
+  process_count?: number | null;
+  summary?: string | null;
+}
+
+export interface DimensionLogResponse {
+  rows: DimensionLogRow[];
+  available: boolean;
 }
 
 export interface ResourceUtilization {

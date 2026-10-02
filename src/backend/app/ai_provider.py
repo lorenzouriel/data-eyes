@@ -8,6 +8,8 @@ or insight prompts.
 from __future__ import annotations
 
 import json
+import asyncio
+import time
 import logging
 from abc import ABC, abstractmethod
 from dataclasses import asdict, dataclass
@@ -218,7 +220,9 @@ class OpenAICompatibleProvider(AIProvider):
             pass
         if error_code == "missing_scope":
             return AIProviderError(
-                f"{self.status.provider_label} API key lacks model-completion permission (missing_scope)."
+                f"{self.status.provider_label} denied model generation (missing_scope). "
+                "Ask your OpenAI project administrator to enable Model capabilities: Request "
+                "for the API key and its project role, or configure an authorized key."
             )
         if status_code == 401:
             return AIProviderError(
@@ -295,15 +299,89 @@ class OpenAICompatibleProvider(AIProvider):
             raise AIProviderError(f"{self.status.provider_label} generation failed.") from exc
 
 
+_ai_slots = None
+
+
+class LimitedProvider(AIProvider):
+    """Apply quotas to foreground and background calls, including full streams."""
+    def __init__(self, provider):
+        super().__init__(provider.status)
+        self.provider = provider
+
+    async def _acquire(self, quota_scope: str = "interactive"):
+        from .security_limits import quota
+        global _ai_slots
+        if _ai_slots is None:
+            _ai_slots = asyncio.Semaphore(settings.AI_MAX_CONCURRENT_REQUESTS)
+        # Take the concurrency slot first so a busy provider doesn't burn
+        # hourly quota on requests that never run. Background sweeps have their
+        # own bucket so they can't exhaust the budget for Ask/Advisor/Explain.
+        try:
+            await asyncio.wait_for(_ai_slots.acquire(), timeout=1)
+        except Exception as exc:
+            raise AIProviderError("AI request limit reached or quota service unavailable; retry later") from exc
+        try:
+            if quota_scope == "background":
+                await quota("ai-global-hour-background", "all", 120, 3600)
+            else:
+                await quota("ai-global-hour", "all", 300, 3600)
+        except BaseException as exc:
+            _ai_slots.release()
+            if isinstance(exc, Exception):
+                raise AIProviderError("AI request limit reached or quota service unavailable; retry later") from exc
+            raise
+        return _ai_slots
+
+    def _validate(self, system, messages):
+        size = len(system) + sum(len(item.get("content", "")) for item in messages)
+        if len(messages) > 20 or size > 32000:
+            raise AIProviderError("AI input exceeds the configured request size limit")
+
+    async def stream_text(self, *, system, messages, tier, max_tokens, quota_scope="interactive"):
+        self._validate(system, messages)
+        slots = await self._acquire(quota_scope)
+        stream = self.provider.stream_text(system=system, messages=messages, tier=tier, max_tokens=max_tokens)
+        deadline = time.monotonic() + settings.AI_REQUEST_TIMEOUT_SECONDS
+        try:
+            while True:
+                try:
+                    remaining = deadline - time.monotonic()
+                    if remaining <= 0:
+                        raise asyncio.TimeoutError
+                    chunk = await asyncio.wait_for(stream.__anext__(), timeout=remaining)
+                except StopAsyncIteration:
+                    break
+                yield chunk
+        except asyncio.TimeoutError:
+            raise AIProviderError("AI request timed out") from None
+        finally:
+            try:
+                await stream.aclose()
+            finally:
+                slots.release()
+
+    async def complete_text(self, *, system, messages, tier, max_tokens, quota_scope="interactive"):
+        self._validate(system, messages)
+        slots = await self._acquire(quota_scope)
+        try:
+            return await asyncio.wait_for(self.provider.complete_text(
+                system=system, messages=messages, tier=tier, max_tokens=max_tokens),
+                timeout=settings.AI_REQUEST_TIMEOUT_SECONDS)
+        except asyncio.TimeoutError:
+            raise AIProviderError("AI request timed out") from None
+        finally:
+            slots.release()
+
+
 @lru_cache(maxsize=1)
 def get_ai_provider() -> Optional[AIProvider]:
     status = get_ai_status()
     if not status.configured:
         return None
     if status.provider == "anthropic":
-        return AnthropicProvider(status)
+        return LimitedProvider(AnthropicProvider(status))
     if status.provider == "openai":
-        return OpenAICompatibleProvider(status, api_key=settings.OPENAI_API_KEY, local=False)
+        return LimitedProvider(OpenAICompatibleProvider(status, api_key=settings.OPENAI_API_KEY, local=False))
     if status.provider == "local":
-        return OpenAICompatibleProvider(status, api_key=settings.LOCAL_AI_API_KEY, local=True)
+        return LimitedProvider(OpenAICompatibleProvider(status, api_key=settings.LOCAL_AI_API_KEY, local=True))
     return None

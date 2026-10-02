@@ -13,12 +13,16 @@ RUN apt-get update \
     && apt-get purge -y --auto-remove curl gnupg \
     && rm -rf /var/lib/apt/lists/*
 
+COPY --from=ghcr.io/astral-sh/uv:0.11.24 /uv /usr/local/bin/uv
 WORKDIR /app
-
-COPY pyproject.toml /app/
+COPY pyproject.toml uv.lock /app/
 COPY app /app/app
-RUN pip install -e .
+RUN uv sync --frozen --no-dev --no-editable
 
 EXPOSE 8090
+
+ENV PATH="/app/.venv/bin:$PATH"
+RUN useradd --uid 10001 --create-home appuser
+USER 10001:10001
 
 CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8090"]

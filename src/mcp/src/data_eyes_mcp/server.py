@@ -93,7 +93,7 @@ class MSSQLMCPServer:
             @tools_mcp.custom_route("/ready", methods=["GET"])
             async def ready_endpoint(request: Request) -> Response:
                 """Readiness probe."""
-                result = await readiness_check()
+                result = await readiness_check(principal=request.scope.get("data_eyes.principal"))
                 status_code = 200 if result["status"] == "ready" else 503
                 return JSONResponse(result, status_code=status_code)
 
@@ -112,7 +112,13 @@ class MSSQLMCPServer:
             # Use FastMCP's built-in HTTP transport runner
             # This starts uvicorn with the Starlette app
             # MCP protocol is available at http://host:port/mcp
-            await tools_mcp.run_streamable_http_async()
+            import uvicorn
+            from .http_auth import BearerAuthMiddleware
+
+            app = BearerAuthMiddleware(tools_mcp.streamable_http_app())
+            config = uvicorn.Config(app, host=settings.HTTP_BIND_HOST,
+                                    port=settings.HTTP_BIND_PORT, proxy_headers=False)
+            await uvicorn.Server(config).serve()
 
         except ImportError as e:
             self.logger.error("Required dependencies not installed: %s", e)

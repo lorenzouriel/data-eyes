@@ -64,7 +64,7 @@ _BENIGN_WAIT_TYPES_SQL = """
     N'WAIT_FOR_RESULTS', N'WAIT_XTP_CKPT_CLOSE', N'WAIT_XTP_HOST_WAIT',
     N'WAIT_XTP_OFFLINE_CKPT_NEW_LOG', N'WAIT_XTP_RECOVERY',
     N'WAITFOR', N'WAITFOR_TASKSHUTDOWN', N'XE_TIMER_EVENT',
-    N'XE_DISPATCHER_WAIT'
+    N'XE_DISPATCHER_WAIT', N'SOS_WORK_DISPATCHER'
 """
 
 
@@ -96,7 +96,7 @@ def _rows_to_dicts(columns: List[str], rows: List[Tuple[Any, ...]]) -> List[Dict
 
 
 def _severity_rank(sev: Optional[str]) -> int:
-    return {"CRITICAL": 0, "WARNING": 1, "OK": 2}.get(sev or "", 3)
+    return {"CRITICAL": 0, "WARNING": 1, "UNKNOWN": 2, "OK": 3}.get(sev or "", 2)
 
 
 def _worst_severity(rows: List[Dict[str, Any]], default: str = "OK") -> str:
@@ -104,7 +104,7 @@ def _worst_severity(rows: List[Dict[str, Any]], default: str = "OK") -> str:
         return default
     worst = default
     for row in rows:
-        sev = row.get("severity")
+        sev = row.get("severity") or "UNKNOWN"
         if _severity_rank(sev) < _severity_rank(worst):
             worst = sev
     return worst
@@ -145,11 +145,7 @@ def _sql_wait_stats(top_n: int) -> str:
         wait_time_ms / 1000.0 AS Wait_Time_Seconds,
         waiting_tasks_count AS Waiting_Tasks_Count,
         wait_time_ms * 100.0 / SUM(wait_time_ms) OVER() AS Percentage_WaitTime,
-        CASE
-            WHEN wait_time_ms * 100.0 / SUM(wait_time_ms) OVER() >= 25 THEN 'CRITICAL'
-            WHEN wait_time_ms * 100.0 / SUM(wait_time_ms) OVER() >= 10 THEN 'WARNING'
-            ELSE 'OK'
-        END AS severity
+        'OK' AS severity -- Wait distribution is informational, not a distress threshold.
     FROM sys.dm_os_wait_stats
     WHERE wait_type NOT IN ({_BENIGN_WAIT_TYPES_SQL})
         AND wait_time_ms >= 1
@@ -318,6 +314,7 @@ def _sql_db_space() -> str:
         db.name AS DatabaseName,
         mf.name AS FileName,
         mf.type_desc AS FileType,
+        vs.volume_mount_point AS Drive,
         CAST(mf.size * 8.0 / 1024 AS DECIMAL(18, 2)) AS FileSizeMB,
         CAST((mf.size - FILEPROPERTY(mf.name, 'SpaceUsed')) * 8.0 / 1024 AS DECIMAL(18, 2)) AS FreeSpaceMB,
         CAST(100.0 * (mf.size - FILEPROPERTY(mf.name, 'SpaceUsed')) / NULLIF(mf.size, 0) AS DECIMAL(5, 2)) AS FreeSpacePct,
@@ -350,6 +347,9 @@ def _sql_backup_health() -> str:
     SELECT
         d.name AS DatabaseName,
         d.recovery_model_desc AS RecoveryModel,
+        CASE WHEN d.group_database_id IS NOT NULL
+             THEN 'Local replica history only; missing or stale records require verification on other replicas'
+             ELSE 'Local backup history' END AS BackupEvidence,
         lb.LastFullBackup,
         DATEDIFF(HOUR, lb.LastFullBackup, GETDATE()) AS FullBackupAgeHours,
         lb.LastDiffBackup,
@@ -357,6 +357,11 @@ def _sql_backup_health() -> str:
         CASE WHEN d.recovery_model_desc <> 'SIMPLE'
              THEN DATEDIFF(MINUTE, lb.LastLogBackup, GETDATE()) ELSE NULL END AS LogBackupAgeMinutes,
         CASE
+            WHEN d.group_database_id IS NOT NULL AND (
+                lb.LastFullBackup IS NULL OR DATEDIFF(HOUR, lb.LastFullBackup, GETDATE()) >= 24
+                OR (d.recovery_model_desc <> 'SIMPLE' AND (lb.LastLogBackup IS NULL
+                    OR DATEDIFF(MINUTE, lb.LastLogBackup, GETDATE()) >= 60))
+            ) THEN 'UNKNOWN' -- Other replicas may hold the backup history.
             WHEN lb.LastFullBackup IS NULL THEN 'CRITICAL'
             WHEN DATEDIFF(HOUR, lb.LastFullBackup, GETDATE()) >= 48 THEN 'CRITICAL'
             WHEN DATEDIFF(HOUR, lb.LastFullBackup, GETDATE()) >= 24 THEN 'WARNING'
@@ -561,6 +566,86 @@ async def db_space(connection_string: str, database: Optional[str] = None) -> Li
     return await _query(connection_string, sql)
 
 
+_SQL_FILE_IO_STATS = """
+SELECT
+    DB_NAME(vfs.database_id) AS DatabaseName,
+    mf.name AS FileName,
+    vs.volume_mount_point AS Drive,
+    CAST(vfs.io_stall_read_ms + vfs.io_stall_write_ms AS FLOAT) AS IoStallMs,
+    CAST(vfs.num_of_bytes_read + vfs.num_of_bytes_written AS FLOAT) AS IoBytes,
+    CAST(vfs.num_of_reads + vfs.num_of_writes AS FLOAT) AS IoCount
+FROM sys.dm_io_virtual_file_stats(NULL, NULL) vfs
+INNER JOIN sys.master_files mf ON mf.database_id = vfs.database_id AND mf.file_id = vfs.file_id
+CROSS APPLY sys.dm_os_volume_stats(vfs.database_id, vfs.file_id) vs
+WHERE DB_NAME(vfs.database_id) IS NOT NULL
+"""
+
+
+async def file_io_stats(connection_string: str) -> List[Dict[str, Any]]:
+    """Cumulative-since-restart IO stall time, bytes transferred, and IO
+    count per data/log file, with its drive (volume_mount_point) — same
+    dm_os_volume_stats join _sql_db_space() uses for free space. Cumulative,
+    so app/collector.py diffs this between cycles (same delta technique as
+    wait_stats -> wait_category_snapshot) rather than persisting it as-is."""
+    return await _query(connection_string, _SQL_FILE_IO_STATS)
+
+
+_SQL_WORKER_STATS = """
+SELECT
+    (SELECT max_workers_count FROM sys.dm_os_sys_info) AS MaxWorkers,
+    (SELECT SUM(current_workers_count) FROM sys.dm_os_schedulers WHERE status = 'VISIBLE ONLINE') AS CreatedWorkers,
+    (SELECT SUM(current_workers_count - active_workers_count) FROM sys.dm_os_schedulers WHERE status = 'VISIBLE ONLINE') AS IdleWorkers
+"""
+
+
+async def worker_stats(connection_string: str) -> Dict[str, Any]:
+    """Worker thread pool pressure — max configured, currently created, and
+    idle (created but not doing work right now). Point-in-time gauges, same
+    shape as resource_utilization's buffer-cache gauges."""
+    rows = await _query(connection_string, _SQL_WORKER_STATS)
+    return rows[0] if rows else {}
+
+
+_SQL_MEMORY_STATS = """
+SELECT
+    (SELECT physical_memory_in_use_kb FROM sys.dm_os_process_memory) AS SqlMemoryKB,
+    (SELECT CAST(cntr_value AS BIGINT) FROM sys.dm_os_performance_counters
+     WHERE counter_name = 'Target Server Memory (KB)') AS TargetMemoryKB,
+    (SELECT available_physical_memory_kb FROM sys.dm_os_sys_memory) AS FreeMemoryKB,
+    (SELECT page_fault_count FROM sys.dm_os_process_memory) AS PageFaults
+"""
+
+
+async def memory_stats(connection_string: str) -> Dict[str, Any]:
+    """SQL Server's own memory footprint (physical_memory_in_use), its
+    configured target, and OS-level free physical memory — point-in-time
+    gauges, not cumulative counters."""
+    rows = await _query(connection_string, _SQL_MEMORY_STATS)
+    return rows[0] if rows else {}
+
+
+_SQL_ERROR_COUNTERS = """
+SELECT SUM(cntr_value) AS ErrorCount
+FROM sys.dm_os_performance_counters
+WHERE object_name LIKE '%SQL Errors%'
+    AND instance_name IN ('User Errors', 'Kill Connection Errors', 'DB Offline Errors', 'DB Online Errors')
+"""
+
+
+async def error_rate_stats(connection_string: str) -> Optional[float]:
+    """Cumulative-since-restart count of meaningful SQL Server errors —
+    excludes the benign 'Info Errors' instance, same exclusion-list
+    philosophy as _BENIGN_WAIT_TYPES_SQL's benign wait types. Only
+    meaningful as a rate: app/collector.py diffs this between cycles, same
+    delta technique as resource_utilization's disk/batch counters, and
+    derives a severity from the delta (0 = OK, some errors = WARNING/CRITICAL)."""
+    rows = await _query(connection_string, _SQL_ERROR_COUNTERS)
+    if not rows:
+        return None
+    value = rows[0].get("ErrorCount")
+    return float(value) if value is not None else None
+
+
 async def backup_health(connection_string: str, database: Optional[str] = None) -> List[Dict[str, Any]]:
     sql = _filter_by_database(_sql_backup_health(), database)
     return await _query(connection_string, sql)
@@ -586,6 +671,23 @@ async def job_health(connection_string: str) -> List[Dict[str, Any]]:
 async def list_databases(connection_string: str) -> List[Dict[str, Any]]:
     sql = "SELECT name, database_id, state_desc AS state FROM sys.databases WHERE HAS_DBACCESS(name) = 1 ORDER BY name"
     return await _query(connection_string, sql)
+
+
+async def database_status(connection_string: str) -> List[Dict[str, Any]]:
+    """Database access mode and local Always On membership, including unreadable replicas."""
+    return await _query(connection_string, """
+        SELECT d.name, d.state_desc AS state,
+            CAST(DATABASEPROPERTYEX(d.name, 'Updateability') AS nvarchar(60)) AS updateability,
+            CAST(CASE WHEN d.group_database_id IS NULL THEN 0 ELSE 1 END AS bit) AS in_availability_group,
+            ag.name AS availability_group,
+            ars.role_desc AS replica_role
+        FROM sys.databases d
+        LEFT JOIN sys.availability_replicas ar ON ar.replica_id = d.replica_id
+        LEFT JOIN sys.availability_groups ag ON ag.group_id = ar.group_id
+        LEFT JOIN sys.dm_hadr_availability_replica_states ars
+            ON ars.replica_id = d.replica_id AND ars.is_local = 1
+        ORDER BY d.name
+    """)
 
 
 async def fleet_health_score(connection_string: str) -> Dict[str, Any]:
@@ -635,7 +737,7 @@ async def fleet_health_score(connection_string: str) -> Dict[str, Any]:
             logger.exception("fleet_health_score: category %s failed", name)
             results[name] = "UNKNOWN"
 
-    rank_order = {"CRITICAL": 0, "WARNING": 1, "OK": 2, "UNKNOWN": 3}
+    rank_order = {"CRITICAL": 0, "WARNING": 1, "UNKNOWN": 2, "OK": 3}
     overall = min(results.values(), key=lambda s: rank_order.get(s, 3)) if results else "UNKNOWN"
 
     return {"overall_severity": overall, "categories": results, "metrics": headline_metrics}
@@ -656,67 +758,46 @@ _WAIT_CATEGORY_PREFIXES: List[Tuple[Tuple[str, ...], str]] = [
 
 
 def categorize_wait_type(wait_type: str) -> str:
-    """Buckets a raw sys.dm_os_wait_stats wait_type into the 5 categories the
-    Waits tab groups by (lock / disk / cpu / network / other). Shared by
-    wait_stats' category column and app/collector.py's historical
+    """Buckets a raw sys.dm_os_wait_stats wait_type into the 4 coarse
+    categories the Waits tab groups by (lock / disk / cpu / network) where a
+    prefix is recognized. Anything else is surfaced as the actual wait_type
+    — never collapsed into a generic "other" bucket, since that hid
+    whatever was really driving wait time behind an opaque catch-all. Shared
+    by wait_stats' category column and app/collector.py's historical
     wait-category sampling — one taxonomy, not two."""
     for prefixes, category in _WAIT_CATEGORY_PREFIXES:
         if any(wait_type.startswith(p) for p in prefixes):
             return category
-    return "other"
+    return wait_type
 
 
 def _sql_active_sessions(top_n: int) -> str:
     top_n = max(1, min(top_n, 200))
     return f"""
     SELECT TOP {top_n}
-        r.session_id AS Pid,
+        s.session_id AS Pid,
         st.text AS SqlText,
         s.login_name AS LoginName,
         s.program_name AS ProgramName,
         s.host_name AS HostName,
-        ISNULL(r.wait_type, r.status) AS State,
-        r.wait_time / 1000.0 AS WaitSeconds,
-        r.total_elapsed_time / 1000.0 AS ElapsedSeconds
-    FROM sys.dm_exec_requests r
-    INNER JOIN sys.dm_exec_sessions s ON s.session_id = r.session_id
+        DB_NAME(r.database_id) AS DatabaseName,
+        r.plan_handle AS PlanHandle,
+        COALESCE(r.wait_type, r.status, s.status) AS State,
+        COALESCE(r.wait_time, 0) / 1000.0 AS WaitSeconds,
+        COALESCE(r.total_elapsed_time, 0) / 1000.0 AS ElapsedSeconds
+    FROM sys.dm_exec_sessions s
+    LEFT JOIN sys.dm_exec_requests r ON s.session_id = r.session_id
     OUTER APPLY sys.dm_exec_sql_text(r.sql_handle) st
-    WHERE r.session_id > 50
-    ORDER BY r.total_elapsed_time DESC
+    WHERE s.is_user_process = 1 AND s.session_id <> @@SPID
+    ORDER BY CASE WHEN r.session_id IS NULL THEN 1 ELSE 0 END, r.total_elapsed_time DESC, s.session_id
     """
 
 
 async def active_sessions(connection_string: str, top_n: int = 50) -> List[Dict[str, Any]]:
-    """Live sessions with an in-flight request right now — not a history;
+    """Connected user sessions, including idle connections — not a history;
     call again to see how it's changed. Same DMV family as blocking_snapshot,
     without the blocking filter."""
     return await _query(connection_string, _sql_active_sessions(top_n))
-
-
-def _sql_session_dimension(column: str) -> str:
-    return f"""
-    SELECT
-        {column} AS Dimension,
-        SUM(r.wait_time) / 1000.0 AS WaitSeconds
-    FROM sys.dm_exec_requests r
-    INNER JOIN sys.dm_exec_sessions s ON s.session_id = r.session_id
-    WHERE r.session_id > 50 AND {column} IS NOT NULL
-    GROUP BY {column}
-    ORDER BY WaitSeconds DESC
-    """
-
-
-async def session_dimensions(connection_string: str, top_n: int = 5) -> Dict[str, List[Dict[str, Any]]]:
-    """Top users/programs/hosts by wait time among sessions active *right
-    now* — a live-snapshot breakdown, not a historical rollup (SQL Server
-    doesn't retain per-login wait history without Query Store or a
-    session-level trace, neither of which this reads)."""
-    dimensions = {"users": "s.login_name", "programs": "s.program_name", "hosts": "s.host_name"}
-    result: Dict[str, List[Dict[str, Any]]] = {}
-    for key, column in dimensions.items():
-        rows = await _query(connection_string, _sql_session_dimension(column))
-        result[key] = rows[:top_n]
-    return result
 
 
 _SQL_SERVER_OVERVIEW = """
@@ -757,7 +838,8 @@ SELECT
 _SQL_CPU_HISTORY = """
 SELECT TOP 20
     timestamp AS TimestampMs,
-    CAST(record AS XML).value('(./Record/SchedulerMonitorEvent/SystemHealth/ProcessUtilization)[1]', 'int') AS CpuPct
+    CAST(record AS XML).value('(./Record/SchedulerMonitorEvent/SystemHealth/ProcessUtilization)[1]', 'int') AS CpuPct,
+    CAST(record AS XML).value('(./Record/SchedulerMonitorEvent/SystemHealth/SystemIdle)[1]', 'int') AS SystemIdlePct
 FROM sys.dm_os_ring_buffers
 WHERE ring_buffer_type = 'RING_BUFFER_SCHEDULER_MONITOR'
 ORDER BY timestamp DESC
@@ -795,6 +877,13 @@ async def resource_utilization(connection_string: str) -> Dict[str, Any]:
 
     cpu_rows = await _query(connection_string, _SQL_CPU_HISTORY)
     cpu_history = list(reversed(cpu_rows))  # oldest first, for charting
+    latest_cpu = cpu_rows[0] if cpu_rows else {}
+    system_idle_pct = latest_cpu.get("SystemIdlePct")
+    # SQL Server's own share of CPU vs. the OS total (SQL + every other
+    # process) — the ring buffer's SystemIdle is OS-wide idle %, so
+    # 100 - SystemIdle is total OS utilization, of which ProcessUtilization
+    # is SQL Server's slice.
+    os_cpu_pct = (100 - system_idle_pct) if system_idle_pct is not None else None
 
     rate_rows = await _query(connection_string, _SQL_RATE_COUNTERS)
     raw_counters = rate_rows[0] if rate_rows else {}
@@ -803,6 +892,8 @@ async def resource_utilization(connection_string: str) -> Dict[str, Any]:
         "buffer_cache_hit_pct": buffer_cache_hit_pct,
         "page_life_expectancy_seconds": gauges.get("PageLifeExpectancySeconds"),
         "cpu_history": cpu_history,
+        "sql_cpu_pct": latest_cpu.get("CpuPct"),
+        "os_cpu_pct": os_cpu_pct,
         "disk_read_bytes_total": raw_counters.get("DiskReadBytesTotal"),
         "batch_requests_total": raw_counters.get("BatchRequestsTotal"),
     }
@@ -926,3 +1017,70 @@ async def query_plan(connection_string: str, plan_handle: str) -> Dict[str, Any]
         "avg_logical_reads": round(avg_logical_reads, 1),
         "nodes": _parse_plan_xml(row["QueryPlanXml"], avg_elapsed_ms),
     }
+
+
+_SQL_HEALTH_RING_BUFFER = """
+SELECT xet.target_data AS TargetData
+FROM sys.dm_xe_session_targets xet
+JOIN sys.dm_xe_sessions xes ON xes.address = xet.event_session_address
+WHERE xes.name = 'system_health' AND xet.target_name = 'ring_buffer'
+"""
+
+
+def _parse_deadlock_events(xml_text: str) -> List[Dict[str, Any]]:
+    """Shreds the system_health Extended Events ring buffer's XML for
+    xml_deadlock_report events — same xml.etree.ElementTree technique
+    _parse_plan_xml() uses for query plans, applied to a different schema (a
+    deadlock graph's <process>/<resource-list>, not <RelOp>). Best-effort:
+    SQL Server's deadlock XML shape has minor version-to-version variance, so
+    every field read here degrades to None rather than raising if a
+    particular attribute is absent."""
+    try:
+        root = ET.fromstring(xml_text)
+    except ET.ParseError:
+        logger.warning("deadlock_events: could not parse system_health ring buffer XML")
+        return []
+
+    events: List[Dict[str, Any]] = []
+    for event in root.findall(".//event[@name='xml_deadlock_report']"):
+        deadlock = event.find(".//deadlock")
+        if deadlock is None:
+            continue
+
+        processes = {p.get("id"): p for p in deadlock.findall("./process-list/process")}
+        victim_ids = [v.get("id") for v in deadlock.findall("./victim-list/victimProcess")]
+        victim = processes.get(victim_ids[0]) if victim_ids else None
+
+        resource_parts = []
+        for res in deadlock.findall("./resource-list/*"):
+            label = res.get("objectname") or res.get("associatedObjectId") or res.get("waitresource")
+            resource_parts.append(f"{res.tag}{': ' + label if label else ''}")
+
+        victim_login = victim.get("loginname") if victim is not None else None
+        victim_host = victim.get("hostname") if victim is not None else None
+        events.append(
+            {
+                "occurred_at": event.get("timestamp"),
+                "database_name": victim.get("currentdbname") if victim is not None else None,
+                "victim_login": victim_login,
+                "victim_host": victim_host,
+                "victim_program": victim.get("clientapp") if victim is not None else None,
+                "resource_description": "; ".join(resource_parts) or None,
+                "process_count": len(processes),
+                "summary": f"{len(processes)} process(es) — victim {victim_login or 'unknown'}@{victim_host or 'unknown'}",
+            }
+        )
+    return events
+
+
+async def deadlock_events(connection_string: str) -> List[Dict[str, Any]]:
+    """Deadlock graphs currently held in SQL Server's own system_health
+    Extended Events ring buffer (always-on by default — no new XE session is
+    created, this only reads one that already exists) — read-only, same
+    DMV-only philosophy as everything else in this module. The ring buffer
+    has limited capacity and rolls over, so app/collector.py polls this and
+    persists new events into deadlock_event for durable history."""
+    rows = await _query(connection_string, _SQL_HEALTH_RING_BUFFER)
+    if not rows or not rows[0].get("TargetData"):
+        return []
+    return _parse_deadlock_events(rows[0]["TargetData"])

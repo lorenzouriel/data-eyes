@@ -6,7 +6,7 @@ import { getFleetHealth } from "../api";
 import type { InstanceHealth } from "../types";
 
 const POLL_INTERVAL_MS = 30_000;
-const VALID_SECTIONS = new Set(["resources", "waits", "blocking", "sessions", "sql", "advisor"]);
+const VALID_SECTIONS = new Set(["databases", "activity", "advisor"]);
 
 export default function InstanceDashboard() {
   const { instanceName = "", tab } = useParams();

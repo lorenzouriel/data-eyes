@@ -1,0 +1,29 @@
+{
+    admin off
+    auto_https disable_redirects
+}
+
+https://{$DASHBOARD_HOST:localhost}:8443 {
+    tls internal
+    header {
+        Strict-Transport-Security "max-age=31536000"
+        X-Content-Type-Options nosniff
+        Referrer-Policy same-origin
+        X-Frame-Options DENY
+    }
+    request_body {
+        max_size 128KB
+    }
+    handle /mcp* {
+        reverse_proxy data-eyes-mcp-dev:8080
+    }
+    handle_path /staging/* {
+        reverse_proxy data-eyes-mcp-staging:8080
+    }
+    handle_path /production/* {
+        reverse_proxy data-eyes-mcp-prod:8080
+    }
+    handle {
+        reverse_proxy dashboard-frontend:8080
+    }
+}

@@ -12,6 +12,8 @@ import bcrypt
 
 
 def hash_password(plaintext: str) -> str:
+    if len(plaintext.encode()) > 72:
+        raise ValueError("Password must be at most 72 UTF-8 bytes")
     return bcrypt.hashpw(plaintext.encode(), bcrypt.gensalt()).decode()
 
 

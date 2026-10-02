@@ -21,9 +21,9 @@ from typing import Optional
 import asyncpg
 from mcp.server.fastmcp import Context
 
-from .config import settings
+from .config import settings, load_instances
 from .db import request_credentials
-from .security import audit, authorize, enforce_rate_limit
+from .security import audit, authorize, enforce_rate_limit, is_authorized
 from .tools import _connection_options, mcp
 from .utils import format_json
 
@@ -70,12 +70,16 @@ async def list_tracked_instances(ctx: Optional[Context] = None) -> str:
         return _NOT_CONFIGURED
     try:
         async with pool.acquire() as conn:
-            rows = await conn.fetch("SELECT name, label, environment FROM instance ORDER BY name")
+            rows = await conn.fetch("SELECT name, label, environment FROM mcp_instance_summary ORDER BY name")
     except Exception as e:
         logger.exception("list_tracked_instances failed")
         return f"ERROR: {type(e).__name__}: {e}"
     if not rows:
         return "No instances registered in the dashboard."
+    with request_credentials(**_connection_options(ctx, None)):
+        deployed = {item.name for item in load_instances()}
+        rows = [row for row in rows if row["name"] in deployed and
+                is_authorized(instance=row["name"], tool="list_tracked_instances")]
     columns = ["name", "label", "environment"]
     data = [tuple(row[c] for c in columns) for row in rows]
     with request_credentials(**_connection_options(ctx, None)):
@@ -104,6 +108,8 @@ async def get_severity_trend(instance_name: str, category: str, hours: int = 24,
         JSON list of {captured_at, severity, metric_value}, oldest first, or
         a message if REPOSITORY_DSN isn't configured or there's no history yet.
     """
+    if instance_name not in {item.name for item in load_instances()}:
+        raise PermissionError("Instance is outside this deployment")
     with request_credentials(**_connection_options(ctx, instance_name)):
         authorize(instance=instance_name, tool="get_severity_trend")
         enforce_rate_limit()
@@ -158,6 +164,8 @@ async def get_latest_snapshot(instance_name: str, ctx: Optional[Context] = None)
         row per category, or a message if REPOSITORY_DSN isn't configured or
         nothing has been collected for this instance yet.
     """
+    if instance_name not in {item.name for item in load_instances()}:
+        raise PermissionError("Instance is outside this deployment")
     with request_credentials(**_connection_options(ctx, instance_name)):
         authorize(instance=instance_name, tool="get_latest_snapshot")
         enforce_rate_limit()

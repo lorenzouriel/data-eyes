@@ -15,11 +15,13 @@ services:
     container_name: data-eyes-dashboard-repo
     environment:
       POSTGRES_DB: data_eyes_dashboard
+      MCP_REPO_PASSWORD: ${MCP_REPO_PASSWORD:?Set MCP_REPO_PASSWORD in src/.env}
       POSTGRES_USER: data_eyes
-      POSTGRES_PASSWORD: ${DASHBOARD_REPO_PASSWORD:-change-me}
+      POSTGRES_PASSWORD: ${DASHBOARD_REPO_PASSWORD:?Set DASHBOARD_REPO_PASSWORD in src/.env}
     volumes:
       - dashboard-repo-data:/var/lib/postgresql/data
-      - ./repository/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+      - ./repository/init.sql:/docker-entrypoint-initdb.d/10-init.sql:ro
+      - ./repository/20-mcp-reader.sh:/docker-entrypoint-initdb.d/20-mcp-reader.sh:ro
     restart: unless-stopped
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U data_eyes -d data_eyes_dashboard"]
@@ -35,11 +37,9 @@ services:
       - ./backend/.env
     environment:
       INSTANCES_FILE: /app/instances.yaml
-      REPOSITORY_DSN: postgresql://data_eyes:${DASHBOARD_REPO_PASSWORD:-change-me}@dashboard-repo:5432/data_eyes_dashboard
+      REPOSITORY_DSN: postgresql://data_eyes:${DASHBOARD_REPO_PASSWORD:?Set DASHBOARD_REPO_PASSWORD in src/.env}@dashboard-repo:5432/data_eyes_dashboard
     volumes:
       - ./instances.yaml:/app/instances.yaml:ro
-    ports:
-      - "8090:8090"
     depends_on:
       dashboard-repo:
         condition: service_healthy
@@ -64,16 +64,15 @@ services:
       INSTANCES_FILE: /app/instances.yaml
       DEPLOYMENT_ENVIRONMENT: development
       INSTANCE_ALLOWLIST: dev
-      DEFAULT_PRINCIPAL: development-agent
       STAGING_MSSQL_USER: ""
       STAGING_MSSQL_PASSWORD: ""
       PROD_MSSQL_USER: ""
       PROD_MSSQL_PASSWORD: ""
-      REPOSITORY_DSN: postgresql://data_eyes:${DASHBOARD_REPO_PASSWORD:-change-me}@dashboard-repo:5432/data_eyes_dashboard
+      REPOSITORY_DSN: postgresql://data_eyes_mcp:${MCP_REPO_PASSWORD:?Set MCP_REPO_PASSWORD in src/.env}@dashboard-repo:5432/data_eyes_dashboard
     volumes:
       - ./instances.yaml:/app/instances.yaml:ro
     ports:
-      - "8080:8080"
+      - "127.0.0.1:8080:8080"
     depends_on:
       dashboard-repo:
         condition: service_healthy
@@ -99,16 +98,15 @@ services:
       INSTANCES_FILE: /app/instances.yaml
       DEPLOYMENT_ENVIRONMENT: staging
       INSTANCE_ALLOWLIST: staging
-      DEFAULT_PRINCIPAL: staging-agent
       DEV_MSSQL_USER: ""
       DEV_MSSQL_PASSWORD: ""
       PROD_MSSQL_USER: ""
       PROD_MSSQL_PASSWORD: ""
-      REPOSITORY_DSN: postgresql://data_eyes:${DASHBOARD_REPO_PASSWORD:-change-me}@dashboard-repo:5432/data_eyes_dashboard
+      REPOSITORY_DSN: postgresql://data_eyes_mcp:${MCP_REPO_PASSWORD:?Set MCP_REPO_PASSWORD in src/.env}@dashboard-repo:5432/data_eyes_dashboard
     volumes:
       - ./instances.yaml:/app/instances.yaml:ro
     ports:
-      - "8081:8080"
+      - "127.0.0.1:8081:8080"
     depends_on:
       dashboard-repo:
         condition: service_healthy
@@ -134,16 +132,15 @@ services:
       INSTANCES_FILE: /app/instances.yaml
       DEPLOYMENT_ENVIRONMENT: production
       INSTANCE_ALLOWLIST: prod
-      DEFAULT_PRINCIPAL: production-agent
       DEV_MSSQL_USER: ""
       DEV_MSSQL_PASSWORD: ""
       STAGING_MSSQL_USER: ""
       STAGING_MSSQL_PASSWORD: ""
-      REPOSITORY_DSN: postgresql://data_eyes:${DASHBOARD_REPO_PASSWORD:-change-me}@dashboard-repo:5432/data_eyes_dashboard
+      REPOSITORY_DSN: postgresql://data_eyes_mcp:${MCP_REPO_PASSWORD:?Set MCP_REPO_PASSWORD in src/.env}@dashboard-repo:5432/data_eyes_dashboard
     volumes:
       - ./instances.yaml:/app/instances.yaml:ro
     ports:
-      - "8082:8080"
+      - "127.0.0.1:8082:8080"
     depends_on:
       dashboard-repo:
         condition: service_healthy
@@ -159,12 +156,26 @@ services:
     build: ./frontend
     image: data-eyes-dashboard-frontend
     container_name: data-eyes-dashboard-frontend
-    ports:
-      - "8091:80"
     depends_on:
       dashboard-backend:
         condition: service_healthy
     restart: unless-stopped
+
+  gateway:
+    build: ./gateway
+    environment:
+      DASHBOARD_HOST: ${DASHBOARD_HOST:-localhost}
+    ports:
+      - "${DASHBOARD_BIND_IP:-127.0.0.1}:8443:8443"
+    volumes:
+      - gateway-data:/data
+      - gateway-config:/config
+    depends_on:
+      - dashboard-frontend
+      - data-eyes-mcp-dev
+    restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
 
   loadgen:
     profiles: ["loadtest"]
@@ -180,3 +191,5 @@ services:
 
 volumes:
   dashboard-repo-data:
+  gateway-data:
+  gateway-config:

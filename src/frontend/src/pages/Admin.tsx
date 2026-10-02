@@ -281,7 +281,7 @@ function UsersAdmin() {
           </label>
           <label style={{ flex: 1, minWidth: 160 }}>
             Initial password
-            <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} autoComplete="new-password" minLength={8} required />
+            <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} autoComplete="new-password" minLength={12} maxLength={72} required />
           </label>
           <label style={{ flex: 1, minWidth: 160 }}>
             Role

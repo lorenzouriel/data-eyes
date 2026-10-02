@@ -10,7 +10,7 @@ from pathlib import Path
 from typing import List, Optional
 
 import yaml
-from pydantic import BaseModel
+from pydantic import BaseModel, Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -21,8 +21,19 @@ class Settings(BaseSettings):
     # PASSWORD only matter once, to seed the first admin account when the
     # user table is empty; after that, accounts are managed through the UI.
     DASHBOARD_ADMIN_USERNAME: str = "admin"
-    DASHBOARD_ADMIN_PASSWORD: str
-    SESSION_SECRET_KEY: str
+    DASHBOARD_ADMIN_PASSWORD: str = Field(min_length=12, max_length=72)
+    SESSION_SECRET_KEY: str = Field(min_length=32)
+    SESSION_HTTPS_ONLY: bool = True
+    # The backend is only reachable through the frontend nginx, which sets
+    # X-Real-IP to the real client address. Disable if exposing it directly.
+    TRUST_X_REAL_IP: bool = True
+    SQL_ALLOWED_SERVERS: List[str] = []
+    SQL_MAX_CONCURRENT_QUERIES: int = Field(default=8, ge=1, le=64)
+    SQL_MAX_BACKGROUND_QUERIES: int = Field(default=4, ge=1, le=64)
+    SQL_QUEUE_TIMEOUT_SECONDS: float = Field(default=5.0, ge=0.1, le=60)
+    SQL_MAX_RESPONSE_BYTES: int = Field(default=2_000_000, ge=1024)
+    SQL_MAX_CELL_LENGTH: int = Field(default=100_000, ge=256)
+    AI_MAX_CONCURRENT_REQUESTS: int = Field(default=2, ge=1, le=16)
     SESSION_MAX_AGE_SECONDS: int = 60 * 60 * 12  # 12h
 
     # Fleet registry seed (relative to this backend's project root unless
@@ -48,6 +59,16 @@ class Settings(BaseSettings):
     REPOSITORY_DSN: str
     COLLECTOR_INTERVAL_SECONDS: int = 60
     TREND_RETENTION_DAYS: int = 30
+    # activity_sample is written every few seconds per instance, so it keeps a
+    # much shorter window than the minute-cadence trend tables.
+    ACTIVITY_RETENTION_DAYS: int = Field(default=7, ge=1)
+    # Activity sampling (app/collector.py's _run_activity_sampler_forever)
+    # runs on its own, much tighter loop than COLLECTOR_INTERVAL_SECONDS —
+    # catching a session actually mid-query/mid-wait needs a sampling
+    # interval close to query duration, not the other collector jobs'
+    # cumulative-counter cadence. Higher write volume to activity_sample is
+    # the accepted tradeoff (see repository/init.sql's comment on the table).
+    ACTIVITY_SAMPLE_INTERVAL_SECONDS: int = 3
 
     # Provider-neutral AI for Ask, Advisor, explanations, and insight sweeps.
     # Supported providers: anthropic, openai ("chatgpt" alias), and local.
@@ -67,11 +88,20 @@ class Settings(BaseSettings):
     HOST: str = "0.0.0.0"
     PORT: int = 8090
 
+    @field_validator("DASHBOARD_ADMIN_PASSWORD")
+    @classmethod
+    def _password_fits_bcrypt(cls, value: str) -> str:
+        # bcrypt silently/loudly rejects >72 *bytes*; max_length counts characters.
+        if len(value.encode()) > 72:
+            raise ValueError("must be at most 72 UTF-8 bytes")
+        return value
+
     model_config = SettingsConfigDict(
         env_file=".env",
         env_file_encoding="utf-8",
         case_sensitive=True,
         extra="ignore",
+        hide_input_in_errors=True,
     )
 
 

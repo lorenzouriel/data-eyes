@@ -124,7 +124,10 @@ export default function AdvisorTab({ instanceName, autoLoad = true }: { instance
     setError(null);
     getAdvisorReport(instanceName)
       .then(setReport)
-      .catch((e) => setError(e instanceof ApiError ? e.message : "Advisor request failed."));
+      .catch((e) => {
+        setReport(null);
+        setError(e instanceof ApiError ? e.message : "Advisor request failed.");
+      });
   }, [instanceName, refreshKey, autoLoad, status]);
 
   const dismiss = (findingKey: string) => {
@@ -135,8 +138,8 @@ export default function AdvisorTab({ instanceName, autoLoad = true }: { instance
     <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
         <p style={{ margin: 0, fontSize: 12.5, color: "var(--muted)" }}>
-          Drafted by {status?.provider_label ?? "the configured AI provider"} from this instance's live wait, blocking,
-          top-query, and missing-index data — reviewed suggestions, not applied or benchmarked changes.
+          Generate suggestions with {status?.provider_label ?? "the configured AI provider"} using this instance's diagnostic summary.
+          Review suggestions before use; no changes are applied automatically.
         </p>
         <button className="btn-ghost" onClick={() => setRefreshKey((k) => k + 1)} disabled={report === undefined || status?.configured === false}>
           {report ? "Regenerate" : "Generate report"}

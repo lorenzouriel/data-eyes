@@ -9,6 +9,7 @@ import asyncio
 import logging
 import os
 import re
+import threading
 from contextlib import contextmanager
 from contextvars import ContextVar
 from dataclasses import dataclass, field
@@ -332,14 +333,17 @@ async def execute_query(  # noqa: C901
     authorize(instance=selected_instance, database=effective_database)
     started = __import__("time").monotonic()
     cursor_holder: Dict[str, Any] = {}
+    cancelled = threading.Event()
 
     def _sync_execute() -> QueryResult:
         """Synchronous query execution in thread."""
         with get_connection(database) as conn:
+            conn.timeout = timeout
             cursor = conn.cursor()
-            cursor.timeout = timeout
             cursor_holder["cursor"] = cursor
             try:
+                if cancelled.is_set():
+                    return QueryResult()
                 cursor.execute(sql, params)
                 # Extract column names from cursor description
                 columns = [desc[0] for desc in cursor.description] if cursor.description else []
@@ -373,9 +377,17 @@ async def execute_query(  # noqa: C901
     # Execute in a bounded worker slot with both driver-level and cooperative
     # cancellation. The queue wait is intentionally outside the DB timeout.
     semaphore = _get_query_semaphore()
-    await semaphore.acquire()
+    try:
+        await asyncio.wait_for(semaphore.acquire(), timeout=1)
+    except asyncio.TimeoutError:
+        raise DatabaseError("Query capacity exhausted; retry shortly") from None
     try:
         task = asyncio.create_task(asyncio.to_thread(_sync_execute))
+        def finished(task):
+            semaphore.release()
+            if not task.cancelled():
+                task.exception()
+        task.add_done_callback(finished)
         result = await asyncio.wait_for(asyncio.shield(task), timeout=timeout + 1)
         audit(
             "allow",
@@ -386,19 +398,19 @@ async def execute_query(  # noqa: C901
             response_bytes=result.response_bytes,
         )
         return result
-    except asyncio.TimeoutError:
+    except (asyncio.TimeoutError, asyncio.CancelledError) as exc:
+        cancelled.set()
         cursor = cursor_holder.get("cursor")
         if cursor is not None:
-            try:
-                await asyncio.to_thread(cursor.cancel)
-            except Exception:
-                logger.exception("ODBC cursor cancellation failed")
-        try:
-            await asyncio.wait_for(asyncio.shield(task), timeout=2)
-        except Exception:
-            # Cancellation commonly surfaces as an ODBC error; the public
-            # outcome remains the original query timeout.
-            pass
+            async def cancel_cursor():
+                try:
+                    await asyncio.to_thread(cursor.cancel)
+                except Exception:
+                    pass
+            cancellation = asyncio.create_task(cancel_cursor())
+            cancellation.add_done_callback(lambda task: task.exception() if not task.cancelled() else None)
+        if isinstance(exc, asyncio.CancelledError):
+            raise
         logger.error("Query timeout after %d seconds", timeout)
         audit("deny", "query_timeout_cancelled", database=effective_database, duration_ms=timeout * 1000)
         raise QueryTimeoutError(f"Query execution exceeded {timeout}s timeout") from None
@@ -421,8 +433,6 @@ async def execute_query(  # noqa: C901
             error_type=type(e).__name__,
         )
         raise DatabaseError("Unexpected database error") from e
-    finally:
-        semaphore.release()
 
 
 async def execute_schema_query(sql: str, timeout: Optional[int] = None,

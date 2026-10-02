@@ -5,6 +5,7 @@ import { changeMyPassword, ApiError } from "../api";
 
 export default function Account() {
   const { username, role } = useAuth();
+  const [currentPassword, setCurrentPassword] = useState("");
   const [password, setPassword] = useState("");
   const [confirm, setConfirm] = useState("");
   const [submitting, setSubmitting] = useState(false);
@@ -21,10 +22,12 @@ export default function Account() {
     }
     setSubmitting(true);
     try {
-      await changeMyPassword(password);
+      await changeMyPassword(password, currentPassword);
+      setCurrentPassword("");
       setPassword("");
       setConfirm("");
       setDone(true);
+      window.setTimeout(() => window.location.assign("/login"), 2000);
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Failed to change password");
     } finally {
@@ -44,17 +47,21 @@ export default function Account() {
 
         <form className="field" style={{ display: "flex", flexDirection: "column", gap: 12 }} onSubmit={handleSubmit}>
           <label>
+            Current password
+            <input type="password" value={currentPassword} onChange={(e) => setCurrentPassword(e.target.value)} autoComplete="current-password" required />
+          </label>
+          <label>
             New password
-            <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} autoComplete="new-password" minLength={8} required />
+            <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} autoComplete="new-password" minLength={12} maxLength={72} required />
           </label>
           <label>
             Confirm new password
-            <input type="password" value={confirm} onChange={(e) => setConfirm(e.target.value)} autoComplete="new-password" minLength={8} required />
+            <input type="password" value={confirm} onChange={(e) => setConfirm(e.target.value)} autoComplete="new-password" minLength={12} maxLength={72} required />
           </label>
           {error && <div className="banner-error">{error}</div>}
           {done && (
             <div className="tag" style={{ color: "var(--status-ok)", background: "color-mix(in srgb, var(--status-ok) 12%, transparent)", width: "fit-content" }}>
-              Password changed
+              Password changed. Sign in again on all devices.
             </div>
           )}
           <button type="submit" className="btn-primary" style={{ width: "fit-content" }} disabled={submitting}>

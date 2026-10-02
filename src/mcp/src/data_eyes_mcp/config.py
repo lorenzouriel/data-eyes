@@ -9,8 +9,18 @@ from pathlib import Path
 from typing import Dict, List, Optional
 
 import yaml  # type: ignore[import-untyped]
+from dotenv import load_dotenv
 from pydantic import BaseModel, Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+# pydantic-settings' own env_file loading only populates the Settings model
+# below — it never touches os.environ. Per-instance credentials
+# (<PREFIX>_MSSQL_USER/_PASSWORD, resolved dynamically via os.getenv() in
+# this module's validate_settings() and in db.py) need the real process
+# environment, so .env must also be loaded the ordinary way before Settings()
+# is constructed. No-op under Docker Compose, which already injects .env via
+# its own env_file: directive.
+load_dotenv()
 
 
 class Settings(BaseSettings):
@@ -73,11 +83,10 @@ class Settings(BaseSettings):
     MAX_CELL_LENGTH: int = 4000
     MAX_CONCURRENT_QUERIES: int = 8
 
-    # Authorization is deliberately independent of authentication. HTTP
-    # deployments must put this service behind a trusted identity-aware proxy.
+    # HTTP uses deployment-scoped bearer tokens. DEFAULT_PRINCIPAL is stdio-only.
     SECURITY_ENFORCEMENT: bool = True
     DEFAULT_PRINCIPAL: Optional[str] = None
-    PRINCIPAL_HEADER: str = "X-Data-Eyes-Principal"
+    HTTP_TOKEN_HASHES: Dict[str, str] = Field(default_factory=dict)
     ALLOW_REQUEST_CREDENTIALS: bool = False
     REQUIRE_SCOPED_CREDENTIALS: bool = True
     DEPLOYMENT_ENVIRONMENT: Optional[str] = None
@@ -117,6 +126,7 @@ class Settings(BaseSettings):
         env_file_encoding="utf-8",
         case_sensitive=True,
         extra="ignore",
+        hide_input_in_errors=True,
         frozen=False,
     )
 
@@ -222,6 +232,18 @@ def validate_settings() -> tuple[bool, Optional[str]]:  # noqa: C901
     """
     Validate critical settings. Returns (is_valid, error_message).
     """
+    if settings.MCP_TRANSPORT == "http":
+        import re
+        hashes = settings.HTTP_TOKEN_HASHES
+        if not hashes or any(not name or not re.fullmatch(r"[0-9a-f]{64}", digest) for name, digest in hashes.items()):
+            return False, "HTTP requires HTTP_TOKEN_HASHES mapping principals to SHA-256 token hashes"
+        if len(set(hashes.values())) != len(hashes):
+            return False, "HTTP bearer tokens must be unique per principal"
+        if not settings.SECURITY_ENFORCEMENT:
+            return False, "HTTP requires SECURITY_ENFORCEMENT=true"
+        if not set(hashes).issubset(load_security_config().principals):
+            return False, "Each HTTP token principal requires an authorization policy"
+
     try:
         instances = load_instances()
     except Exception as e:

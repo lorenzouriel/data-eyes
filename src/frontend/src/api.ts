@@ -1,14 +1,16 @@
 import type {
+  ActivityDimension,
   AdvisorReport,
   AIStatus,
   AppUser,
   ChatMessage,
+  DimensionLogResponse,
   FleetHealth,
   InstanceOverview,
   InstanceSummary,
-  QueryPlan,
   Role,
   TabResponse,
+  TopDimensionResponse,
   TrendResponse,
 } from "./types";
 
@@ -75,15 +77,23 @@ export function getInstanceTab(instanceName: string, tabName: string, database?:
   );
 }
 
-export function getQueryPlan(instanceName: string, planHandle: string) {
-  return request<QueryPlan>(
-    `/api/instances/${encodeURIComponent(instanceName)}/plan?plan_handle=${encodeURIComponent(planHandle)}`,
-  );
-}
-
 export function getTrend(instanceName: string, category: string, hours = 24) {
   return request<TrendResponse>(
     `/api/instances/${encodeURIComponent(instanceName)}/trend/${encodeURIComponent(category)}?hours=${hours}`,
+  );
+}
+
+// --- Top-N historical activity (routers/activity.py) ---
+
+export function getTopDimension(instanceName: string, dimension: ActivityDimension, range: "30d" | "7d" = "30d", limit = 10) {
+  return request<TopDimensionResponse>(
+    `/api/instances/${encodeURIComponent(instanceName)}/top/${encodeURIComponent(dimension)}?range=${range}&limit=${limit}`,
+  );
+}
+
+export function getDimensionLog(instanceName: string, dimension: ActivityDimension, day: string) {
+  return request<DimensionLogResponse>(
+    `/api/instances/${encodeURIComponent(instanceName)}/top/${encodeURIComponent(dimension)}/log?day=${encodeURIComponent(day)}`,
   );
 }
 
@@ -155,10 +165,10 @@ export function deleteUser(username: string) {
   return request<void>(`/api/users/${encodeURIComponent(username)}`, { method: "DELETE" });
 }
 
-export function changeMyPassword(password: string) {
+export function changeMyPassword(password: string, current_password: string) {
   return request<{ ok: boolean }>("/api/users/me/password", {
     method: "POST",
-    body: JSON.stringify({ password }),
+    body: JSON.stringify({ password, current_password }),
   });
 }
 

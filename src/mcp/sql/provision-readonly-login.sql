@@ -1,8 +1,4 @@
 /*
-  Run with sqlcmd variables, once per isolated MCP deployment:
-
-  sqlcmd -S <server> -E -v LoginName="data_eyes_mcp_dev" Password="<secret>" DatabaseName="YourDatabase" SchemaName="reporting" -i provision-readonly-login.sql
-
   Review every grant. Do not execute this template unchanged in production.
 */
 USE [master];
