@@ -1,10 +1,6 @@
--- Data Eyes dashboard — trend-history repository schema.
---
--- One row per (instance, category) per collection cycle. `category` values
--- match .claude/knowledge-base/_static/taxonomy.md's category names, plus
--- the synthetic "overall" category for the instance's overall_severity
--- (used by the Main Page fleet card trend strip).
+-- Data Eyes dashboard
 
+-- One row per (instance, category) per collection cycle. 
 CREATE TABLE IF NOT EXISTS metric_snapshot (
     snapshot_id     BIGSERIAL PRIMARY KEY,
     captured_at     TIMESTAMPTZ NOT NULL DEFAULT now(),
@@ -18,8 +14,7 @@ CREATE TABLE IF NOT EXISTS metric_snapshot (
 CREATE INDEX IF NOT EXISTS ix_metric_snapshot_lookup
     ON metric_snapshot (instance_name, category, captured_at DESC);
 
--- Instance registry — the database-backed fleet registry (replaces the old
--- instances.yaml-as-source-of-truth model).
+-- Instance registry: the database-backed fleet registry
 CREATE TABLE IF NOT EXISTS instance (
     instance_id     BIGSERIAL PRIMARY KEY,
     name            TEXT UNIQUE NOT NULL,
@@ -31,9 +26,7 @@ CREATE TABLE IF NOT EXISTS instance (
     updated_at      TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
--- User accounts — replaces the single shared DASHBOARD_ADMIN_USERNAME/
--- PASSWORD credential. DASHBOARD_ADMIN_USERNAME/PASSWORD now only seed one
--- admin-role row here when this table is empty at startup
+-- User accounts: replaces the single shared DASHBOARD_ADMIN_USERNAME/PASSWORD credential. 
 CREATE TABLE IF NOT EXISTS app_user (
     user_id        BIGSERIAL PRIMARY KEY,
     username       TEXT UNIQUE NOT NULL,
@@ -42,8 +35,7 @@ CREATE TABLE IF NOT EXISTS app_user (
     created_at     TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
--- Wait-category history — the design's Waits tab needs a real 24h
--- stacked-by-category chart, not just a live snapshot.
+-- Wait-category history: the design's Waits tab needs a real 24h
 CREATE TABLE IF NOT EXISTS wait_category_snapshot (
     snapshot_id     BIGSERIAL PRIMARY KEY,
     captured_at     TIMESTAMPTZ NOT NULL DEFAULT now(),
@@ -55,8 +47,7 @@ CREATE TABLE IF NOT EXISTS wait_category_snapshot (
 CREATE INDEX IF NOT EXISTS ix_wait_category_snapshot_lookup
     ON wait_category_snapshot (instance_name, captured_at DESC);
 
--- Blocking-event log — the Blocking tab's "last 24 hours" list needs actual
--- history, not a re-labeled live snapshot. 
+-- Blocking-event log: the Blocking tab's "last 24 hours" list needs actual history
 CREATE TABLE IF NOT EXISTS blocking_event (
     event_id          BIGSERIAL PRIMARY KEY,
     captured_at       TIMESTAMPTZ NOT NULL DEFAULT now(),
@@ -70,10 +61,69 @@ CREATE TABLE IF NOT EXISTS blocking_event (
 CREATE INDEX IF NOT EXISTS ix_blocking_event_lookup
     ON blocking_event (instance_name, captured_at DESC);
 
--- Advisor dismiss state — findings are generated fresh on every Advisor-tab
--- request (never cached server-side), so this table holds only the one bit
--- that must survive across requests: "the DBA already saw and dismissed
--- this one." 
+-- Activity sample log: append-only, one row per currently-active session per
+-- collector cycle (diagnostics.active_sessions()).
+CREATE TABLE IF NOT EXISTS activity_sample (
+    sample_id         BIGSERIAL PRIMARY KEY,
+    captured_at       TIMESTAMPTZ NOT NULL DEFAULT now(),
+    instance_name     TEXT NOT NULL,
+    session_id        INTEGER NOT NULL,
+    database_name     TEXT,
+    program_name      TEXT,
+    host_name         TEXT,
+    login_name        TEXT,
+    wait_type         TEXT,
+    wait_category     TEXT,
+    wait_time_ms      DOUBLE PRECISION NOT NULL DEFAULT 0,
+    elapsed_time_ms   DOUBLE PRECISION NOT NULL DEFAULT 0,
+    plan_handle       TEXT,
+    query_hash        TEXT,
+    sql_text          TEXT
+);
+
+CREATE INDEX IF NOT EXISTS ix_activity_sample_lookup
+    ON activity_sample (instance_name, captured_at DESC);
+
+-- File IO history: delta-of-cumulative-counter, same technique as
+-- wait_category_snapshot, against sys.dm_io_virtual_file_stats
+CREATE TABLE IF NOT EXISTS file_io_snapshot (
+    snapshot_id     BIGSERIAL PRIMARY KEY,
+    captured_at     TIMESTAMPTZ NOT NULL DEFAULT now(),
+    instance_name   TEXT NOT NULL,
+    database_name   TEXT NOT NULL,
+    file_name       TEXT NOT NULL,
+    drive           TEXT,
+    io_stall_ms     DOUBLE PRECISION NOT NULL,
+    io_bytes        DOUBLE PRECISION NOT NULL DEFAULT 0,
+    io_count        DOUBLE PRECISION NOT NULL DEFAULT 0
+);
+
+CREATE INDEX IF NOT EXISTS ix_file_io_snapshot_lookup
+    ON file_io_snapshot (instance_name, captured_at DESC);
+
+-- Deadlock event log: durable copy of SQL Server's own system_health
+-- Extended Events ring buffer, which has limited capacity and rolls over.
+CREATE TABLE IF NOT EXISTS deadlock_event (
+    event_id             BIGSERIAL PRIMARY KEY,
+    occurred_at          TIMESTAMPTZ NOT NULL,
+    captured_at          TIMESTAMPTZ NOT NULL DEFAULT now(),
+    instance_name        TEXT NOT NULL,
+    database_name        TEXT,
+    victim_login         TEXT,
+    victim_host          TEXT,
+    victim_program       TEXT,
+    resource_description TEXT,
+    process_count        INTEGER NOT NULL,
+    summary              TEXT
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS ux_deadlock_event_dedup
+    ON deadlock_event (instance_name, occurred_at);
+CREATE INDEX IF NOT EXISTS ix_deadlock_event_lookup
+    ON deadlock_event (instance_name, occurred_at DESC);
+
+-- Advisor dismiss state: findings are generated fresh on every Advisor-tab
+-- request (never cached server-side)
 CREATE TABLE IF NOT EXISTS advisor_dismissal (
     instance_name  TEXT NOT NULL,
     finding_key    TEXT NOT NULL,
