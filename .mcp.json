@@ -2,7 +2,7 @@
   "mcpServers": {
     "data-eyes-mcp": {
       "command": "uv",
-      "args": ["--directory", "src/mcp", "run", "data-eyes-mcp"],
+      "args": ["--directory", "mcp", "run", "data-eyes-mcp"],
       "env": {
         "DEPLOYMENT_ENVIRONMENT": "development",
         "INSTANCE_ALLOWLIST": "dev",

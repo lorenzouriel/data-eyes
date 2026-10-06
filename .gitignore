@@ -1,9 +1,10 @@
 */generated/
 lab/
-src/instances.yaml
-src/loadgen/
-src/.env
+instances.yaml
+loadgen/
+.env
 
 .uv-review-cache/
 .security-venv/
-references/
+
+docs/plan/

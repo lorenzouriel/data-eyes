@@ -4,7 +4,7 @@ Two tiers, different jobs — don't confuse them.
 
 ## `_static/` — compact, cross-cutting index
 
-Five files, none of them narrative: `thresholds.yaml` (every severity number — memory, IO, index, waits, backup/CHECKDB/jobs, AG, query performance, storage), `taxonomy.md` (category → dashboard tab → script → tool name → source doc, one routing table shared by the `sql-server-dba` agent, `mcp/`'s tools, and `dashboard/backend/app/diagnostics.py`), `naming-conventions.md` (the SQL naming standard, mirrored from `CLAUDE.md`), `methodology.md` (a 10-step index pointing into `.claude/resources/performance/README.md`), and `scripts-index.md` (read-only/write status and MCP-wrapping per script).
+Five files, none of them narrative: `thresholds.yaml` (every severity number — memory, IO, index, waits, backup/CHECKDB/jobs, AG, query performance, storage), `taxonomy.md` (category → dashboard tab → script → tool name → source doc, one routing table shared by the `sql-server-dba` agent, `mcp/`'s tools, and `dashboard/backend/app/modules/monitoring/diagnostics`), `naming-conventions.md` (the SQL naming standard, mirrored from `CLAUDE.md`), `methodology.md` (a 10-step index pointing into `.claude/resources/performance/README.md`), and `scripts-index.md` (read-only/write status and MCP-wrapping per script).
 
 This tier exists so a number or a rule only has **one** place to change. Nothing in here is prose you'd hand a new DBA to read top to bottom — it's what an agent (or a slash command) reads at the moment it needs a specific threshold or routing decision, instead of carrying its own copy that can silently drift.
 

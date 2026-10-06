@@ -1,47 +1,32 @@
 # Data Eyes — SQL Server Monitoring, Performance & Maintenance Toolkit
 
-Open-source toolkit for complete visibility and best-practice automation on Microsoft SQL Server. The deployable system lives in `src/`: the dashboard, MCP gateway, PostgreSQL repository, and shared `src/instances.yaml` fleet configuration. The dashboard runs trusted fixed queries directly; MCP exposes the same configured fleet to agents and reads the shared trend repository. The old Grafana stack has been removed.
+Open-source toolkit for complete visibility and best-practice automation on Microsoft SQL Server. The deployable services live at the repository root: the dashboard, MCP gateway, PostgreSQL repository, and shared `instances.yaml` fleet configuration. The dashboard runs trusted fixed queries directly; MCP exposes the same configured fleet to agents and reads the shared trend repository. The old Grafana stack has been removed.
 
 ## Repository Structure
-```
+```text
 data-eyes/
-├── dashboard/            Custom Data Eyes dashboard app (replaces monitor/'s Grafana stack)
-│   ├── backend/          FastAPI — connects directly to SQL Server (diagnostics.py, mssql_client.py),
-│   │                     fleet health rollup, real user accounts, DB-backed instance registry,
-│   │                     trend collector, insights agent
-│   ├── frontend/         React + TS + Vite — Main Page, per-database tabbed drill-down,
-│   │                     instance/user management
-│   └── repository/       Schema for the dashboard's own Postgres DB — trend history,
-│                         instance registry, user accounts
-├── mcp/                  data-eyes-mcp server — agent-only (Claude Code's sql-server-dba agent);
-│                         NOT used by the dashboard, which queries SQL Server directly
-│   ├── src/data_eyes_mcp/   generic tools (tools.py) + DBA diagnostic tools (dba_tools.py, 11 tools)
-│   │                        + dashboard-repository trend tools (repository_tools.py, 3 tools)
-│   └── docker-compose.yml   single instance
-└── .claude/
-    ├── settings.json
-    ├── commands/data-eyes/   12 slash commands
-    ├── agents/               sql-server-dba, dashboard-app
-    ├── knowledge-base/
-    │   ├── _static/          shared static KB: thresholds.yaml, taxonomy.md, naming-conventions.md, methodology.md, scripts-index.md
-    │   └── <database>.md     per-database volume/index KBs (built by /sql-kb)
-    └── resources/            secondary, agent-supporting toolkits — not required to run the dashboard
-        ├── performance/      10-step performance tuning methodology
-        │   ├── performance_tuning_workbook.xlsx
-        │   └── additional_queries/   9 diagnostic SQL scripts (severity-classified *.json.sql + originals) + docs
-        ├── maintenance/      Ola Hallengren maintenance automation
-        │   ├── playbook.sql
-        │   ├── sql_agent_schedule_playbook.sql
-        │   ├── use_cases/    35+ scenarios (backup, integrity, index)
-        │   └── diagnostics/  7 live read-only diagnostic scripts (backup, CHECKDB, fragmentation, blocking, AG, jobs, space) + docs
-        └── sql-scripts/      84 reusable DBA scripts across 18 topics
-            ├── audit/            backup_recovery/   custom_alert_emails/
-            ├── database_size/    free_space/         functions/
-            ├── helps/            index/              lock/
-            ├── query_store/      server/             sql_access/
-            ├── sql_agent/        sql_docker/         sql_profiler/
-            ├── ssis/             ssrs/               triggers/
-            └── README.md
+|-- docs/                    Architecture, setup, features, security, integrations
+|-- backend/
+|   |-- app/core/            Settings, encryption, shared limits
+|   |-- app/infrastructure/  PostgreSQL pool/schema, SQL Server client
+|   |-- app/modules/         Auth, users, instances, monitoring, insights, alerts, notifications
+|   `-- tests/modules/       Tests grouped by feature
+|-- frontend/
+|   |-- src/app/             Routing, providers, application shell
+|   |-- src/features/        Feature pages, components, hooks, API calls, types
+|   `-- src/shared/          HTTP client, common types, components, styles
+|-- gateway/                Caddy TLS and reverse-proxy configuration
+|-- mcp/
+|   |-- src/data_eyes_mcp/   Core, security, database, tools, transport, observability
+|   |-- tests/              Core and security regression tests
+|   `-- sql/                SQL Server login provisioning
+|-- repository/init/        PostgreSQL first-run initialization
+|-- assets/                 Project branding
+|-- .github/                CI workflows
+|-- .claude/                Agent definitions, commands, knowledge, SQL toolkits
+|-- instances.yaml          Local shared fleet file; ignored by Git
+|-- docker-compose.yml      Integrated stack
+`-- .mcp.json               Local MCP client registration
 ```
 
 ## Key Conventions
@@ -51,7 +36,7 @@ data-eyes/
 - Connection via $MSSQL_CONNECTION env var or manual credential prompt
 - Ola Hallengren parameters use @Databases, @Directory, @CleanupTime etc.
 - Prefer a live `data-eyes-mcp` tool call over reading a script as text whenever an MCP server is reachable — scripts remain the reference/copy-paste source, not the primary path (see `sql-server-dba` agent's Knowledge Resolution order)
-- `src/docker-compose.yml` starts the dashboard, MCP, and PostgreSQL together; both SQL-facing services read `src/instances.yaml`. Never display `.env` contents or connection strings.
+- `docker-compose.yml` starts the dashboard, MCP, and PostgreSQL together; both SQL-facing services read `instances.yaml`. Never display `.env` contents or connection strings.
 
 ## SQL Naming Standards (Data Eyes Guidelines)
 
@@ -85,7 +70,7 @@ data-eyes/
 
 Two layers:
 
-- **Static domain KB** (`.claude/knowledge-base/_static/`) — thresholds, taxonomy, naming conventions, methodology, and the scripts index. Severity SQL is duplicated between `src/mcp/src/data_eyes_mcp/dba_tools.py` and `src/backend/app/diagnostics.py`; keep both synchronized with the KB.
+- **Static domain KB** (`.claude/knowledge-base/_static/`) — thresholds, taxonomy, naming conventions, methodology, and the scripts index. Severity SQL is duplicated between `mcp/src/data_eyes_mcp/tools/diagnostics` and `backend/app/modules/monitoring/diagnostics`; keep both synchronized with the KB. Alert catalog defaults (`backend/app/modules/alerts/catalog.py`) mirror the `alerts:` section of `thresholds.yaml`, enforced by `test_alert_catalog.py`; alert checks live only in the backend, and MCP sees their results as `alert.<key>` snapshots.
 - **Per-database KB** (`.claude/knowledge-base/<database-name>.md`) — built by /sql-kb, consumed by /sql-pr-review. Contains:
   - Table volumes with SMALL/MEDIUM/HIGH/CRITICAL classification
   - Existing index inventory with usage stats

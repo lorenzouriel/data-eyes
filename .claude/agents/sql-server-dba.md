@@ -52,7 +52,7 @@ escalation_rules:
 
 ### Resolution Order
 
-1. **Live `data-eyes-mcp` diagnostic tools** — if reachable through root `.mcp.json` or `src/docker-compose.yml`, call `list_configured_instances` and pass the selected `instance` name to the matching tool. MCP and the dashboard share `src/instances.yaml` and the trend repository; the dashboard retains a direct-SQL path for its fixed queries.
+1. **Live `data-eyes-mcp` diagnostic tools** — if reachable through root `.mcp.json` or `docker-compose.yml`, call `list_configured_instances` and pass the selected `instance` name to the matching tool. MCP and the dashboard share `instances.yaml` and the trend repository; the dashboard retains a direct-SQL path for its fixed queries.
 2. **Data Eyes scripts** — `.claude/resources/performance/`, `.claude/resources/maintenance/diagnostics/`, `.claude/resources/sql-scripts/` are the reference/copy-paste source and the fallback for any environment without live MCP connectivity (e.g. a customer's own SSMS session)
 3. **Knowledge Base** — check `.claude/knowledge-base/<database>.md` for table volumes and index data
 4. **SQL Server documentation** — DMV references, sys.* catalog views

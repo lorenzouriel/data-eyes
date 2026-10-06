@@ -1,0 +1,300 @@
+"""
+Configuration module for Data Eyes MCP Server.
+
+Loads settings from environment variables using Pydantic BaseSettings.
+Supports .env file for local development.
+"""
+
+from pathlib import Path
+from typing import Dict, List, Optional
+
+import yaml  # type: ignore[import-untyped]
+from dotenv import load_dotenv
+from pydantic import BaseModel, Field
+from pydantic_settings import BaseSettings, SettingsConfigDict
+
+# pydantic-settings' own env_file loading only populates the Settings model
+# below — it never touches os.environ. Per-instance credentials
+# (<PREFIX>_MSSQL_USER/_PASSWORD, resolved dynamically via os.getenv() in
+# this module's validate_settings() and in db.py) need the real process
+# environment, so .env must also be loaded the ordinary way before Settings()
+# is constructed. No-op under Docker Compose, which already injects .env via
+# its own env_file: directive.
+load_dotenv()
+
+
+class Settings(BaseSettings):
+    """Application settings loaded from environment variables."""
+
+    # Database connection
+    # Shared fleet configuration.  Both the dashboard and this MCP server read
+    # instances.yaml; the environment connection string remains as a
+    # backwards-compatible single-instance fallback.
+    INSTANCES_FILE: str = "../instances.yaml"
+    DEFAULT_INSTANCE: Optional[str] = None
+    MSSQL_CONNECTION_STRING: Optional[str] = None
+    MSSQL_CONNECTION_TIMEOUT: int = 30  # seconds
+    MSSQL_QUERY_TIMEOUT: int = 30  # seconds
+    MSSQL_MAX_POOL_SIZE: int = 10
+
+    # Character encoding for pyodbc (fixes garbled non-ASCII, e.g. accented text).
+    # MSSQL_WIDE_ENCODING is used for wide SQL_WCHAR/NVARCHAR decoding AND for the
+    # query/parameter send encoding — SQL Server expects UTF-16LE, so leave this at
+    # the default unless you know otherwise. MSSQL_ENCODING covers narrow
+    # SQL_CHAR/VARCHAR decoding; override it (e.g. "cp1250") if VARCHAR data uses a
+    # legacy code-page collation.
+    MSSQL_ENCODING: str = "utf-8"
+    MSSQL_WIDE_ENCODING: str = "utf-16-le"
+
+    # Optional credential override. When set, these take precedence over any
+    # UID/PWD embedded in MSSQL_CONNECTION_STRING, letting each deployment run
+    # under its own SQL login (and thus its own read/write permissions) without
+    # editing the base connection string. Leave unset to use the connection
+    # string as-is.
+    MSSQL_USER: Optional[str] = None
+    MSSQL_PASSWORD: Optional[str] = None
+    # Windows/Integrated authentication. True forces Trusted_Connection=yes
+    # (ignores user/password); False forces SQL auth; None leaves it untouched.
+    MSSQL_TRUSTED_CONNECTION: Optional[bool] = None
+
+    # Optional default database (initial catalog). When set, connections open in
+    # this database instead of the login's default, so unqualified names and the
+    # discovery tools resolve there. Leave unset to use the login's default DB.
+    # Per-call `database` arguments and fully-qualified names still work and win.
+    DEFAULT_DATABASE: Optional[str] = None
+
+    # Optional: the Data Eyes dashboard's own trend-history repository
+    # (dashboard/repository/init/10-init.sql) — a Postgres database, never a
+    # monitored SQL Server. When set, this server also exposes
+    # repository_tools.py's tools (list_tracked_instances, get_severity_trend,
+    # get_latest_snapshot) so an agent can ask "how has this looked over
+    # time" using the dashboard's own collected history, not just live DMVs.
+    # Leave unset to run this server exactly as before, with no dashboard
+    # dependency at all.
+    REPOSITORY_DSN: Optional[str] = None
+
+    # Security & safety
+    READ_ONLY: bool = True
+    ENABLE_WRITES: bool = False
+    ADMIN_CONFIRM: str = ""  # must be set to a specific token to enable writes
+    MAX_ROWS_PER_QUERY: int = 50000
+    MAX_QUERY_LENGTH: int = 50000  # characters
+    MAX_RESPONSE_BYTES: int = 2_000_000
+    MAX_CELL_LENGTH: int = 4000
+    MAX_CONCURRENT_QUERIES: int = 8
+
+    # HTTP uses deployment-scoped bearer tokens. DEFAULT_PRINCIPAL is stdio-only.
+    SECURITY_ENFORCEMENT: bool = True
+    DEFAULT_PRINCIPAL: Optional[str] = None
+    HTTP_TOKEN_HASHES: Dict[str, str] = Field(default_factory=dict)
+    ALLOW_REQUEST_CREDENTIALS: bool = False
+    REQUIRE_SCOPED_CREDENTIALS: bool = True
+    DEPLOYMENT_ENVIRONMENT: Optional[str] = None
+    INSTANCE_ALLOWLIST: str = ""
+    DISABLE_ADHOC_ENVIRONMENTS: str = "production,staging"
+
+    # Feature flags
+    ENABLE_METRICS: bool = True
+    ENABLE_HEALTH_CHECKS: bool = True
+    ENABLE_SCHEMA_DISCOVERY: bool = True
+
+    # Server configuration
+    MCP_TRANSPORT: str = "stdio"  # 'stdio' or 'http'
+    HTTP_BIND_HOST: str = "127.0.0.1"
+    HTTP_BIND_PORT: int = 8080
+
+    # DNS rebinding protection (HTTP transport).
+    # By default only localhost/127.0.0.1 are accepted. Set this to the server's
+    # external hostname (without port) to allow access via that host, e.g.
+    # "mcp.example.com". Leave unset for local-only use.
+    ALLOWED_HOST: Optional[str] = None
+
+    # Logging
+    LOG_LEVEL: str = "INFO"
+    LOG_FORMAT: str = "json"  # 'json' or 'text'
+
+    # Observability
+    ENABLE_PROMETHEUS: bool = True
+    SENTRY_DSN: Optional[str] = None
+
+    # Rate limiting
+    RATE_LIMIT_QUERIES_PER_MINUTE: int = 1000
+    RATE_LIMIT_ENABLED: bool = True
+
+    model_config = SettingsConfigDict(
+        env_file=".env",
+        env_file_encoding="utf-8",
+        case_sensitive=True,
+        extra="ignore",
+        hide_input_in_errors=True,
+        frozen=False,
+    )
+
+
+# Global settings singleton
+settings = Settings()
+
+
+class InstanceConfig(BaseModel):
+    """One SQL Server from the shared Data Eyes fleet file."""
+
+    name: str
+    label: str
+    mssql_connection_string: str
+    environment: Optional[str] = None
+    credential_env_prefix: Optional[str] = None
+
+
+class ObjectGrant(BaseModel):
+    """Allowed object pattern. Omitted lists mean no access, `*` means all."""
+
+    databases: List[str] = Field(default_factory=list)
+    schemas: List[str] = Field(default_factory=list)
+    tables: List[str] = Field(default_factory=list)
+    columns: List[str] = Field(default_factory=list)
+
+
+class PrincipalPolicy(BaseModel):
+    """Default-deny grants for one asserted principal."""
+
+    tools: List[str] = Field(default_factory=list)
+    instances: List[str] = Field(default_factory=list)
+    objects: List[ObjectGrant] = Field(default_factory=list)
+
+
+class SecurityConfig(BaseModel):
+    principals: Dict[str, PrincipalPolicy] = Field(default_factory=dict)
+
+
+def instances_file_path() -> Path:
+    """Resolve INSTANCES_FILE relative to the MCP project directory."""
+    path = Path(settings.INSTANCES_FILE).expanduser()
+    if not path.is_absolute():
+        path = Path(__file__).resolve().parents[3] / path
+    return path.resolve()
+
+
+def load_instances() -> List[InstanceConfig]:
+    """Load the shared fleet file.
+
+    The file is intentionally read on demand so a restarted MCP client always
+    sees the same configuration that the dashboard will sync at startup.
+    """
+    path = instances_file_path()
+    if not path.exists():
+        return []
+    with path.open("r", encoding="utf-8") as stream:
+        data = yaml.safe_load(stream) or {}
+    instances = [InstanceConfig(**item) for item in data.get("instances", [])]
+    environment = settings.DEPLOYMENT_ENVIRONMENT
+    allowlist = {item.strip() for item in settings.INSTANCE_ALLOWLIST.split(",") if item.strip()}
+    if environment:
+        instances = [item for item in instances if item.environment == environment]
+    if allowlist:
+        instances = [item for item in instances if item.name in allowlist]
+    names = [instance.name for instance in instances]
+    duplicates = sorted({name for name in names if names.count(name) > 1})
+    if duplicates:
+        raise ValueError(f"Duplicate instance name(s): {', '.join(duplicates)}")
+    return instances
+
+
+def load_security_config() -> SecurityConfig:
+    """Load MCP authorization rules from the same fleet configuration file."""
+    path = instances_file_path()
+    if not path.exists():
+        return SecurityConfig()
+    with path.open("r", encoding="utf-8") as stream:
+        data = yaml.safe_load(stream) or {}
+    return SecurityConfig(**(data.get("mcp_security") or {}))
+
+
+def get_instance(name: Optional[str] = None) -> Optional[InstanceConfig]:
+    """Resolve an explicit/default instance from the shared fleet file."""
+    instances = load_instances()
+    target = name or settings.DEFAULT_INSTANCE
+    if target:
+        for instance in instances:
+            if instance.name == target:
+                return instance
+        raise ValueError(f"Unknown instance '{target}' in {instances_file_path()}")
+    if len(instances) == 1:
+        return instances[0]
+    return None
+
+
+def get_settings() -> Settings:
+    """Get global settings instance."""
+    return settings
+
+
+def validate_settings() -> tuple[bool, Optional[str]]:  # noqa: C901
+    """
+    Validate critical settings. Returns (is_valid, error_message).
+    """
+    if settings.MCP_TRANSPORT == "http":
+        import re
+        hashes = settings.HTTP_TOKEN_HASHES
+        if not hashes or any(not name or not re.fullmatch(r"[0-9a-f]{64}", digest) for name, digest in hashes.items()):
+            return False, "HTTP requires HTTP_TOKEN_HASHES mapping principals to SHA-256 token hashes"
+        if len(set(hashes.values())) != len(hashes):
+            return False, "HTTP bearer tokens must be unique per principal"
+        if not settings.SECURITY_ENFORCEMENT:
+            return False, "HTTP requires SECURITY_ENFORCEMENT=true"
+        if not set(hashes).issubset(load_security_config().principals):
+            return False, "Each HTTP token principal requires an authorization policy"
+
+    try:
+        instances = load_instances()
+    except Exception as e:
+        return False, f"Could not load INSTANCES_FILE: {e}"
+
+    if not instances and not settings.MSSQL_CONNECTION_STRING:
+        return False, "Configure at least one instance in INSTANCES_FILE or set MSSQL_CONNECTION_STRING"
+
+    if settings.DEFAULT_INSTANCE and not any(
+        instance.name == settings.DEFAULT_INSTANCE for instance in instances
+    ):
+        return False, f"DEFAULT_INSTANCE '{settings.DEFAULT_INSTANCE}' is not in INSTANCES_FILE"
+
+    if settings.ENABLE_WRITES and not settings.ADMIN_CONFIRM:
+        return False, "ADMIN_CONFIRM must be set to enable writes"
+
+    if settings.MSSQL_QUERY_TIMEOUT < 1:
+        return False, "MSSQL_QUERY_TIMEOUT must be >= 1 second"
+
+    if settings.MAX_ROWS_PER_QUERY < 1:
+        return False, "MAX_ROWS_PER_QUERY must be >= 1"
+
+    if settings.MAX_RESPONSE_BYTES < 1024:
+        return False, "MAX_RESPONSE_BYTES must be >= 1024"
+
+    for name in ("MAX_CELL_LENGTH", "MAX_CONCURRENT_QUERIES"):
+        if getattr(settings, name) < 1:
+            return False, f"{name} must be >= 1"
+
+    if settings.SECURITY_ENFORCEMENT:
+        try:
+            security = load_security_config()
+        except Exception as e:
+            return False, f"Could not load mcp_security policy: {e}"
+        if not security.principals:
+            return False, "SECURITY_ENFORCEMENT=true requires at least one mcp_security principal"
+
+    if settings.REQUIRE_SCOPED_CREDENTIALS:
+        import os
+
+        for instance in instances:
+            prefix = instance.credential_env_prefix
+            if not prefix:
+                return False, f"Instance '{instance.name}' needs credential_env_prefix"
+            trusted = os.getenv(f"{prefix}_MSSQL_TRUSTED_CONNECTION", "").lower()
+            if trusted not in ("1", "true", "yes", "on") and not (
+                os.getenv(f"{prefix}_MSSQL_USER") and os.getenv(f"{prefix}_MSSQL_PASSWORD")
+            ):
+                return False, (
+                    f"Instance '{instance.name}' requires {prefix}_MSSQL_USER and "
+                    f"{prefix}_MSSQL_PASSWORD (or trusted connection)"
+                )
+
+    return True, None

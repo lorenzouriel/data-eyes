@@ -2,7 +2,7 @@
 
 Maps every DPA-style category to its script, tool/function name, and its dashboard tab. This is the routing table the `sql-server-dba` agent, `mcp/`'s tools, and the dashboard backend all share — one category system, not three.
 
-**"Tool/function name"** is shared by name, not by call path: `mcp/src/data_eyes_mcp/dba_tools.py` exposes it as an `@mcp.tool()` (for Claude Code), and `dashboard/backend/app/diagnostics.py` exposes the identical query + severity logic as a plain async function of the same name (for the dashboard's own direct-SQL rendering path — no MCP hop). Same SQL, same thresholds, two callers.
+**"Tool/function name"** is shared by name, not by call path: `mcp/src/data_eyes_mcp/tools/diagnostics` exposes it as an `@mcp.tool()` (for Claude Code), and `backend/app/modules/monitoring/diagnostics` exposes the identical query + severity logic as a plain async function of the same name (for the dashboard's own direct-SQL rendering path — no MCP hop). Same SQL, same thresholds, two callers.
 
 | Category | Tab | Script(s) | Tool/function name | Source doc |
 |---|---|---|---|---|

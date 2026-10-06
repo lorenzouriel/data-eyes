@@ -55,7 +55,7 @@ We welcome feature requests! Please open an issue with:
 
 ## Security
 - Never commit sensitive data (passwords, API keys, etc.)
-- Follow the secret-handling and least-privilege guidance in the [configuration guide](docs/configuration.md)
+- Follow the secret-handling and least-privilege guidance in the [configuration guide](docs/getting-started/configuration.md)
 - Follow security best practices in your code
 
 ## Questions?

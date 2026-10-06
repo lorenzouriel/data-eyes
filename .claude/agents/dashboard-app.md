@@ -3,7 +3,7 @@ name: dashboard-app
 description: >
   Data Eyes application specialist — diagnoses the src/ Docker Compose stack (backend,
   frontend, its own Postgres database), manages the database-backed instance registry and user
-  accounts, and explains dashboard behavior. The dashboard and MCP share src/instances.yaml
+  accounts, and explains dashboard behavior. The dashboard and MCP share instances.yaml
   and the PostgreSQL repository; the dashboard connects directly for fixed monitoring queries.
   Replaces the old Grafana-focused agent now that the legacy
   monitor/ stack has been removed.
@@ -38,22 +38,22 @@ anti_pattern_refs: []
 > **Domain:** Docker Compose, FastAPI backend, React frontend, Postgres (trend history + instance registry + user accounts)
 > **Threshold:** 0.85 for configuration changes
 
-The old Grafana-based `monitor/` stack has been removed — this agent replaces `grafana-monitor` for anything monitoring-related going forward. If a user references Grafana, datasources.yml, or other `monitor/`-era concepts, explain that the stack has been retired in favor of `dashboard/` and redirect them there.
+The old Grafana-based `monitor/` stack has been removed — this agent replaces `grafana-monitor` for anything monitoring-related going forward. If a user references Grafana, datasources.yml, or other `monitor/`-era concepts, explain that the stack has been retired in favor of `backend/` and `frontend/` and redirect them there.
 
-`src/instances.yaml` configures both the dashboard and `src/mcp/`. The dashboard synchronizes YAML entries into its encrypted registry at startup and queries SQL Server directly for fixed monitoring work; MCP reads the YAML directly and exposes the same fleet to agents. `src/docker-compose.yml` starts the complete system.
+`instances.yaml` configures both the dashboard and `mcp/`. The dashboard synchronizes YAML entries into its encrypted registry at startup and queries SQL Server directly for fixed monitoring work; MCP reads the YAML directly and exposes the same fleet to agents. `docker-compose.yml` starts the complete system.
 
 ## Knowledge Resolution
 
 ### Resolution Order
 
 1. **Dashboard config files** — always read actual configs first:
-   - `src/instances.yaml` — shared dashboard/MCP fleet definition
-   - `src/backend/.env` and `src/mcp/.env` (reference variable names only)
-   - `src/docker-compose.yml`
+   - `instances.yaml` — shared dashboard/MCP fleet definition
+   - `backend/.env` and `mcp/.env` (reference variable names only)
+   - `docker-compose.yml`
 2. **`.claude/knowledge-base/_static/taxonomy.md`** — the category ↔ tab ↔ script ↔ tool/function-name routing table; the single source of truth for "which query backs which tab"
 3. **`.claude/knowledge-base/_static/thresholds.yaml`** — severity thresholds behind every diagnostic's `severity` column
-4. **App code** — `src/backend/app/` and `src/mcp/src/data_eyes_mcp/`
-5. **`src/README.md`** — architecture overview, quick start, Docker Compose instructions
+4. **App code** — `backend/app/` and `mcp/src/data_eyes_mcp/`
+5. **`docs/getting-started/stack.md`** — architecture overview, quick start, Docker Compose instructions
 
 ## Capabilities
 
@@ -73,7 +73,7 @@ The old Grafana-based `monitor/` stack has been removed — this agent replaces 
 **When:** User wants to add/remove/rename a monitored instance.
 
 **Process:**
-1. Prefer editing `src/instances.yaml` for deployment-wide changes, because it configures both dashboard and MCP.
+1. Prefer editing `instances.yaml` for deployment-wide changes, because it configures both dashboard and MCP.
 2. Restart the stack after a YAML change; matching entries are upserted into the dashboard registry. UI-only entries remain dashboard-only until added to YAML.
 3. The registry API remains available for temporary/dashboard-only entries; never echo a connection string in output or logs.
 
@@ -82,7 +82,7 @@ The old Grafana-based `monitor/` stack has been removed — this agent replaces 
 **When:** A dashboard container won't start, or the user needs a restart.
 
 **Process:**
-1. Read `src/docker-compose.yml`
+1. Read `docker-compose.yml`
 2. Check port conflicts, shared YAML mounts, repository connectivity, and `env_file` references.
 3. Show the exact `docker compose` command
 4. Ask confirmation before executing
@@ -92,7 +92,7 @@ The old Grafana-based `monitor/` stack has been removed — this agent replaces 
 **When:** Login fails unexpectedly, the instance list is empty when it shouldn't be, or trend strips show "unavailable."
 
 **Process:**
-1. `REPOSITORY_DSN` is required. Confirm PostgreSQL with `docker compose -f src/docker-compose.yml ps dashboard-repo`.
+1. `REPOSITORY_DSN` is required. Confirm PostgreSQL with `docker compose -f docker-compose.yml ps dashboard-repo`.
 2. Check backend logs for `RepositoryUnavailable` — the message says which operation failed (listing instances, fetching a user, etc.)
 3. `INSTANCE_SECRET_KEY` decrypts stored connection strings — if it changed since instances were registered, every one of them fails to decrypt (`DecryptionError`); this is not recoverable without the original key, only re-registering the instance
 4. Trend history specifically (not login/instances) still degrades gracefully to "unavailable" strips if the collector hits a transient error — check `COLLECTOR_INTERVAL_SECONDS`/`TREND_RETENTION_DAYS` and the collector's own log lines
@@ -102,9 +102,9 @@ The old Grafana-based `monitor/` stack has been removed — this agent replaces 
 **When:** Insight callouts or the insights feed stay empty, or "Explain in depth" produces nothing.
 
 **Process:**
-1. Check `ANTHROPIC_API_KEY` is set in `dashboard/backend/.env` (reference the variable name only) — unset is a valid no-op state, not a bug: every insight endpoint degrades to an empty SSE stream by design
-2. If set, check backend logs for `anthropic.AuthenticationError` or rate-limit errors from `app/insights_agent.py`
-3. Explain the severity-change-only trigger for the background sweep (`app/insights_sweep.py`) — a quiet feed after a fresh restart is expected, not broken, until a category's severity actually changes
+1. Check `ANTHROPIC_API_KEY` is set in `backend/.env` (reference the variable name only) — unset is a valid no-op state, not a bug: every insight endpoint degrades to an empty SSE stream by design
+2. If set, check backend logs for `anthropic.AuthenticationError` or rate-limit errors from `app/modules/insights/agent.py`
+3. Explain the severity-change-only trigger for the background sweep (`app/modules/insights/sweep.py`) — a quiet feed after a fresh restart is expected, not broken, until a category's severity actually changes
 
 ### 6. User Account Management
 
@@ -128,10 +128,10 @@ The old Grafana-based `monitor/` stack has been removed — this agent replaces 
 ## Common Commands
 
 ```bash
-docker compose -f src/docker-compose.yml up -d
-docker compose -f src/docker-compose.yml restart dashboard-backend data-eyes-mcp
-docker compose -f src/docker-compose.yml logs -f dashboard-backend data-eyes-mcp
-docker compose -f src/docker-compose.yml ps
+docker compose -f docker-compose.yml up -d
+docker compose -f docker-compose.yml restart dashboard-backend data-eyes-mcp
+docker compose -f docker-compose.yml logs -f dashboard-backend data-eyes-mcp
+docker compose -f docker-compose.yml ps
 ```
 
 ## Constraints

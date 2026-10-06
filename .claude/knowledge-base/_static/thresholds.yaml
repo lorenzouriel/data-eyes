@@ -99,3 +99,54 @@ storage:
   drive_free_space_gb:
     warning: 20
     critical: 5
+
+alerts:
+  # Defaults for the dashboard's alert catalog (backend/app/modules/alerts/catalog.py).
+  # Users override them per alert and per instance on the Alerts page.
+  # backend/tests/modules/alerts/test_alert_catalog.py fails if these drift
+  # from the catalog. direction: above = alert when the value rises to the
+  # threshold; below = alert when it falls to it. Alerts with no numeric
+  # threshold (fixed severity, such as a SUSPECT database) are not listed.
+  # Availability
+  ag_health: {unit: "KB", direction: above, warning: 51200, critical: 512000}
+  ag_data_loss_risk: {unit: "seconds", direction: above, warning: 60, critical: 300}
+  log_shipping_latency: {unit: "minutes", direction: above, warning: 60, critical: 240}
+  # Backup & integrity
+  full_backup_age: {unit: "hours", direction: above, warning: 24, critical: 48}
+  log_backup_age: {unit: "minutes", direction: above, warning: 60, critical: 240}
+  checkdb_age: {unit: "days", direction: above, warning: 7, critical: 14}
+  page_corruption: {unit: "pages", direction: above, warning: null, critical: 1}
+  # Storage
+  disk_space: {unit: "GB", direction: below, warning: 20, critical: 5}
+  transaction_log_health: {unit: "%", direction: above, warning: 75, critical: 90}
+  maxsize_growth: {unit: "%", direction: above, warning: 80, critical: 90}
+  database_growth: {unit: "%/day", direction: above, warning: 10, critical: 25}
+  slow_file_growth: {unit: "ms", direction: above, warning: 1000, critical: 10000}
+  vlf_count: {unit: "VLFs", direction: above, warning: 1000, critical: 5000}
+  io_pending: {unit: "ms", direction: above, warning: 5000, critical: 15000}
+  slow_disk: {unit: "ms", direction: above, warning: 20, critical: 50}
+  # Tempdb
+  tempdb_data_utilization: {unit: "%", direction: above, warning: 85, critical: 95}
+  tempdb_version_store: {unit: "%", direction: above, warning: 30, critical: 50}
+  tempdb_log_usage: {unit: "%", direction: above, warning: 70, critical: 90}
+  tempdb_contention: {unit: "tasks", direction: above, warning: 5, critical: 20}
+  # Performance
+  cpu_utilization: {unit: "%", direction: above, warning: 80, critical: 95}
+  memory_available: {unit: "MB", direction: below, warning: 2048, critical: 512}
+  page_life_expectancy: {unit: "seconds", direction: below, warning: 300, critical: 100}
+  memory_grants_pending: {unit: "queries", direction: above, warning: 1, critical: 5}
+  threadpool_exhaustion: {unit: "%", direction: above, warning: 80, critical: 95}
+  blocking: {unit: "seconds", direction: above, warning: 30, critical: 120}
+  long_running_process: {unit: "seconds", direction: above, warning: 600, critical: 3600}
+  slow_queries: {unit: "ms", direction: above, warning: 5000, critical: 30000}
+  query_regression: {unit: "queries", direction: above, warning: 1, critical: 10}
+  login_failed: {unit: "logins", direction: above, warning: 5, critical: 50}
+  # Maintenance
+  index_fragmentation: {unit: "%", direction: above, warning: 30, critical: 60}
+  stale_statistics: {unit: "days", direction: above, warning: 30, critical: 60}
+  identity_values: {unit: "%", direction: above, warning: 80, critical: 90}
+  version_support: {unit: "days", direction: below, warning: 365, critical: 0}
+  # Configuration & security
+  certificate_expiry: {unit: "days", direction: below, warning: 30, critical: 7}
+  # Data Eyes
+  notification_delivery_failing: {unit: "failures", direction: above, warning: 1, critical: 3}
