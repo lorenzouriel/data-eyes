@@ -8,3 +8,15 @@ loadgen/
 .security-venv/
 
 docs/plan/
+**/.venv/
+**/__pycache__/
+**/.pytest_cache/
+collector/state/
+prometheus/secrets/
+grafana/provisioning/alerting/contact-points.yml
+**/*.egg-info/
+
+.migration-backup/
+**/node_modules/
+**/dist/
+**/build/

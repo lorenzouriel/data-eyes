@@ -1,198 +1,253 @@
-# Preserve the project identity used when Compose lived in src/.
+# =============================================================================
+# Data Eyes — integrated stack
+# =============================================================================
+#
+#   SQL Server fleet (instances.yaml)
+#        │                         │
+#        ▼                         ▼
+#   collector ──/metrics──▶ prometheus ──▶ grafana ──┐
+#   (fixed DMV queries)     (30d history)  (dashboards,│
+#                                 ▲          alerts)   │
+#                                 │                    ▼
+#   data-eyes-mcp-{dev,staging,prod} ◀─────────── gateway (Caddy, TLS :8443)
+#   (agent tools; history read from Prometheus)
+#
+# Usage:
+#   docker compose up -d                              # core stack + MCP dev
+#   docker compose --profile staging up -d            # + MCP staging
+#   docker compose --profile production up -d         # + MCP production
+#   docker compose --profile loadtest run loadgen     # synthetic MCP load
+#
+# Required files (never commit or print their contents):
+#   .env               GRAFANA_ADMIN_PASSWORD (required), GRAFANA_ADMIN_USER,
+#                      DASHBOARD_HOST, DASHBOARD_BIND_IP
+#   instances.yaml     Shared fleet definition (template: instances.example.yaml)
+#   mcp/.env           MCP credentials and settings; optional per-environment
+#                      overlays: mcp/.env.dev, mcp/.env.staging, mcp/.env.production
+#
+# Rules:
+#   - Run exactly one collector per collector-state volume (checkpoint file).
+#   - Every host port binds to 127.0.0.1 by default; external access goes
+#     through the gateway only.
+# =============================================================================
+
+# Project name. Volume names are prefixed with it (src_prometheus-data, ...)
 name: src
 
-# Data Eyes — dashboard, MCP gateway, and repository as one stack.
-#
-# Both SQL-facing services consume ./instances.yaml. The dashboard keeps its
-# direct fixed-query path; MCP exposes the same fleet to external agents.
-#   docker compose -f docker-compose.yml up -d --build
+# Common definition for every MCP environment. Each environment service
+# merges this and adds its own profile, env files, allowlist, and host port.
+x-mcp-service: &mcp-service
+  build: ./mcp
+  image: data-eyes-mcp
+  command:
+  - python
+  - -m
+  - data_eyes_mcp.main
+  - --transport
+  - http
+  - --bind
+  - 0.0.0.0:8080
+  volumes:
+  - ./instances.yaml:/app/instances.yaml:ro
+  restart: unless-stopped
+  healthcheck:
+    test:
+    - CMD
+    - curl
+    - -f
+    - http://localhost:8080/health
+    interval: 30s
+    timeout: 10s
+    retries: 3
+    start_period: 10s
+
+# Environment shared by every MCP environment. Each service also blanks the
+# credentials of the other environments so a container can only ever log in
+# to the instances on its own INSTANCE_ALLOWLIST.
+x-mcp-environment: &mcp-environment
+  INSTANCES_FILE: /app/instances.yaml
+  PROMETHEUS_URL: http://prometheus:9090
 
 services:
-  # The dashboard's own database — trend history, the instance registry, and
-  # user accounts. Never a monitored SQL Server (see
-  # repository/init/10-init.sql). Required, not optional: the backend's
-  # collector writes trend snapshots here, but login and the instance
-  # registry depend on it too.
-  dashboard-repo:
-    image: postgres:16-alpine
-    container_name: data-eyes-dashboard-repo
-    environment:
-      POSTGRES_DB: data_eyes_dashboard
-      MCP_REPO_PASSWORD: ${MCP_REPO_PASSWORD:?Set MCP_REPO_PASSWORD in .env}
-      POSTGRES_USER: data_eyes
-      POSTGRES_PASSWORD: ${DASHBOARD_REPO_PASSWORD:?Set DASHBOARD_REPO_PASSWORD in .env}
-    volumes:
-      - dashboard-repo-data:/var/lib/postgresql/data
-      - ./repository/init/10-init.sql:/docker-entrypoint-initdb.d/10-init.sql:ro
-      - ./repository/init/20-mcp-reader.sh:/docker-entrypoint-initdb.d/20-mcp-reader.sh:ro
-    restart: unless-stopped
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U data_eyes -d data_eyes_dashboard"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
 
-  dashboard-backend:
-    build: ./backend
-    image: data-eyes-dashboard-backend
-    container_name: data-eyes-dashboard-backend
-    env_file:
-      - ./backend/.env
+  # ===========================================================================
+  # 1. Monitoring pipeline — collector → Prometheus → Grafana
+  # ===========================================================================
+
+  # Runs trusted, fixed, read-only queries against the fleet and serves cached
+  # Prometheus metrics on :8090 (internal network only; scraped by Prometheus).
+  collector:
+    build: ./collector
+    restart: unless-stopped
     environment:
       INSTANCES_FILE: /app/instances.yaml
-      REPOSITORY_DSN: postgresql://data_eyes:${DASHBOARD_REPO_PASSWORD:?Set DASHBOARD_REPO_PASSWORD in .env}@dashboard-repo:5432/data_eyes_dashboard
+      STATE_FILE: /state/checkpoints.json
     volumes:
-      - ./instances.yaml:/app/instances.yaml:ro
-    depends_on:
-      dashboard-repo:
-        condition: service_healthy
-    restart: unless-stopped
+    - ./instances.yaml:/app/instances.yaml:ro
+    - ./collector/checks.yaml:/app/checks.yaml:ro    # alert check overrides
+    - collector-state:/state                        # checkpoints; one collector per volume
     healthcheck:
-      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8090/api/health')"]
+      test:
+      - CMD
+      - python
+      - -c
+      - import urllib.request; urllib.request.urlopen('http://localhost:8090/health')
       interval: 30s
-      timeout: 10s
+      timeout: 5s
       retries: 3
-      start_period: 10s
+
+  # Scrapes the collector and keeps 30 days of history; evaluates the
+  # recording rules in prometheus/rules/. Internal only (:9090).
+  prometheus:
+    image: prom/prometheus:v3.13.4
+    restart: unless-stopped
+    command:
+    - --config.file=/etc/prometheus/prometheus.yml
+    - --storage.tsdb.path=/prometheus
+    - --storage.tsdb.retention.time=30d
+    volumes:
+    - ./prometheus:/etc/prometheus:ro
+    - prometheus-data:/prometheus
+    depends_on:
+    - collector
+
+  # Dashboards, alerting, and user accounts. Provisioned from grafana/;
+  # reachable only through the gateway (internal :3000).
+  grafana:
+    image: grafana/grafana:13.2.3
+    restart: unless-stopped
+    environment:
+      GF_SECURITY_ADMIN_USER: ${GRAFANA_ADMIN_USER:-admin}
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:?Set GRAFANA_ADMIN_PASSWORD in .env}
+      GF_USERS_ALLOW_SIGN_UP: 'false'
+      GF_AUTH_ANONYMOUS_ENABLED: 'false'
+      GF_SERVER_ROOT_URL: https://${DASHBOARD_HOST:-localhost}:8443
+      GF_SECURITY_COOKIE_SECURE: 'true'
+      # Read by grafana/provisioning/alerting/contact-points.yml when activated.
+      DATA_EYES_ALERT_WEBHOOK_URL: ${DATA_EYES_ALERT_WEBHOOK_URL:-}
+    volumes:
+    - grafana-data:/var/lib/grafana
+    - ./grafana/provisioning:/etc/grafana/provisioning:ro
+    - ./grafana/dashboards:/var/lib/grafana/dashboards:ro
+    depends_on:
+    - prometheus
+
+  # ===========================================================================
+  # 2. MCP server — one container per environment
+  # ===========================================================================
+  #
+  #   service                 profile      host port        gateway path
+  #   data-eyes-mcp-dev       (default)    127.0.0.1:8080   /mcp
+  #   data-eyes-mcp-staging   staging      127.0.0.1:8081   /staging/
+  #   data-eyes-mcp-prod      production   127.0.0.1:8082   /production/
 
   data-eyes-mcp-dev:
-    build: ./mcp
-    image: data-eyes-mcp
+    <<: *mcp-service
     container_name: data-eyes-mcp-dev
-    command: ["python", "-m", "data_eyes_mcp.cli", "--transport", "http", "--bind", "0.0.0.0:8080"]
     env_file:
-      - path: ./mcp/.env
-      - path: ./mcp/.env.dev
-        required: false
+    - path: ./mcp/.env
+    - path: ./mcp/.env.dev
+      required: false
     environment:
-      INSTANCES_FILE: /app/instances.yaml
+      <<: *mcp-environment
       DEPLOYMENT_ENVIRONMENT: development
       INSTANCE_ALLOWLIST: dev
-      STAGING_MSSQL_USER: ""
-      STAGING_MSSQL_PASSWORD: ""
-      PROD_MSSQL_USER: ""
-      PROD_MSSQL_PASSWORD: ""
-      REPOSITORY_DSN: postgresql://data_eyes_mcp:${MCP_REPO_PASSWORD:?Set MCP_REPO_PASSWORD in .env}@dashboard-repo:5432/data_eyes_dashboard
-    volumes:
-      - ./instances.yaml:/app/instances.yaml:ro
+      STAGING_MSSQL_USER: ''
+      STAGING_MSSQL_PASSWORD: ''
+      PROD_MSSQL_USER: ''
+      PROD_MSSQL_PASSWORD: ''
     ports:
-      - "127.0.0.1:8080:8080"
-    depends_on:
-      dashboard-repo:
-        condition: service_healthy
-    restart: unless-stopped
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 10s
+    - 127.0.0.1:8080:8080
 
   data-eyes-mcp-staging:
-    profiles: ["staging"]
-    build: ./mcp
-    image: data-eyes-mcp
+    <<: *mcp-service
+    profiles:
+    - staging
     container_name: data-eyes-mcp-staging
-    command: ["python", "-m", "data_eyes_mcp.cli", "--transport", "http", "--bind", "0.0.0.0:8080"]
     env_file:
-      - path: ./mcp/.env
-      - path: ./mcp/.env.staging
-        required: false
+    - path: ./mcp/.env
+    - path: ./mcp/.env.staging
+      required: false
     environment:
-      INSTANCES_FILE: /app/instances.yaml
+      <<: *mcp-environment
       DEPLOYMENT_ENVIRONMENT: staging
       INSTANCE_ALLOWLIST: staging
-      DEV_MSSQL_USER: ""
-      DEV_MSSQL_PASSWORD: ""
-      PROD_MSSQL_USER: ""
-      PROD_MSSQL_PASSWORD: ""
-      REPOSITORY_DSN: postgresql://data_eyes_mcp:${MCP_REPO_PASSWORD:?Set MCP_REPO_PASSWORD in .env}@dashboard-repo:5432/data_eyes_dashboard
-    volumes:
-      - ./instances.yaml:/app/instances.yaml:ro
+      DEV_MSSQL_USER: ''
+      DEV_MSSQL_PASSWORD: ''
+      PROD_MSSQL_USER: ''
+      PROD_MSSQL_PASSWORD: ''
     ports:
-      - "127.0.0.1:8081:8080"
-    depends_on:
-      dashboard-repo:
-        condition: service_healthy
-    restart: unless-stopped
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 10s
+    - 127.0.0.1:8081:8080
 
   data-eyes-mcp-prod:
-    profiles: ["production"]
-    build: ./mcp
-    image: data-eyes-mcp
+    <<: *mcp-service
+    profiles:
+    - production
     container_name: data-eyes-mcp-prod
-    command: ["python", "-m", "data_eyes_mcp.cli", "--transport", "http", "--bind", "0.0.0.0:8080"]
     env_file:
-      - path: ./mcp/.env
-      - path: ./mcp/.env.production
-        required: false
+    - path: ./mcp/.env
+    - path: ./mcp/.env.production
+      required: false
     environment:
-      INSTANCES_FILE: /app/instances.yaml
+      <<: *mcp-environment
       DEPLOYMENT_ENVIRONMENT: production
       INSTANCE_ALLOWLIST: prod
-      DEV_MSSQL_USER: ""
-      DEV_MSSQL_PASSWORD: ""
-      STAGING_MSSQL_USER: ""
-      STAGING_MSSQL_PASSWORD: ""
-      REPOSITORY_DSN: postgresql://data_eyes_mcp:${MCP_REPO_PASSWORD:?Set MCP_REPO_PASSWORD in .env}@dashboard-repo:5432/data_eyes_dashboard
-    volumes:
-      - ./instances.yaml:/app/instances.yaml:ro
+      DEV_MSSQL_USER: ''
+      DEV_MSSQL_PASSWORD: ''
+      STAGING_MSSQL_USER: ''
+      STAGING_MSSQL_PASSWORD: ''
     ports:
-      - "127.0.0.1:8082:8080"
-    depends_on:
-      dashboard-repo:
-        condition: service_healthy
-    restart: unless-stopped
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 10s
+    - 127.0.0.1:8082:8080
 
-  dashboard-frontend:
-    build: ./frontend
-    image: data-eyes-dashboard-frontend
-    container_name: data-eyes-dashboard-frontend
-    depends_on:
-      dashboard-backend:
-        condition: service_healthy
-    restart: unless-stopped
+  # ===========================================================================
+  # 3. Gateway — single TLS entry point (Caddy, see gateway/Caddyfile)
+  # ===========================================================================
 
+  # https://${DASHBOARD_HOST}:8443 → Grafana at /, MCP environments at
+  # /mcp, /staging/, /production/. Set DASHBOARD_BIND_IP to expose it beyond
+  # localhost.
   gateway:
     build: ./gateway
     environment:
       DASHBOARD_HOST: ${DASHBOARD_HOST:-localhost}
     ports:
-      - "${DASHBOARD_BIND_IP:-127.0.0.1}:8443:8443"
+    - ${DASHBOARD_BIND_IP:-127.0.0.1}:8443:8443
     volumes:
-      - gateway-data:/data
-      - gateway-config:/config
+    - gateway-data:/data        # internal CA and certificates
+    - gateway-config:/config
     depends_on:
-      - dashboard-frontend
-      - data-eyes-mcp-dev
+    - grafana
+    - data-eyes-mcp-dev
     restart: unless-stopped
     security_opt:
-      - no-new-privileges:true
+    - no-new-privileges:true
 
+  # ===========================================================================
+  # 4. Testing tools (opt-in profiles)
+  # ===========================================================================
+
+  # One-shot load generator built from the MCP image (profile: loadtest).
   loadgen:
-    profiles: ["loadtest"]
+    profiles:
+    - loadtest
     build: ./mcp
     image: data-eyes-mcp
-    entrypoint: ["python", "/app/loadgen/run.py"]
+    entrypoint:
+    - python
+    - /app/loadgen/run.py
     environment:
-      PYTHONUNBUFFERED: "1"
+      PYTHONUNBUFFERED: '1'
     volumes:
-      - ./instances.yaml:/app/instances.yaml:ro
-      - ./loadgen:/app/loadgen:ro
-    restart: "no"
+    - ./instances.yaml:/app/instances.yaml:ro
+    - ./loadgen:/app/loadgen:ro
+    restart: 'no'
 
+# =============================================================================
+# Named volumes — persistent state
+# =============================================================================
 volumes:
-  dashboard-repo-data:
-  gateway-data:
-  gateway-config:
+  prometheus-data:    # 30-day TSDB
+  grafana-data:       # users, sessions, alert state
+  collector-state:    # collector checkpoints
+  gateway-data:       # Caddy certificates
+  gateway-config:     # Caddy autosaved config

@@ -1,0 +1,7 @@
+# Catalog defaults apply unless overridden. Restart collector after editing.
+# Exclusions merge; instance settings override fleet settings.
+checks: []
+# - alert_key: cpu_utilization
+#   instance_name: ""
+#   warning_threshold: 80
+#   critical_threshold: 95

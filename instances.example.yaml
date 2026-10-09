@@ -1,18 +1,10 @@
 # Copy this file to instances.yaml and replace the placeholders locally.
-# Never commit production credentials.
 
-# HTTP bearer tokens map to principals through HTTP_TOKEN_HASHES.
-# Only stdio uses DEFAULT_PRINCIPAL. Ad-hoc SQL is disabled in every environment.
 mcp_security:
   principals:
     development-agent:
       tools: ["*"]
       instances: ["dev"]
-      objects:
-        - databases: ["master"]
-          schemas: ["*"]
-          tables: ["*"]
-          columns: ["*"]
     staging-agent:
       tools:
         - list_configured_instances
@@ -23,7 +15,6 @@ mcp_security:
         - schema_discovery
         - get_relationships
         - get_database_info
-        - get_policy_info
         - check_db_connection
         - wait_stats
         - missing_indexes
@@ -39,17 +30,11 @@ mcp_security:
         - job_health
         - fleet_health_score
       instances: ["staging"]
-      objects:
-        - databases: ["master"]
-          schemas: ["*"]
-          tables: ["*"]
-          columns: ["*"]
     production-agent:
       tools:
         - list_configured_instances
         - list_databases
         - get_database_info
-        - get_policy_info
         - check_db_connection
         - wait_stats
         - missing_indexes
@@ -65,11 +50,6 @@ mcp_security:
         - job_health
         - fleet_health_score
       instances: ["prod"]
-      objects:
-        - databases: ["master"]
-          schemas: ["*"]
-          tables: ["*"]
-          columns: ["*"]
 
 instances:
   - name: prod

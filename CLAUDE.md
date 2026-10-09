@@ -1,32 +1,39 @@
 # Data Eyes — SQL Server Monitoring, Performance & Maintenance Toolkit
 
-Open-source toolkit for complete visibility and best-practice automation on Microsoft SQL Server. The deployable services live at the repository root: the dashboard, MCP gateway, PostgreSQL repository, and shared `instances.yaml` fleet configuration. The dashboard runs trusted fixed queries directly; MCP exposes the same configured fleet to agents and reads the shared trend repository. The old Grafana stack has been removed.
+Open-source toolkit for complete visibility and best-practice automation on Microsoft SQL Server. The deployable services live at the repository root: a Python collector, Prometheus, Grafana, the MCP server, a Caddy gateway, and the shared `instances.yaml` fleet configuration. The collector runs trusted fixed read-only queries against the fleet and exposes cached `/metrics`; Prometheus keeps 30 days of history; Grafana provides dashboards, alerting, and user accounts. MCP exposes the same configured fleet to agents and reads history from Prometheus.
 
 ## Repository Structure
 ```text
 data-eyes/
-|-- docs/                    Architecture, setup, features, security, integrations
-|-- backend/
-|   |-- app/core/            Settings, encryption, shared limits
-|   |-- app/infrastructure/  PostgreSQL pool/schema, SQL Server client
-|   |-- app/modules/         Auth, users, instances, monitoring, insights, alerts, notifications
-|   `-- tests/modules/       Tests grouped by feature
-|-- frontend/
-|   |-- src/app/             Routing, providers, application shell
-|   |-- src/features/        Feature pages, components, hooks, API calls, types
-|   `-- src/shared/          HTTP client, common types, components, styles
-|-- gateway/                Caddy TLS and reverse-proxy configuration
+|-- collector/
+|   |-- app/main.py          FastAPI app: /metrics and /health, startup
+|   |-- app/config.py        Settings, instances.yaml, checks.yaml
+|   |-- app/sql.py           SQL Server client (lanes, timeouts, app name)
+|   |-- app/scheduler.py     Collection loops and cached Prometheus samples
+|   |-- app/metrics.py       7 metric groups (30 s; databases every 5 min) and their SQL
+|   |-- app/alerts/          catalog (56 checks in 7 groups), evaluation, checks/ (6 modules)
+|   |-- tests/               Alert checks, evaluation, configuration, exporter, HTTP, SQL client
+|   `-- checks.yaml          Alert check overrides (thresholds, per-instance settings)
+|-- prometheus/              Scrape config (30 s), 3 recording rules
+|-- grafana/
+|   |-- dashboards/          4 dashboards: fleet, instance, database, health
+|   `-- provisioning/        Datasource, dashboard provider, 6 alert rules, contact-point template
+|-- gateway/                 Caddy HTTPS :8443 (Grafana at /, MCP at /mcp, /staging/mcp, /production/mcp)
 |-- mcp/
-|   |-- src/data_eyes_mcp/   Core, security, database, tools, transport, observability
-|   |-- tests/              Core and security regression tests
-|   `-- sql/                SQL Server login provisioning
-|-- repository/init/        PostgreSQL first-run initialization
-|-- assets/                 Project branding
-|-- .github/                CI workflows
-|-- .claude/                Agent definitions, commands, knowledge, SQL toolkits
-|-- instances.yaml          Local shared fleet file; ignored by Git
-|-- docker-compose.yml      Integrated stack
-`-- .mcp.json               Local MCP client registration
+|   |-- src/data_eyes_mcp/   main, config, auth, db, output, queries (diagnostic SQL), tools (27 tools)
+|   |-- tests/               Config, auth, db, and tool tests
+|   `-- sql/                 SQL Server login provisioning (read-only, alerting permissions)
+|-- assets/                  Project branding
+|-- .github/workflows/       security.yml (MCP tests, promtool, image builds, pip-audit, gitleaks)
+|-- .claude/                 2 agents, 12 commands, static KB (5 files), SQL toolkits
+|   `-- resources/
+|       |-- performance/     9 diagnostic queries (+ JSON variants), 5 docs, tuning workbook
+|       |-- maintenance/     2 playbooks, 7 diagnostics, 3 Ola Hallengren use cases
+|       `-- sql-scripts/     84 scripts across 18 sub-folders
+|-- README.md                Full setup, configuration, services, MCP, security guide
+|-- instances.yaml           Local shared fleet file; ignored by Git (template: instances.example.yaml)
+|-- docker-compose.yml       Integrated stack (MCP dev/staging/prod profiles, gateway, collector, Prometheus, Grafana)
+`-- .mcp.json                Local MCP client registration (stdio, dev instance)
 ```
 
 ## Key Conventions
@@ -36,7 +43,7 @@ data-eyes/
 - Connection via $MSSQL_CONNECTION env var or manual credential prompt
 - Ola Hallengren parameters use @Databases, @Directory, @CleanupTime etc.
 - Prefer a live `data-eyes-mcp` tool call over reading a script as text whenever an MCP server is reachable — scripts remain the reference/copy-paste source, not the primary path (see `sql-server-dba` agent's Knowledge Resolution order)
-- `docker-compose.yml` starts the dashboard, MCP, and PostgreSQL together; both SQL-facing services read `instances.yaml`. Never display `.env` contents or connection strings.
+- `docker-compose.yml` starts the collector, Prometheus, Grafana, MCP, and gateway together; both SQL-facing services (collector, MCP) read `instances.yaml`. Run exactly one collector per checkpoint volume. Never display `.env` contents or connection strings.
 
 ## SQL Naming Standards (Data Eyes Guidelines)
 
@@ -55,7 +62,7 @@ data-eyes/
 |---------|---------|
 | /sql-document | Generate database documentation from catalog views |
 | /sql-maintenance | Set up maintenance using Ola Hallengren scripts |
-| /sql-monitor | Diagnose and configure the Data Eyes dashboard app |
+| /sql-monitor | Diagnose and configure the Data Eyes monitoring stack (collector, Prometheus, Grafana) |
 | /sql-performance | Systematic performance tuning (10-step methodology) |
 | /sql-guidelines | Review SQL against clean code guidelines |
 | /sql-scripts | Find and adapt scripts from the 84-script library |
@@ -70,8 +77,8 @@ data-eyes/
 
 Two layers:
 
-- **Static domain KB** (`.claude/knowledge-base/_static/`) — thresholds, taxonomy, naming conventions, methodology, and the scripts index. Severity SQL is duplicated between `mcp/src/data_eyes_mcp/tools/diagnostics` and `backend/app/modules/monitoring/diagnostics`; keep both synchronized with the KB. Alert catalog defaults (`backend/app/modules/alerts/catalog.py`) mirror the `alerts:` section of `thresholds.yaml`, enforced by `test_alert_catalog.py`; alert checks live only in the backend, and MCP sees their results as `alert.<key>` snapshots.
-- **Per-database KB** (`.claude/knowledge-base/<database-name>.md`) — built by /sql-kb, consumed by /sql-pr-review. Contains:
+- **Static domain KB** (`.claude/knowledge-base/_static/`) — thresholds, taxonomy, naming conventions, methodology, and the scripts index. Diagnostic severity SQL for the MCP tools lives in `mcp/src/data_eyes_mcp/queries.py`; keep it synchronized with the KB. The collector keeps its own fixed SQL (`collector/app/metrics.py`, `collector/app/alerts/checks/`). Alert catalog defaults (`collector/app/alerts/catalog.py`) mirror the `alerts:` section of `thresholds.yaml` — change both together; deployment overrides go in `collector/checks.yaml`. Alert checks live only in the collector, and MCP sees their results as `alert.<key>` history from Prometheus.
+- **Per-database KB** (none built yet) (`.claude/knowledge-base/<database-name>.md`) — built by /sql-kb, consumed by /sql-pr-review. Contains:
   - Table volumes with SMALL/MEDIUM/HIGH/CRITICAL classification
   - Existing index inventory with usage stats
   - Missing index hints from DMV
