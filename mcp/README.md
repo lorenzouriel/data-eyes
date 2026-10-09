@@ -1,4 +1,4 @@
-> **Security:** Read the [security hardening guide](../docs/security/security-hardening.md) before deploying. HTTP MCP requires bearer tokens; ad-hoc SQL is disabled; the dashboard uses HTTPS on port 8443.
+> **Security:** Read the [security hardening guide](../README.md#security) before deploying. HTTP MCP requires bearer tokens; ad-hoc SQL is disabled; the dashboard uses HTTPS on port 8443.
 
 # Data Eyes MCP server
 
@@ -17,13 +17,13 @@ src/data_eyes_mcp/
   tools.py    all 27 tools: discovery, diagnostics, Prometheus history
 ```
 
-The canonical guide is [docs/features/mcp.md](../docs/features/mcp.md). Related guides:
+The canonical guide is [docs/features/mcp.md](../README.md#mcp-server). Related guides:
 
-- [Architecture](../docs/architecture/architecture.md)
-- [Shared configuration](../docs/getting-started/configuration.md)
-- [Deployment](../docs/getting-started/deployment.md)
-- [Development](../docs/development/development.md)
-- [MCP security model](../docs/security/mcp-security.md)
+- [Architecture](../README.md)
+- [Shared configuration](../README.md#configuration)
+- [Deployment](../README.md#quick-start)
+- [Development](../README.md#development)
+- [MCP security model](../README.md#security)
 
 ## Quick local start
 
