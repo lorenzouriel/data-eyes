@@ -1,11 +1,11 @@
 -- #######################
 -- TOP 25 UNUSED INDEXES — structured/severity form
 -- Purpose: Same as unused_indexes.sql, but adds a severity classification and
---          emits FOR JSON AUTO output for MCP/dashboard consumption.
+--          emits FOR JSON AUTO output for MCP/collector consumption.
 -- Thresholds: .claude/knowledge-base/_static/thresholds.yaml -> index.unused_index_update_cost
 -- Caveat: sys.dm_db_index_usage_stats resets on SQL Server service restart —
 --         a recently restarted instance will under-report usage. Cross-check
---         instance uptime (Overview tab / fleet_health_score) before treating
+--         instance uptime (fleet_health_score) before treating
 --         a CRITICAL/WARNING result here as conclusive.
 -- #######################
 

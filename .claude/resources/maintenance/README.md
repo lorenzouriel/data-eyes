@@ -39,7 +39,7 @@ This maintenance solution delivers automated operational tasks for SQL Server da
 
 The maintenance solution is the **automation component** of the Data Eyes ecosystem:
 
-1. **Monitoring** ([Data Eyes dashboard](../../../docs/features/dashboard.md)) - Live fleet visibility and trends
+1. **Monitoring** ([Data Eyes dashboard](../../../README.md#grafana)) - Live fleet visibility and trends
 2. **Performance** ([performance/](../performance/)) - Analysis and tuning guidance
 3. **Maintenance** (this solution) - Automated operational tasks
 

@@ -4,7 +4,7 @@
 
 ## Purpose
 
-Per-database AG sync health — a replica can report `HEALTHY` while one of its databases is `NOT SYNCHRONIZING`. Ports the query already documented in `monitor/docs/availability_groups.md` into a severity-classified form.
+Per-database AG sync health — a replica can report `HEALTHY` while one of its databases is `NOT SYNCHRONIZING`. Severity-classified.
 
 ## Output columns
 
@@ -16,4 +16,4 @@ Per-database AG sync health — a replica can report `HEALTHY` while one of its 
 
 ## Notes
 
-Returns an **empty result set, not an error**, on standalone/non-AG instances. The dashboard's AG tab (per the rearchitecture plan) should hide itself when this returns nothing, matching how `fleet_overview.json`'s `STANDALONE` handling already works.
+Returns an **empty result set, not an error**, on standalone/non-AG instances. Callers should treat that as "no AG", not as healthy or failed.

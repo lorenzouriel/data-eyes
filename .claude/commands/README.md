@@ -8,10 +8,10 @@
 |---------|-------------|
 | `/sql-document` | Generate database documentation from catalog views |
 | `/sql-maintenance` | Set up maintenance using Ola Hallengren scripts |
-| `/sql-monitor` | Diagnose and configure the Data Eyes dashboard app |
+| `/sql-monitor` | Diagnose and configure the monitoring stack (collector, Prometheus, Grafana, gateway) |
 | `/sql-performance` | Systematic performance tuning (10-step methodology) |
 | `/sql-guidelines` | Review SQL against clean code guidelines |
-| `/sql-scripts` | Find and adapt scripts from the 80+ script library |
+| `/sql-scripts` | Find and adapt scripts from the 84-script library |
 
 ## Knowledge-Driven Review (2)
 
@@ -30,7 +30,7 @@
 
 | Command | Description |
 |---------|-------------|
-| `/status` | Health report — components, monitor stack, KB freshness, recommendations |
+| `/status` | Health report — components, monitoring stack, KB freshness, recommendations |
 | `/sync-context` | Update CLAUDE.md with current repo structure and script inventory |
 | `/memory` | Save valuable DBA session insights (findings, decisions, gotchas) |
 
@@ -54,16 +54,16 @@
 /sql-pr-review --branch-diff main
 
 # Performance investigation
-/performance "high CPU, queries slowed down"
+/sql-performance "high CPU, queries slowed down"
 
 # Find a script
 /sql-scripts "check blocking sessions"
 
 # Set up maintenance
-/maintenance "weekly index optimization for all user databases"
+/sql-maintenance "weekly index optimization for all user databases"
 
-# Dashboard app troubleshooting
-/sql-monitor "the dashboard says prod1 is unreachable"
+# Monitoring stack troubleshooting
+/sql-monitor "Grafana shows prod as unreachable"
 ```
 
 ## Agents
@@ -71,6 +71,6 @@
 | Agent | Description |
 |-------|-------------|
 | `sql-server-dba` | SQL Server troubleshooting, performance tuning, maintenance |
-| `dashboard-app` | Data Eyes dashboard app configuration and diagnostics |
+| `dashboard-app` | Collector, Prometheus, Grafana, and deployment configuration and diagnostics |
 
 Agents are in `.claude/agents/` and are automatically available via the Agent tool.

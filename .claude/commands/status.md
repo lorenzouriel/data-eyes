@@ -1,6 +1,6 @@
 ---
 name: status
-description: Data Eyes project health report — dashboard app, maintenance coverage, script inventory, KB freshness, and recommendations
+description: Data Eyes project health report — monitoring stack, maintenance coverage, script inventory, KB freshness, and recommendations
 ---
 
 # /status Command
@@ -18,8 +18,8 @@ description: Data Eyes project health report — dashboard app, maintenance cove
 
 ## What It Does
 
-1. **Scans** all toolkit components (dashboard/mcp, performance, maintenance, sql-scripts)
-2. **Checks** dashboard app health (Docker containers, instance registry)
+1. **Scans** all toolkit components (collector, Prometheus, Grafana, MCP, performance, maintenance, sql-scripts)
+2. **Checks** monitoring stack health (Docker containers, fleet file, config files)
 3. **Audits** knowledge base freshness and coverage
 4. **Counts** script inventory across all 18 sub-folders
 5. **Generates** actionable recommendations
@@ -33,10 +33,16 @@ Execute all steps inline (no agent delegation).
 ### Step 1: Scan Toolkit Components
 
 ```text
-# Dashboard app + MCP (agent-only, separate from the dashboard)
-Glob("dashboard/docker-compose.yml")
-Glob("dashboard/backend/instances.yaml")
-Glob("mcp/docker-compose.yml")
+# Monitoring stack + MCP (root docker-compose.yml runs all of them)
+Glob("docker-compose.yml")
+Glob("instances.yaml")                 # fleet file — ignored by Git
+Glob("collector/app/**/*.py")
+Glob("collector/checks.yaml")
+Glob("prometheus/*.yml")
+Glob("prometheus/rules/*.yml")
+Glob("grafana/dashboards/*.json")
+Glob("grafana/provisioning/**/*.yml")
+Glob("mcp/src/data_eyes_mcp/*.py")
 Glob(".claude/knowledge-base/_static/*")
 
 # Performance toolkit
@@ -54,21 +60,27 @@ Glob(".claude/resources/sql-scripts/**/*.sql")
 
 Count files in each component.
 
-### Step 2: Check Dashboard App Health
+### Step 2: Check Monitoring Stack Health
 
 ```bash
 # Check if Docker is available
 docker --version 2>/dev/null || echo "Docker not installed"
 
-# Check if the dashboard app is running (only if Docker available) — no
-# no MCP container to check — the dashboard connects to SQL Server directly
-docker compose -f dashboard/docker-compose.yml ps 2>/dev/null || echo "Dashboard stack not running"
+# Service state for collector, prometheus, grafana, gateway, data-eyes-mcp-*
+docker compose ps 2>/dev/null || echo "Stack not running"
 
-# Check if .env exists for the dashboard backend
-ls dashboard/backend/.env 2>/dev/null || echo "No .env file — dashboard backend will fail to start"
+# Required env files (existence only — never print contents)
+ls .env 2>/dev/null || echo "No root .env — Grafana will refuse to start (GRAFANA_ADMIN_PASSWORD is required)"
+ls mcp/.env 2>/dev/null || echo "No mcp/.env — MCP services will fail to start"
+ls instances.yaml 2>/dev/null || echo "No instances.yaml — copy instances.example.yaml"
 ```
 
-Read `dashboard/backend/instances.yaml` — count registered instances (names only, never credentials).
+Read `instances.yaml` — count instances and list `name`/`environment` only. Never display `mssql_connection_string` values or anything under `mcp_security`.
+
+If the stack is running, the collector's health is reachable only inside Compose:
+```bash
+docker compose exec collector python -c "import urllib.request;print(urllib.request.urlopen('http://localhost:8090/health').status)"
+```
 
 ### Step 3: Audit Knowledge Base
 
@@ -117,7 +129,7 @@ git branch --show-current
 
 ```text
 # Commands
-Glob(".claude/commands/data-eyes/*.md")
+Glob(".claude/commands/*.md")
 
 # Agents
 Glob(".claude/agents/*.md")
@@ -144,19 +156,23 @@ Glob("CLAUDE.md")
 
 | Component | Files | Status | Notes |
 |-----------|-------|--------|-------|
-| Dashboard app | {N} instances registered | {Running/Stopped/Unknown} | `dashboard/` |
+| Monitoring stack | {N} instances, {N} Grafana dashboards, {N} alert rules | {Running/Stopped/Unknown} | collector → Prometheus → Grafana |
+| MCP | {N} tool modules | {Running/Stopped/Unknown} | `mcp/`, dev + optional staging/prod |
 | Performance | {N} scripts, {N} docs, workbook | Present | 10-step methodology |
 | Maintenance | {N} playbooks, {N} use cases | Present | Ola Hallengren |
 | SQL Scripts | {N} scripts across {N} folders | Present | 18 topic areas |
 
-## Dashboard App
+## Monitoring Stack
 
 | Check | Status |
 |-------|--------|
 | Docker installed | {Yes/No} |
-| Dashboard stack running | {Yes/No/Unknown} |
-| Dashboard backend .env file | {Present/Missing} |
-| Instances registered | {N} — {names} |
+| Services running | {collector / prometheus / grafana / gateway / mcp-dev: Up/Down} |
+| Root .env | {Present/Missing} |
+| mcp/.env | {Present/Missing} |
+| instances.yaml | {N} instances — {names (environment)} |
+| Check overrides (`collector/checks.yaml`) | {N} rows |
+| Collector /health | {OK/Failed/Not checked} |
 
 ## Knowledge Base
 
@@ -215,8 +231,10 @@ Generate recommendations based on:
 |-----------|---------------|
 | No KB files exist | "Run `/sql-kb <database>` to enable volume-aware PR reviews" |
 | KB older than 30 days | "Run `/sql-kb --refresh <database>` — KB is {N} days stale" |
-| Dashboard stack not running | "Run `docker compose -f dashboard/docker-compose.yml up -d` to start the dashboard app" |
-| No .env file for dashboard backend | "Copy `dashboard/backend/.env.example` to `.env` and set credentials — backend needs it to start" |
+| Stack not running | "Run `docker compose up -d` from the repository root" |
+| Root `.env` missing | "Copy `.env.example` to `.env` and set `GRAFANA_ADMIN_PASSWORD` — Grafana requires it" |
+| `mcp/.env` missing | "Copy `mcp/.env.example` to `mcp/.env` and set the per-environment SQL credential variables" |
+| `instances.yaml` missing | "Copy `instances.example.yaml` to `instances.yaml` and fill in the fleet locally" |
 | CLAUDE.md missing | "Run `/sync-context` to generate CLAUDE.md" |
 | Uncommitted changes | "Commit or stash {N} uncommitted files" |
 | New scripts added without docs | "Add documentation for new scripts in the matching docs/ folder" |

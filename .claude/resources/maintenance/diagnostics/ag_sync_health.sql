@@ -1,12 +1,11 @@
 -- #######################
 -- AVAILABILITY GROUP SYNC HEALTH — live observation, read-only, instance-wide
 -- Purpose: Per-database AG sync health (a replica can report HEALTHY while one
---          of its databases is NOT SYNCHRONIZING) — ports the query from
---          monitor/docs/availability_groups.md into a severity-classified,
+--          of its databases is NOT SYNCHRONIZING), in a severity-classified,
 --          MCP-tool-consumable form.
 -- Thresholds: .claude/knowledge-base/_static/thresholds.yaml -> availability_groups
 -- Note: returns an empty result set (not an error) on standalone/non-AG
---       instances — the dashboard's AG tab should hide itself in that case.
+--       instances; callers should treat that as "no AG", not as healthy or failed.
 -- #######################
 
 ;WITH Base AS (

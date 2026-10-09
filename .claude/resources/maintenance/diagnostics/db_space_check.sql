@@ -1,9 +1,6 @@
 -- #######################
 -- DATABASE SPACE & DRIVE FREE SPACE — live observation, read-only
--- Purpose: Closes the "Storage" gap — this logic previously only existed as
---          inline Grafana panel SQL and prose in
---          monitor/docs/database_space_usage.md ("Database size per
---          database" panel). Per-file size/free-space plus underlying drive
+-- Purpose: The "Storage" category. Per-file size/free-space plus underlying drive
 --          free space, since a database can have plenty of free space
 --          inside its files while the drive hosting them is nearly full.
 -- Thresholds: .claude/knowledge-base/_static/thresholds.yaml -> storage.drive_free_space_gb

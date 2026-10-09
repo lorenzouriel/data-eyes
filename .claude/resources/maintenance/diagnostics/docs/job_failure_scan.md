@@ -4,7 +4,7 @@
 
 ## Purpose
 
-Most recent run outcome and 7-day failure count per enabled job — ports `monitor/docs/jobs_monitoring.md`'s "Failed Job Runs" and "Job Run History" queries into one severity-classified form.
+Most recent run outcome and 7-day failure count per enabled job, in one severity-classified form.
 
 ## Output columns
 

@@ -4,7 +4,7 @@
 
 ## Purpose
 
-Point-in-time view of active blocking, instance-wide, with head-blocker identification — feeds the Sessions/Blocking tab and Step 3 (Contention) of the performance methodology.
+Point-in-time view of active blocking, instance-wide, with head-blocker identification — feeds the Blocking category and Step 3 (Contention) of the performance methodology.
 
 ## Output columns
 
@@ -16,4 +16,4 @@ Point-in-time view of active blocking, instance-wide, with head-blocker identifi
 
 ## Notes
 
-This is a snapshot, not a trend — a single call only catches blocking active at that instant. For the dashboard's background poller (§4 of the rearchitecture plan), call this repeatedly to detect persistent vs. transient blocking.
+This is a snapshot, not a trend — a single call only catches blocking active at that instant. Call it repeatedly to tell persistent from transient blocking; the collector's `blocking` check does this with consecutive-sample confirmation.

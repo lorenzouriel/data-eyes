@@ -4,7 +4,7 @@
 
 ## Purpose
 
-Per-file size/free-space plus the underlying drive's free space — the "Storage" DPA-style tab. Ports `monitor/docs/database_space_usage.md`'s "Database size per database" panel, which previously existed only as inline Grafana panel SQL.
+Per-file size/free-space plus the underlying drive's free space — the "Storage" DPA-style category.
 
 ## Output columns
 

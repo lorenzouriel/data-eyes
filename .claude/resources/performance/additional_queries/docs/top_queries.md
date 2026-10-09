@@ -4,7 +4,7 @@
 
 ## Purpose
 
-Ranks queries by average elapsed time per execution — the "Top SQL" DPA-style tab. Ports and merges the "Top 10 Longest Running Queries" (`monitor/docs/query_perfomance.md`) and "Slow Query Alerts (> 30s)" (`monitor/docs/other_metrics.md`) panels, which previously existed only as inline Grafana panel SQL with no standalone script.
+Ranks queries by average elapsed time per execution — the "Top SQL" DPA-style category.
 
 ## Output columns
 

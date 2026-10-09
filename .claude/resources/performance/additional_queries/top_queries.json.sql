@@ -1,13 +1,10 @@
 -- #######################
 -- TOP QUERIES BY AVERAGE DURATION — structured/severity form
--- Purpose: Closes the "Top SQL" gap — this logic previously only existed as
---          inline Grafana panel SQL (monitor/dashboards/sqlserver.json) and
---          prose in monitor/docs/query_perfomance.md /
---          monitor/docs/other_metrics.md. No plain copy-paste sibling exists
+-- Purpose: The "Top SQL" category. No plain copy-paste sibling exists
 --          (unlike the other .claude/resources/performance/additional_queries/ scripts) since
 --          this one was authored directly in structured form.
 -- Thresholds: .claude/knowledge-base/_static/thresholds.yaml -> query_performance.avg_duration_ms
---             (critical tier matches other_metrics.md's existing ">30s" slow-query language)
+--             (critical tier uses the conventional ">30s" slow-query cutoff)
 -- Params: @DatabaseName = NULL checks all databases; set it to scope to one.
 -- #######################
 

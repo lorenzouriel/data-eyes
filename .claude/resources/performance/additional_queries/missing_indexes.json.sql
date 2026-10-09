@@ -1,7 +1,7 @@
 -- #######################
 -- TOP 25 MISSING INDEXES BY ESTIMATED IMPACT — structured/severity form
 -- Purpose: Same as missing_indexes.sql, but adds a severity classification and
---          emits FOR JSON AUTO output for MCP/dashboard consumption.
+--          emits FOR JSON AUTO output for MCP/collector consumption.
 -- Thresholds: .claude/knowledge-base/_static/thresholds.yaml -> index.missing_index_impact_score
 --             (heuristic — no documented industry-standard value, tune per workload)
 -- #######################

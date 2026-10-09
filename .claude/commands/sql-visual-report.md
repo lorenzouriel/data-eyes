@@ -31,7 +31,7 @@ description: Generate a self-contained HTML report visualizing SQL Server perfor
 
 1. Collects DBA actions from the current session (or git diff)
 2. Loads knowledge base for volume context if available
-3. Generates a **self-contained HTML page** with SQL Server and Grafana branding
+3. Generates a **self-contained HTML page** with Data Eyes branding
 4. Visualizes before/after baselines, index changes, config diffs, and maintenance schedules
 5. Writes to `docs/reports/` and opens in browser
 
@@ -39,7 +39,7 @@ description: Generate a self-contained HTML report visualizing SQL Server perfor
 
 ## Brand Colors
 
-The report uses the Data Eyes brand palette throughout — reused verbatim from `dashboard/frontend/src/styles.css` (itself the dataviz skill's validated reference palette), not invented separately:
+The report uses the Data Eyes brand palette throughout — based on the dataviz skill's validated reference palette, not invented separately. This block is the canonical copy:
 
 ```css
 :root {
@@ -61,7 +61,7 @@ The report uses the Data Eyes brand palette throughout — reused verbatim from 
     --text-secondary: #666666;
     --border: #E0E0E0;
 
-    /* Status colors — match dashboard/frontend's fixed status palette */
+    /* Status colors — fixed status palette (OK / Warning / Critical / Info) */
     --status-good: #0CA30C;
     --status-warn: #FAB219;
     --status-critical: #D03B3B;
@@ -269,7 +269,7 @@ Styled cards with severity indicators:
 - **No JavaScript libraries** — vanilla JS only for interactivity (collapsible sections, sticky nav)
 - **Responsive** — works on desktop and tablet
 - **Print-friendly** — `@media print` styles included
-- **Dark mode** — `prefers-color-scheme: dark` support with the same dark-mode violet/aqua steps `dashboard/frontend` uses
+- **Dark mode** — `prefers-color-scheme: dark` support with darker/lighter steps of the same violet/aqua
 - **Sticky navigation** — sidebar or top nav for section jumping
 - **Overflow protection** — `min-width: 0` on flex/grid children, `overflow-wrap: break-word`
 

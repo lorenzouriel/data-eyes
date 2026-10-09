@@ -1,6 +1,6 @@
 # Data Eyes — Scripts Index
 
-Catalog of every script in the toolkit, its read-only/write nature, and whether an MCP tool wraps it. This is the layer that lets an agent (or the dashboard backend) answer "what can I run to check X" without re-deriving it from folder names each time.
+Catalog of every script in the toolkit, its read-only/write nature, and whether an MCP tool wraps it. This is the layer that lets an agent (or the collector) answer "what can I run to check X" without re-deriving it from folder names each time.
 
 ## .claude/resources/performance/additional_queries/ — read-only, diagnostic
 
@@ -12,7 +12,7 @@ Catalog of every script in the toolkit, its read-only/write nature, and whether 
 | Stale statistics | `update_statistics.sql` | `update_statistics.json.sql` | `stale_statistics` |
 | Top queries by duration | — (structured form only, see below) | `top_queries.json.sql` | `top_queries` |
 
-The first four `.json.sql` copies emit `severity` (from [[thresholds]]) and `FOR JSON AUTO` output alongside an unchanged plain `.sql` original (copy-paste/SSMS form). `top_queries.json.sql` was authored directly in structured form during Phase 3 — it closed a gap where this logic previously existed only as inline Grafana panel SQL, so there was no pre-existing plain `.sql` to keep a sibling of.
+The first four `.json.sql` copies emit `severity` (from [[thresholds]]) and `FOR JSON AUTO` output alongside an unchanged plain `.sql` original (copy-paste/SSMS form). `top_queries.json.sql` was authored directly in structured form, so it has no plain `.sql` sibling.
 
 ## .claude/resources/maintenance/ — mixed
 
@@ -31,7 +31,7 @@ The first four `.json.sql` copies emit `severity` (from [[thresholds]]) and `FOR
 | `diagnostics/job_failure_scan.sql` | Read-only, live observation | `job_health` |
 | `diagnostics/db_space_check.sql` | Read-only, live observation | `db_space` |
 
-The `diagnostics/` folder is what closes the gap identified in the rearchitecture plan: before this pass, `.claude/resources/maintenance/` had zero live "is it healthy right now" queries — only action scripts.
+The `diagnostics/` folder holds the live "is it healthy right now" queries; the rest of `.claude/resources/maintenance/` is action scripts.
 
 ## .claude/resources/sql-scripts/ — 18 topic folders, ~84 scripts, unmodified
 
@@ -39,4 +39,4 @@ Not individually cataloged here (would duplicate `/sql-scripts` command's routin
 
 ## mcp/ generic tools (pre-existing, not diagnostic-specific)
 
-`execute_sql`, `list_schemas`, `list_tables`, `schema_discovery`, `describe_table`, `get_database_info`, `get_policy_info`, `check_db_connection`, `get_relationships`, `sample_table`, `distinct_values`, `list_databases` — schema/data exploration, not wrapping any script in this repo. See `mcp/README.md`.
+`list_configured_instances`, `list_schemas`, `list_tables`, `schema_discovery`, `describe_table`, `get_database_info`, `check_db_connection`, `get_relationships`, `sample_table`, `distinct_values`, `list_databases` — schema/data exploration, not wrapping any script in this repo. See `mcp/README.md`.

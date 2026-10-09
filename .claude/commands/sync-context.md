@@ -1,6 +1,6 @@
 ---
 name: sync-context
-description: Sync CLAUDE.md with current data-eyes structure — scripts, commands, agents, KB, and dashboard/MCP config
+description: Sync CLAUDE.md with current data-eyes structure — scripts, commands, agents, KB, and monitoring stack/MCP config
 ---
 
 # /sync-context Command
@@ -19,7 +19,7 @@ description: Sync CLAUDE.md with current data-eyes structure — scripts, comman
 
 ## What It Does
 
-1. **Scans** current repository structure (scripts, configs, dashboards)
+1. **Scans** current repository structure (scripts, configs, collector, Grafana dashboards)
 2. **Counts** scripts per sub-folder and detects new additions
 3. **Lists** available commands, agents, and KB files
 4. **Merges** with existing CLAUDE.md — preserves manual sections
@@ -33,14 +33,18 @@ description: Sync CLAUDE.md with current data-eyes structure — scripts, comman
 
 ```text
 # Core components
-Glob("dashboard/**/*")
+Glob("collector/**/*")
+Glob("prometheus/**/*")
+Glob("grafana/**/*")
+Glob("gateway/**/*")
 Glob("mcp/**/*")
+Glob("docs/**/*.md")
 Glob(".claude/resources/performance/**/*")
 Glob(".claude/resources/maintenance/**/*")
 Glob(".claude/resources/sql-scripts/**/*.sql")
 
 # .claude configuration
-Glob(".claude/commands/data-eyes/*.md")
+Glob(".claude/commands/*.md")
 Glob(".claude/agents/*.md")
 Glob(".claude/knowledge-base/*.md")
 
@@ -63,7 +67,7 @@ Build inventory table with counts. Compare against CLAUDE.md if it exists — fl
 
 Read frontmatter from each command file:
 ```text
-Read(".claude/commands/data-eyes/<name>.md")  # first 5 lines for name + description
+Read(".claude/commands/<name>.md")  # first 5 lines for name + description
 ```
 
 Read frontmatter from each agent file:
@@ -71,12 +75,15 @@ Read frontmatter from each agent file:
 Read(".claude/agents/<name>.md")  # first 10 lines for name + description + tier
 ```
 
-### Step 4: Check Dashboard/MCP Configuration
+### Step 4: Check Monitoring Stack/MCP Configuration
 
 ```text
-Read("dashboard/docker-compose.yml")        # services, ports
-Read("dashboard/backend/instances.yaml")    # instance registry seed (names only)
-Read("mcp/docker-compose.yml")              # agent-only MCP server, not used by the dashboard
+Read("docker-compose.yml")                   # services, profiles, ports, volumes
+Read("instances.yaml")                       # fleet — instance names/environments only, never connection strings
+Read("collector/checks.yaml")                # alert check overrides
+Glob("grafana/dashboards/*.json")            # dashboard count
+Read("grafana/provisioning/alerting/rules.yml")  # alert rule count
+Read("docs/architecture/architecture.md")    # confirm description still matches
 Glob(".claude/knowledge-base/_static/*")    # static KB coverage
 ```
 
@@ -125,7 +132,10 @@ Auto-generate directory tree from Glob results. Include file counts:
 
 \```
 data-eyes/
-├── dashboard/            backend ({N} routers), frontend, repository schema
+├── collector/            SQL diagnostics exporter, {N} alert check groups
+├── prometheus/           scrape config, {N} recording rules
+├── grafana/              {N} dashboards, {N} alert rules
+├── gateway/              Caddy TLS reverse proxy
 ├── mcp/                  data-eyes-mcp server, {N} DBA diagnostic tools
 └── .claude/
     ├── commands/         {N} commands
@@ -179,7 +189,7 @@ Scanning data-eyes...
 ✓ Found {N} SQL scripts across {N} sub-folders
 ✓ Found {N} commands, {N} agents
 ✓ Found {N} knowledge bases
-✓ Monitor stack: {N} dashboards, {N} docs
+✓ Monitoring stack: {N} Grafana dashboards, {N} alert rules, {N} docs
 
 Section updates:
 • Repository Structure: UPDATED ({N} new scripts detected)
@@ -199,5 +209,5 @@ CLAUDE.md updated successfully
 - After adding new SQL scripts to any sub-folder
 - After creating new commands or agents
 - After building a new knowledge base with `/sql-kb`
-- After significant changes to dashboard/MCP configuration
+- After significant changes to collector, Prometheus, Grafana, or MCP configuration
 - When onboarding team members

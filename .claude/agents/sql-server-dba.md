@@ -34,9 +34,9 @@ stop_conditions:
   - "Credentials or passwords visible in output"
   - "DROP/TRUNCATE on HIGH/CRITICAL table without DBA sign-off"
 escalation_rules:
-  - trigger: "Dashboard app or monitoring stack issue"
+  - trigger: "Collector, Prometheus, Grafana, gateway, or deployment issue"
     target: "dashboard-app"
-    reason: "Dashboard/MCP infrastructure configuration is a separate domain"
+    reason: "Monitoring stack and MCP deployment configuration is a separate domain"
   - trigger: "SQL PR review or code review request"
     target: "/sql-pr-review command"
     reason: "PR review requires KB-driven risk scoring"
@@ -52,7 +52,7 @@ escalation_rules:
 
 ### Resolution Order
 
-1. **Live `data-eyes-mcp` diagnostic tools** — if reachable through root `.mcp.json` or `docker-compose.yml`, call `list_configured_instances` and pass the selected `instance` name to the matching tool. MCP and the dashboard share `instances.yaml` and the trend repository; the dashboard retains a direct-SQL path for its fixed queries.
+1. **Live `data-eyes-mcp` diagnostic tools** — if reachable through root `.mcp.json` or `docker-compose.yml`, call `list_configured_instances` and pass the selected `instance` name to the matching tool. MCP and the collector share `instances.yaml`. For "how has this trended" questions use `get_severity_trend` / `get_latest_snapshot`, which read 30-day history from Prometheus (categories `overall` and `alert.<key>`); Prometheus holds numbers only, so SQL text, plans, and sessions always come from the live tools.
 2. **Data Eyes scripts** — `.claude/resources/performance/`, `.claude/resources/maintenance/diagnostics/`, `.claude/resources/sql-scripts/` are the reference/copy-paste source and the fallback for any environment without live MCP connectivity (e.g. a customer's own SSMS session)
 3. **Knowledge Base** — check `.claude/knowledge-base/<database>.md` for table volumes and index data
 4. **SQL Server documentation** — DMV references, sys.* catalog views

@@ -2,8 +2,8 @@
 #
 # Single source of truth for every severity threshold used across the toolkit:
 # the upgraded .claude/resources/performance/additional_queries/*.json.sql scripts, the new
-# .claude/resources/maintenance/diagnostics/*.sql scripts, the MCP dba_tools, and (later) the
-# dashboard's health_score.py rollup all read from THIS file's values.
+# .claude/resources/maintenance/diagnostics/*.sql scripts, the MCP dba_tools, and the
+# collector's diagnostics and alert catalog all read from THIS file's values.
 #
 # Do not hardcode a different copy of these numbers elsewhere. If a SQL script's
 # CASE WHEN literal needs to change, change it here first, then propagate.
@@ -86,9 +86,8 @@ availability_groups:
 
 query_performance:
   # avg elapsed time per execution — the warning tier is heuristic, the
-  # critical tier deliberately matches monitor/docs/other_metrics.md's
-  # existing "Slow Query Alerts (> 30s)" language rather than inventing a
-  # new number.
+  # critical tier uses the conventional
+  # "slow query > 30s" cutoff rather than inventing a new number.
   avg_duration_ms:
     warning: 5000
     critical: 30000
@@ -101,10 +100,9 @@ storage:
     critical: 5
 
 alerts:
-  # Defaults for the dashboard's alert catalog (backend/app/modules/alerts/catalog.py).
-  # Users override them per alert and per instance on the Alerts page.
-  # backend/tests/modules/alerts/test_alert_catalog.py fails if these drift
-  # from the catalog. direction: above = alert when the value rises to the
+  # Defaults for the collector's alert catalog (collector/app/alerts/catalog.py).
+  # Deployments override them per alert and per instance in collector/checks.yaml.
+  # Keep these and the catalog in sync by hand. direction: above = alert when the value rises to the
   # threshold; below = alert when it falls to it. Alerts with no numeric
   # threshold (fixed severity, such as a SUSPECT database) are not listed.
   # Availability
@@ -149,4 +147,3 @@ alerts:
   # Configuration & security
   certificate_expiry: {unit: "days", direction: below, warning: 30, critical: 7}
   # Data Eyes
-  notification_delivery_failing: {unit: "failures", direction: above, warning: 1, critical: 3}

@@ -1,7 +1,7 @@
 -- #######################
 -- SQL WAIT STATS — structured/severity form
 -- Purpose: Same as wait_statistics.sql, but adds a severity classification and
---          emits FOR JSON AUTO output for MCP/dashboard consumption.
+--          emits FOR JSON AUTO output for MCP/collector consumption.
 -- Thresholds: .claude/knowledge-base/_static/thresholds.yaml -> waits.percentage_of_total
 --             (heuristic — % of total wait time attributable to one wait type)
 -- Note: cumulative since last restart/DBCC SQLPERF CLEAR — same caveat as the

@@ -2,7 +2,7 @@
 -- STATISTICS STALENESS — structured/severity form
 -- Purpose: Same analysis as update_statistics.sql's Script 1, but adds a
 --          severity classification and emits FOR JSON AUTO output for
---          MCP/dashboard consumption. (Script 2 in the original — sp_updatestats
+--          MCP/collector consumption. (Script 2 in the original — sp_updatestats
 --          — is a write operation and has no structured/read-only equivalent
 --          here; run it via the original update_statistics.sql or .claude/resources/maintenance/.)
 -- Thresholds: .claude/knowledge-base/_static/thresholds.yaml -> index.stats_staleness_days

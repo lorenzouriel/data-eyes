@@ -1,7 +1,7 @@
 -- #######################
 -- BLOCKING CHAIN SNAPSHOT — live observation, read-only, instance-wide
 -- Purpose: Point-in-time snapshot of active blocking, with head-blocker
---          identification, for the Sessions/Blocking tab and Step 3
+--          identification, for the Blocking category and Step 3
 --          (Contention) of the performance methodology.
 -- Thresholds: .claude/knowledge-base/_static/thresholds.yaml -> waits.blocking_duration_seconds
 -- Note: this is a snapshot, not a trend — run repeatedly to see if a chain
