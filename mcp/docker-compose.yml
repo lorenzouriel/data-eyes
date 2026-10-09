@@ -4,7 +4,7 @@ services:
     image: data-eyes-mcp
     container_name: data-eyes-mcp-dev
     # The image defaults to stdio transport; run HTTP for a networked container.
-    command: ["python", "-m", "data_eyes_mcp.cli", "--transport", "http", "--bind", "0.0.0.0:8080"]
+    command: ["python", "-m", "data_eyes_mcp.main", "--transport", "http", "--bind", "0.0.0.0:8080"]
     ports:
       - "127.0.0.1:8080:8080"
     env_file:

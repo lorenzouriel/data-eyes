@@ -55,7 +55,8 @@ GO
   GRANT ALTER TRACE TO [$(LoginName)];
 
   Backup Failed, I/O Errors 823/824/825, Database Errors and Login Failed read
-  the error log with xp_readerrorlog, which SQL Server only allows for
+  the error log with xp_readerrorlog (and list log files with xp_enumerrorlogs
+  to catch a log cycle), which SQL Server only allows for
   securityadmin members. securityadmin can grant itself further permissions,
   so treat it as close to sysadmin. Prefer a dedicated, tightly held login, or
   leave those four alerts off.

@@ -1,7 +1,23 @@
-"""Queries implementation."""
+"""Fixed read-only diagnostic SQL behind the MCP diagnostic tools.
+
+Each function returns one complete statement. Numeric arguments are clamped
+before interpolation; an optional `database` filter is embedded as an escaped
+N'' literal.
+"""
+
+from typing import Optional
 
 
-_BENIGN_WAIT_TYPES_SQL = """
+def literal(value: str) -> str:
+    """Return a T-SQL NVARCHAR literal."""
+    return "N'" + value.replace("'", "''") + "'"
+
+
+def _database_filter(column: str, database: Optional[str]) -> str:
+    return f" AND {column} = {literal(database)}" if database else ""
+
+
+BENIGN_WAIT_TYPES_SQL = """
     N'BROKER_EVENTHANDLER', N'BROKER_RECEIVE_WAITFOR', N'BROKER_TASK_STOP',
     N'BROKER_TO_FLUSH', N'BROKER_TRANSMITTER', N'CHECKPOINT_QUEUE',
     N'CHKPT', N'CLR_AUTO_EVENT', N'CLR_MANUAL_EVENT', N'CLR_SEMAPHORE',
@@ -35,11 +51,11 @@ _BENIGN_WAIT_TYPES_SQL = """
     N'WAIT_FOR_RESULTS', N'WAIT_XTP_CKPT_CLOSE', N'WAIT_XTP_HOST_WAIT',
     N'WAIT_XTP_OFFLINE_CKPT_NEW_LOG', N'WAIT_XTP_RECOVERY',
     N'WAITFOR', N'WAITFOR_TASKSHUTDOWN', N'XE_TIMER_EVENT',
-    N'XE_DISPATCHER_WAIT'
+    N'XE_DISPATCHER_WAIT', N'SOS_WORK_DISPATCHER'
 """
 
 
-def _sql_wait_stats(top_n: int) -> str:
+def wait_stats(top_n: int) -> str:
     top_n = max(1, min(top_n, 200))
     return f"""
     SELECT TOP {top_n}
@@ -47,19 +63,15 @@ def _sql_wait_stats(top_n: int) -> str:
         wait_time_ms / 1000.0 AS Wait_Time_Seconds,
         waiting_tasks_count AS Waiting_Tasks_Count,
         wait_time_ms * 100.0 / SUM(wait_time_ms) OVER() AS Percentage_WaitTime,
-        CASE
-            WHEN wait_time_ms * 100.0 / SUM(wait_time_ms) OVER() >= 25 THEN 'CRITICAL'
-            WHEN wait_time_ms * 100.0 / SUM(wait_time_ms) OVER() >= 10 THEN 'WARNING'
-            ELSE 'OK'
-        END AS severity
+        'OK' AS severity -- Wait distribution is informational, not a distress threshold.
     FROM sys.dm_os_wait_stats
-    WHERE wait_type NOT IN ({_BENIGN_WAIT_TYPES_SQL})
+    WHERE wait_type NOT IN ({BENIGN_WAIT_TYPES_SQL})
         AND wait_time_ms >= 1
     ORDER BY Wait_Time_Seconds DESC
     """
 
 
-def _sql_missing_indexes(top_n: int) -> str:
+def missing_indexes(top_n: int) -> str:
     top_n = max(1, min(top_n, 200))
     return f"""
     SELECT TOP {top_n}
@@ -89,7 +101,7 @@ def _sql_missing_indexes(top_n: int) -> str:
     """
 
 
-def _sql_unused_indexes(top_n: int) -> str:
+def unused_indexes(top_n: int) -> str:
     top_n = max(1, min(top_n, 200))
     return f"""
     SELECT TOP {top_n}
@@ -127,7 +139,7 @@ def _sql_unused_indexes(top_n: int) -> str:
     """
 
 
-def _sql_stale_statistics(days_threshold: int) -> str:
+def stale_statistics(days_threshold: int) -> str:
     days_threshold = max(1, min(days_threshold, 3650))
     return f"""
     SELECT DISTINCT
@@ -156,7 +168,7 @@ def _sql_stale_statistics(days_threshold: int) -> str:
     """
 
 
-def _sql_index_fragmentation(min_frag_pct: float, top_n: int) -> str:
+def index_fragmentation(min_frag_pct: float, top_n: int) -> str:
     top_n = max(1, min(top_n, 500))
     return f"""
     SELECT TOP {top_n}
@@ -185,11 +197,12 @@ def _sql_index_fragmentation(min_frag_pct: float, top_n: int) -> str:
     """
 
 
-def _sql_top_queries(top_n: int) -> str:
+def top_queries(top_n: int, database: Optional[str] = None) -> str:
     top_n = max(1, min(top_n, 200))
     return f"""
     SELECT TOP {top_n}
         DB_NAME(st.dbid) AS DatabaseName,
+        qs.plan_handle AS PlanHandle,
         qs.execution_count AS ExecutionCount,
         qs.total_elapsed_time / qs.execution_count / 1000.0 AS AvgElapsedTimeMs,
         qs.total_worker_time / qs.execution_count / 1000.0 AS AvgCpuTimeMs,
@@ -208,20 +221,25 @@ def _sql_top_queries(top_n: int) -> str:
         END AS severity
     FROM sys.dm_exec_query_stats qs
     CROSS APPLY sys.dm_exec_sql_text(qs.sql_handle) st
-    WHERE st.dbid IS NOT NULL
+    WHERE st.dbid IS NOT NULL{_database_filter("DB_NAME(st.dbid)", database)}
     ORDER BY AvgElapsedTimeMs DESC
     """
 
 
-def _sql_db_space() -> str:
-    return """
+def db_space(database: Optional[str] = None) -> str:
+    # FILEPROPERTY only reads files of the current database, so in-file free
+    # space is NULL for every other database rather than silently wrong.
+    return f"""
     SELECT
-        db.name AS DatabaseName,
+        d.name AS DatabaseName,
         mf.name AS FileName,
         mf.type_desc AS FileType,
+        vs.volume_mount_point AS Drive,
         CAST(mf.size * 8.0 / 1024 AS DECIMAL(18, 2)) AS FileSizeMB,
-        CAST((mf.size - FILEPROPERTY(mf.name, 'SpaceUsed')) * 8.0 / 1024 AS DECIMAL(18, 2)) AS FreeSpaceMB,
-        CAST(100.0 * (mf.size - FILEPROPERTY(mf.name, 'SpaceUsed')) / NULLIF(mf.size, 0) AS DECIMAL(5, 2)) AS FreeSpacePct,
+        CASE WHEN mf.database_id = DB_ID() THEN
+            CAST((mf.size - FILEPROPERTY(mf.name, 'SpaceUsed')) * 8.0 / 1024 AS DECIMAL(18, 2)) END AS FreeSpaceMB,
+        CASE WHEN mf.database_id = DB_ID() THEN
+            CAST(100.0 * (mf.size - FILEPROPERTY(mf.name, 'SpaceUsed')) / NULLIF(mf.size, 0) AS DECIMAL(5, 2)) END AS FreeSpacePct,
         CAST(vs.total_bytes / 1024.0 / 1024 / 1024 AS DECIMAL(18, 2)) AS DriveSizeGB,
         CAST(vs.available_bytes / 1024.0 / 1024 / 1024 AS DECIMAL(18, 2)) AS DriveFreeSpaceGB,
         CASE
@@ -230,15 +248,15 @@ def _sql_db_space() -> str:
             ELSE 'OK'
         END AS severity
     FROM sys.master_files mf
-    INNER JOIN sys.databases db ON db.database_id = mf.database_id
+    INNER JOIN sys.databases d ON d.database_id = mf.database_id
     CROSS APPLY sys.dm_os_volume_stats(mf.database_id, mf.file_id) vs
-    WHERE db.database_id > 4 AND db.state_desc = 'ONLINE'
+    WHERE d.database_id > 4 AND d.state_desc = 'ONLINE'{_database_filter("d.name", database)}
     ORDER BY DriveFreeSpaceGB ASC
     """
 
 
-def _sql_backup_health() -> str:
-    return """
+def backup_health(database: Optional[str] = None) -> str:
+    return f"""
     WITH LastBackups AS (
         SELECT
             database_name,
@@ -251,6 +269,9 @@ def _sql_backup_health() -> str:
     SELECT
         d.name AS DatabaseName,
         d.recovery_model_desc AS RecoveryModel,
+        CASE WHEN d.group_database_id IS NOT NULL
+             THEN 'Local replica history only; missing or stale records require verification on other replicas'
+             ELSE 'Local backup history' END AS BackupEvidence,
         lb.LastFullBackup,
         DATEDIFF(HOUR, lb.LastFullBackup, GETDATE()) AS FullBackupAgeHours,
         lb.LastDiffBackup,
@@ -258,6 +279,11 @@ def _sql_backup_health() -> str:
         CASE WHEN d.recovery_model_desc <> 'SIMPLE'
              THEN DATEDIFF(MINUTE, lb.LastLogBackup, GETDATE()) ELSE NULL END AS LogBackupAgeMinutes,
         CASE
+            WHEN d.group_database_id IS NOT NULL AND (
+                lb.LastFullBackup IS NULL OR DATEDIFF(HOUR, lb.LastFullBackup, GETDATE()) >= 24
+                OR (d.recovery_model_desc <> 'SIMPLE' AND (lb.LastLogBackup IS NULL
+                    OR DATEDIFF(MINUTE, lb.LastLogBackup, GETDATE()) >= 60))
+            ) THEN 'UNKNOWN' -- Other replicas may hold the backup history.
             WHEN lb.LastFullBackup IS NULL THEN 'CRITICAL'
             WHEN DATEDIFF(HOUR, lb.LastFullBackup, GETDATE()) >= 48 THEN 'CRITICAL'
             WHEN DATEDIFF(HOUR, lb.LastFullBackup, GETDATE()) >= 24 THEN 'WARNING'
@@ -268,13 +294,13 @@ def _sql_backup_health() -> str:
         END AS severity
     FROM sys.databases d
     LEFT JOIN LastBackups lb ON lb.database_name = d.name
-    WHERE d.database_id > 4 AND d.state_desc = 'ONLINE'
+    WHERE d.database_id > 4 AND d.state_desc = 'ONLINE'{_database_filter("d.name", database)}
     ORDER BY FullBackupAgeHours DESC
     """
 
 
-def _sql_checkdb_health() -> str:
-    return """
+def checkdb_health(database: Optional[str] = None) -> str:
+    return f"""
     WITH LastCheck AS (
         SELECT DatabaseName, MAX(EndTime) AS LastCheckDBEndTime
         FROM master.dbo.CommandLog
@@ -302,12 +328,12 @@ def _sql_checkdb_health() -> str:
     FROM sys.databases d
     LEFT JOIN LastCheck lc ON lc.DatabaseName = d.name
     LEFT JOIN SuspectPages sp ON sp.database_id = d.database_id
-    WHERE d.database_id > 4 AND d.state_desc = 'ONLINE'
+    WHERE d.database_id > 4 AND d.state_desc = 'ONLINE'{_database_filter("d.name", database)}
     ORDER BY DaysSinceLastCheckDB DESC
     """
 
 
-def _sql_blocking_snapshot() -> str:
+def blocking_snapshot() -> str:
     return """
     SELECT
         r.session_id AS BlockedSessionID,
@@ -337,7 +363,7 @@ def _sql_blocking_snapshot() -> str:
     """
 
 
-def _sql_ag_health() -> str:
+def ag_health() -> str:
     return """
     SELECT
         DB_NAME(drs.database_id) AS DatabaseName,
@@ -362,7 +388,7 @@ def _sql_ag_health() -> str:
     """
 
 
-def _sql_job_health() -> str:
+def job_health() -> str:
     return """
     WITH RecentRuns AS (
         SELECT

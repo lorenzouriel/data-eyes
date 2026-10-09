@@ -1,14 +1,3 @@
-"""
-Data Eyes MCP Server - MCP server for SQL Server database access.
+"""Data Eyes MCP server: fixed, read-only SQL Server diagnostics for MCP clients."""
 
-This package provides a Model Context Protocol (MCP) server that safely exposes
-database metadata and query capabilities to LLM-based clients.
-"""
-
-__version__ = "0.1.0"
-__author__ = "Lorenzo Uriel"
-
-from data_eyes_mcp.core.config import settings
-from data_eyes_mcp.server import create_server
-
-__all__ = ["settings", "create_server"]
+__version__ = "0.2.0"
