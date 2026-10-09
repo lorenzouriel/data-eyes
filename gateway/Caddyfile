@@ -24,6 +24,6 @@ https://{$DASHBOARD_HOST:localhost}:8443 {
         reverse_proxy data-eyes-mcp-prod:8080
     }
     handle {
-        reverse_proxy dashboard-frontend:8080
+        reverse_proxy grafana:3000
     }
 }
