@@ -1,0 +1,226 @@
+{
+  "uid": "data-eyes-health",
+  "title": "Data Eyes / Health",
+  "schemaVersion": 39,
+  "version": 1,
+  "timezone": "browser",
+  "refresh": "30s",
+  "time": {
+    "from": "now-6h",
+    "to": "now"
+  },
+  "templating": {
+    "list": [
+      {
+        "name": "environment",
+        "type": "query",
+        "datasource": {
+          "type": "prometheus",
+          "uid": "prometheus"
+        },
+        "query": "label_values(data_eyes_sqlserver_reachable, environment)",
+        "includeAll": true,
+        "allValue": ".*",
+        "multi": true,
+        "refresh": 1,
+        "current": {
+          "text": "All",
+          "value": "$__all"
+        }
+      },
+      {
+        "name": "sql_instance",
+        "type": "query",
+        "datasource": {
+          "type": "prometheus",
+          "uid": "prometheus"
+        },
+        "query": "label_values(data_eyes_sqlserver_reachable, sql_instance)",
+        "includeAll": true,
+        "allValue": ".*",
+        "multi": true,
+        "refresh": 1,
+        "current": {
+          "text": "All",
+          "value": "$__all"
+        }
+      }
+    ]
+  },
+  "panels": [
+    {
+      "id": 1,
+      "title": "Exporter reachable",
+      "type": "stat",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 0,
+        "w": 12,
+        "h": 8
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "up{job=\"data-eyes\"}",
+          "instant": true,
+          "format": "time_series",
+          "legendFormat": "{{sql_instance}} {{category}} {{check}} {{file}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": []
+      },
+      "options": {}
+    },
+    {
+      "id": 2,
+      "title": "Diagnostic collection success",
+      "type": "table",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 0,
+        "w": 12,
+        "h": 8
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "data_eyes_collection_success{sql_instance=~\"${sql_instance:regex}\",environment=~\"${environment:regex}\"}",
+          "instant": true,
+          "format": "table",
+          "legendFormat": "{{sql_instance}} {{category}} {{check}} {{file}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": []
+      },
+      "options": {},
+      "transformations": [
+        {
+          "id": "organize",
+          "options": {
+            "excludeByName": {
+              "__name__": true,
+              "job": true,
+              "instance": true
+            },
+            "indexByName": {},
+            "renameByName": {}
+          }
+        }
+      ]
+    },
+    {
+      "id": 3,
+      "title": "Seconds since successful collection",
+      "type": "table",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 8,
+        "w": 12,
+        "h": 8
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "time() - data_eyes_collection_last_success_timestamp_seconds{sql_instance=~\"${sql_instance:regex}\",environment=~\"${environment:regex}\"}",
+          "instant": true,
+          "format": "table",
+          "legendFormat": "{{sql_instance}} {{category}} {{check}} {{file}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": []
+      },
+      "options": {},
+      "transformations": [
+        {
+          "id": "organize",
+          "options": {
+            "excludeByName": {
+              "__name__": true,
+              "job": true,
+              "instance": true
+            },
+            "indexByName": {},
+            "renameByName": {}
+          }
+        }
+      ]
+    },
+    {
+      "id": 4,
+      "title": "Collection duration (seconds)",
+      "type": "timeseries",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 8,
+        "w": 12,
+        "h": 8
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "data_eyes_collection_duration_seconds{sql_instance=~\"${sql_instance:regex}\",environment=~\"${environment:regex}\"}",
+          "instant": false,
+          "format": "time_series",
+          "legendFormat": "{{sql_instance}} {{category}} {{check}} {{file}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": []
+      },
+      "options": {}
+    }
+  ],
+  "links": [
+    {
+      "title": "Fleet",
+      "type": "link",
+      "url": "/d/data-eyes-fleet",
+      "keepTime": true,
+      "includeVars": true
+    },
+    {
+      "title": "Instance",
+      "type": "link",
+      "url": "/d/data-eyes-instance",
+      "keepTime": true,
+      "includeVars": true
+    },
+    {
+      "title": "Database",
+      "type": "link",
+      "url": "/d/data-eyes-database",
+      "keepTime": true,
+      "includeVars": true
+    },
+    {
+      "title": "Health",
+      "type": "link",
+      "url": "/d/data-eyes-health",
+      "keepTime": true,
+      "includeVars": true
+    }
+  ]
+}

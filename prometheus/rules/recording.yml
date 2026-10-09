@@ -1,0 +1,9 @@
+groups:
+- name: data-eyes
+  rules:
+  - record: data_eyes:batch_requests_per_second
+    expr: rate(data_eyes_batch_requests_total[5m])
+  - record: data_eyes:io_bytes_per_second
+    expr: rate(data_eyes_io_bytes_total[5m])
+  - record: data_eyes:io_latency_seconds
+    expr: rate(data_eyes_io_stall_seconds_total[5m]) / rate(data_eyes_io_operations_total[5m])

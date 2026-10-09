@@ -1,0 +1,278 @@
+apiVersion: 1
+groups:
+- orgId: 1
+  name: Data Eyes
+  folder: Data Eyes
+  interval: 30s
+  rules:
+  - uid: exporter-down
+    title: Data Eyes exporter unavailable
+    condition: B
+    data:
+    - refId: A
+      relativeTimeRange:
+        from: 600
+        to: 0
+      datasourceUid: prometheus
+      model:
+        refId: A
+        expr: up{job="data-eyes"} == bool 0
+        instant: true
+        range: false
+        datasource:
+          type: prometheus
+          uid: prometheus
+    - refId: B
+      relativeTimeRange:
+        from: 0
+        to: 0
+      datasourceUid: __expr__
+      model:
+        refId: B
+        type: threshold
+        expression: A
+        conditions:
+        - evaluator:
+            type: gt
+            params:
+            - 0
+          operator:
+            type: and
+          reducer:
+            type: last
+            params: []
+          type: query
+    noDataState: Alerting
+    execErrState: Error
+    for: 2m
+    annotations:
+      summary: 'Data Eyes collector {{ $labels.instance }} is not being scraped'
+      description: Prometheus cannot reach the collector, so every SQL Server in the fleet is unmonitored.
+    labels:
+      service: data-eyes
+    isPaused: false
+  - uid: sql-down
+    title: SQL Server unavailable
+    condition: B
+    data:
+    - refId: A
+      relativeTimeRange:
+        from: 600
+        to: 0
+      datasourceUid: prometheus
+      model:
+        refId: A
+        expr: data_eyes_sqlserver_reachable == bool 0
+        instant: true
+        range: false
+        datasource:
+          type: prometheus
+          uid: prometheus
+    - refId: B
+      relativeTimeRange:
+        from: 0
+        to: 0
+      datasourceUid: __expr__
+      model:
+        refId: B
+        type: threshold
+        expression: A
+        conditions:
+        - evaluator:
+            type: gt
+            params:
+            - 0
+          operator:
+            type: and
+          reducer:
+            type: last
+            params: []
+          type: query
+    noDataState: OK
+    execErrState: Error
+    for: 1m
+    annotations:
+      summary: 'SQL Server {{ $labels.sql_instance }} ({{ $labels.environment }}) is unreachable'
+    labels:
+      service: data-eyes
+    isPaused: false
+  - uid: diagnostic-failed
+    title: Data Eyes diagnostic unavailable or stale
+    condition: B
+    data:
+    - refId: A
+      relativeTimeRange:
+        from: 600
+        to: 0
+      datasourceUid: prometheus
+      model:
+        refId: A
+        expr: data_eyes_collection_success == bool 0
+        instant: true
+        range: false
+        datasource:
+          type: prometheus
+          uid: prometheus
+    - refId: B
+      relativeTimeRange:
+        from: 0
+        to: 0
+      datasourceUid: __expr__
+      model:
+        refId: B
+        type: threshold
+        expression: A
+        conditions:
+        - evaluator:
+            type: gt
+            params:
+            - 0
+          operator:
+            type: and
+          reducer:
+            type: last
+            params: []
+          type: query
+    noDataState: OK
+    execErrState: Error
+    for: 2m
+    annotations:
+      summary: 'Diagnostic {{ $labels.collector }} on {{ $labels.sql_instance }} ({{ $labels.environment }}) is failing or stale'
+    labels:
+      service: data-eyes
+    isPaused: false
+  - uid: sql-warning
+    title: SQL Server warning
+    condition: B
+    data:
+    - refId: A
+      relativeTimeRange:
+        from: 600
+        to: 0
+      datasourceUid: prometheus
+      model:
+        refId: A
+        expr: data_eyes_health_severity{category!="alert.sql_server_connection"} == bool 2
+        instant: true
+        range: false
+        datasource:
+          type: prometheus
+          uid: prometheus
+    - refId: B
+      relativeTimeRange:
+        from: 0
+        to: 0
+      datasourceUid: __expr__
+      model:
+        refId: B
+        type: threshold
+        expression: A
+        conditions:
+        - evaluator:
+            type: gt
+            params:
+            - 0
+          operator:
+            type: and
+          reducer:
+            type: last
+            params: []
+          type: query
+    noDataState: OK
+    execErrState: Error
+    for: 0s
+    annotations:
+      summary: 'WARNING {{ $labels.category }} on {{ $labels.sql_instance }} ({{ $labels.environment }})'
+    labels:
+      service: data-eyes
+    isPaused: false
+  - uid: sql-critical
+    title: SQL Server critical
+    condition: B
+    data:
+    - refId: A
+      relativeTimeRange:
+        from: 600
+        to: 0
+      datasourceUid: prometheus
+      model:
+        refId: A
+        expr: data_eyes_health_severity{category!="alert.sql_server_connection"} == bool 3
+        instant: true
+        range: false
+        datasource:
+          type: prometheus
+          uid: prometheus
+    - refId: B
+      relativeTimeRange:
+        from: 0
+        to: 0
+      datasourceUid: __expr__
+      model:
+        refId: B
+        type: threshold
+        expression: A
+        conditions:
+        - evaluator:
+            type: gt
+            params:
+            - 0
+          operator:
+            type: and
+          reducer:
+            type: last
+            params: []
+          type: query
+    noDataState: OK
+    execErrState: Error
+    for: 0s
+    annotations:
+      summary: 'CRITICAL {{ $labels.category }} on {{ $labels.sql_instance }} ({{ $labels.environment }})'
+    labels:
+      service: data-eyes
+    isPaused: false
+  - uid: sql-events
+    title: SQL Server events detected
+    condition: B
+    data:
+    - refId: A
+      relativeTimeRange:
+        from: 600
+        to: 0
+      datasourceUid: prometheus
+      model:
+        refId: A
+        expr: increase(data_eyes_check_events_total[5m]) > bool 0
+        instant: true
+        range: false
+        datasource:
+          type: prometheus
+          uid: prometheus
+    - refId: B
+      relativeTimeRange:
+        from: 0
+        to: 0
+      datasourceUid: __expr__
+      model:
+        refId: B
+        type: threshold
+        expression: A
+        conditions:
+        - evaluator:
+            type: gt
+            params:
+            - 0
+          operator:
+            type: and
+          reducer:
+            type: last
+            params: []
+          type: query
+    noDataState: OK
+    execErrState: Error
+    for: 0s
+    annotations:
+      summary: 'New {{ $labels.check }} events on {{ $labels.sql_instance }} ({{ $labels.environment }})'
+    labels:
+      service: data-eyes
+    isPaused: false

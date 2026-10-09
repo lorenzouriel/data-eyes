@@ -1,0 +1,26 @@
+# Inactive template. Grafana ships with no working destination, so Data Eyes
+# alerts are not delivered until you either configure a contact point in the
+# Grafana UI or activate this file:
+#   1. Set DATA_EYES_ALERT_WEBHOOK_URL in the root .env.
+#   2. Copy this file to contact-points.yml (ignored by Git) and restart Grafana.
+# The policy below replaces Grafana's default notification policy tree.
+apiVersion: 1
+contactPoints:
+  - orgId: 1
+    name: data-eyes-webhook
+    receivers:
+      - uid: data-eyes-webhook
+        type: webhook
+        settings:
+          url: $DATA_EYES_ALERT_WEBHOOK_URL
+policies:
+  - orgId: 1
+    receiver: data-eyes-webhook
+    group_by: ['alertname', 'sql_instance']
+    group_wait: 30s
+    group_interval: 5m
+    repeat_interval: 4h
+    routes:
+      - receiver: data-eyes-webhook
+        object_matchers:
+          - ['service', '=', 'data-eyes']
