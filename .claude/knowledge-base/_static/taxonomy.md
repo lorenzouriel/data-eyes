@@ -2,9 +2,9 @@
 
 Maps every DPA-style category to its script, tool/function name, and where it surfaces in Grafana (panel and/or `alert.<key>` check). This is the routing table the `sql-server-dba` agent, `mcp/`'s tools, and the collector all share — one category system, not three.
 
-**"Tool/function name"** is shared by name, not by call path: the SQL and severity logic live in `mcp/src/data_eyes_mcp/queries.py`. `mcp/src/data_eyes_mcp/tools.py` exposes each query as an MCP tool (live, on demand, for agents). The collector runs its own scheduled alert checks (`collector/app/alerts/checks/`) and exports their severities to Prometheus as `alert.<key>`.
+**"Tool/function name"** is shared by name, not by call path: the SQL and severity logic live in `mcp/src/data_eyes_mcp/queries.py`. `mcp/src/data_eyes_mcp/tools.py` exposes each query as an MCP tool (live, on demand, for agents). The collector runs its own scheduled alert checks (`monitor/collector/app/alerts/checks/`) and exports their severities to Prometheus as `alert.<key>`.
 
-**Grafana column:** dashboards are *Fleet*, *Instance*, *Database*, and *Health* (`grafana/dashboards/`). `alert.<key>` checks appear as `data_eyes_health_severity{category="alert.<key>"}` on Fleet → *Category health* and drive the provisioned alert rules; see `docs/features/alerts.md` for units and cadence. "MCP only" means Prometheus holds no equivalent — row-level detail (query text, index definitions, sessions) is never exported as metrics.
+**Grafana column:** dashboards are *Fleet*, *Instance*, *Database*, and *Health* (`monitor/grafana/dashboards/`). `alert.<key>` checks appear as `data_eyes_health_severity{category="alert.<key>"}` on Fleet → *Category health* and drive the provisioned alert rules; see `docs/features/alerts.md` for units and cadence. "MCP only" means Prometheus holds no equivalent — row-level detail (query text, index definitions, sessions) is never exported as metrics.
 
 | Category | Grafana / alert checks | Script(s) | Tool/function name | Source doc |
 |---|---|---|---|---|

@@ -1,11 +1,11 @@
 ---
 name: sql-monitor
-description: Data Eyes monitoring stack — diagnose collector, Prometheus, Grafana, and gateway issues, explain dashboards and alerts, manage the fleet file
+description: Data Eyes monitoring stack — diagnose collector, Prometheus, and Grafana issues, explain dashboards and alerts, manage the fleet file
 ---
 
 # /sql-monitor Command
 
-> Diagnose and configure the Data Eyes monitoring stack (collector → Prometheus → Grafana, behind the Caddy gateway)
+> Diagnose and configure the Data Eyes monitoring stack (collector → Prometheus → Grafana, all under `monitor/`)
 
 ## Usage
 
@@ -33,7 +33,7 @@ description: Data Eyes monitoring stack — diagnose collector, Prometheus, Graf
 ## What This Command Does
 
 1. Reads the stack configuration at invocation time — configs are always the ground truth
-2. Maps your issue or question to the right component (fleet file, collector, Prometheus, Grafana dashboards/alerts/users, gateway, or MCP)
+2. Maps your issue or question to the right component (fleet file, collector, Prometheus, Grafana dashboards/alerts/users, or MCP)
 3. Explains the fix, config change, or command needed
 4. Shows exact YAML edits, `.env` variable names, PromQL, or `docker compose` commands
 5. Offers to run Docker commands after explicit user confirmation
@@ -48,23 +48,20 @@ This command is a thin front door onto the `dashboard-app` agent — for anythin
 instances.yaml ──► collector (:8090 internal) ──/metrics──► Prometheus (:9090 internal, 30d)
        │              │  fixed read-only DMV queries            │
        │              ▼                                         ▼
-       │         SQL Server fleet ◄──── data-eyes-mcp ───► Grafana (:3000 internal)
-       └──────────────────────────────►  (dev/staging/prod)     ▲
-                                                ▲               │
-                                   gateway (Caddy, https://<DASHBOARD_HOST>:8443)
-                                     /mcp → MCP dev · /staging/* · /production/* · / → Grafana
+       │         SQL Server fleet ◄──── data-eyes-mcp ───► Grafana (http://<GRAFANA_BIND_IP>:3000)
+       └──────────────────────────────►  (dev/staging/prod,     UI + alerting
+                                          127.0.0.1:8080-8082)
 ```
 
 | Service | Config | Role |
 |---|---|---|
-| `collector` | `instances.yaml`, `collector/checks.yaml`, volume `collector-state` | Runs fixed diagnostics on a schedule, caches results, serves `/metrics` and `/health`. Scrapes never trigger SQL. One collector per checkpoint volume. |
-| `prometheus` | `prometheus/prometheus.yml`, `prometheus/rules/recording.yml` | Scrapes `collector:8090` every 30s, keeps 30 days, computes rates from counters. |
-| `grafana` | `grafana/provisioning/`, `grafana/dashboards/`, root `.env` (`GRAFANA_ADMIN_USER`, `GRAFANA_ADMIN_PASSWORD`) | Dashboards (Fleet, Instance, Database, Health), alert rules, contact points, human accounts (embedded SQLite). |
-| `gateway` | `gateway/Caddyfile`, root `.env` (`DASHBOARD_HOST`, `DASHBOARD_BIND_IP`) | TLS (internal CA) on `:8443`; the only published entry point besides the MCP localhost ports. |
-| `data-eyes-mcp-*` | `mcp/.env*`, `instances.yaml` (`mcp_security`) | Agent tools. Reads history from Prometheus via `PROMETHEUS_URL`. Staging/prod are Compose profiles. |
+| `collector` | `instances.yaml`, `monitor/collector/checks.yaml`, volume `collector-state` | Runs fixed diagnostics on a schedule, caches results, serves `/metrics` and `/health`. Scrapes never trigger SQL. One collector per checkpoint volume. |
+| `prometheus` | `monitor/prometheus/prometheus.yml`, `monitor/prometheus/rules/recording.yml` | Scrapes `collector:8090` every 30s, keeps 30 days, computes rates from counters. |
+| `grafana` | `monitor/grafana/grafana.ini`, `monitor/grafana/provisioning/`, `monitor/grafana/dashboards/`, `.env` (`GRAFANA_BIND_IP`, `GF_SECURITY_ADMIN_USER`, `GF_SECURITY_ADMIN_PASSWORD`, SMTP) | The UI: Fleet Overview (home page: fleet, instance, alerts, collector) ; Prometheus is its only datasource; alert rules, contact point, notification policy; human accounts (embedded SQLite). |
+| `data-eyes-mcp-*` | `instances.yaml` (instances, `mcp_security` grants and `token_sha256`) | Agent tools. Reads history from Prometheus via `PROMETHEUS_URL`. Staging/prod are Compose profiles. |
 
-**Access:** Grafana at `https://<DASHBOARD_HOST>:8443` (default `https://localhost:8443`, self-signed internal CA).
-**Auth:** Grafana accounts. `GRAFANA_ADMIN_USER`/`GRAFANA_ADMIN_PASSWORD` create the admin; sign-up and anonymous access are disabled. Grafana data-source access is **not** a per-instance boundary — anyone who can query Prometheus sees the whole fleet.
+**Access:** Grafana at `http://<GRAFANA_BIND_IP>:3000` (default `http://localhost:3000`). There is no TLS proxy in the stack; put one in front before exposing it beyond localhost.
+**Auth:** Grafana accounts. `GF_SECURITY_ADMIN_USER`/`GF_SECURITY_ADMIN_PASSWORD` (in `.env`) create the admin on first start only; later changes need `grafana cli admin reset-admin-password`. Grafana data-source access is **not** a per-instance boundary — anyone who can query Prometheus sees the whole fleet.
 
 ---
 
@@ -77,7 +74,7 @@ Always read these first:
 Read("docker-compose.yml")
 Read("docs/architecture/architecture.md")
 Read("docs/features/metrics.md")              — metric names, labels, severity codes
-Read("collector/checks.yaml")
+Read("monitor/collector/checks.yaml")
 ```
 
 For `instances.yaml`, read **only names, labels, and environments** — never echo `mssql_connection_string` values or `mcp_security` tokens.
@@ -85,7 +82,7 @@ For `instances.yaml`, read **only names, labels, and environments** — never ec
 For dashboard/alert/threshold questions, also read:
 ```
 Read("docs/features/alerts.md")                       — check catalog, units, cadence
-Read("grafana/provisioning/alerting/rules.yml")
+Read("monitor/grafana/provisioning/alerting/data-eyes-alerts.yml")
 Read(".claude/knowledge-base/_static/taxonomy.md")     — category → dashboard → script → tool name
 Read(".claude/knowledge-base/_static/thresholds.yaml") — severity bands and alert defaults
 ```
@@ -98,12 +95,12 @@ Read(".claude/knowledge-base/_static/thresholds.yaml") — severity bands and al
 | "No data" everywhere | Exporter or scrape | Health dashboard → *Exporter reachable*; Prometheus target `data-eyes`; collector `/health` |
 | one category Unknown / stale | A single diagnostic failing or slow | `data_eyes_collection_success`, `data_eyes_collection_last_success_timestamp_seconds` by `collector` label; collector logs for permission/timeout errors |
 | add/remove/rename an instance | Fleet file | `instances.yaml` → restart `collector` and the MCP service(s) |
-| change a threshold or exclude a check | Check overrides | `collector/checks.yaml` (empty `instance_name` = fleet-wide) → restart `collector` |
-| alerts not firing / not delivered | Grafana alerting | `grafana/provisioning/alerting/rules.yml`, contact points in Grafana (or `contact-points.yml` copied from the `.example`) |
+| change a threshold or exclude a check | Check overrides | `monitor/collector/checks.yaml` (empty `instance_name` = fleet-wide) → restart `collector` |
+| alerts not firing / not delivered | Grafana alerting | `monitor/grafana/provisioning/alerting/data-eyes-alerts.yml` (rules), `contact-points.yml` (email contact point and policy), SMTP settings in `.env` (names only) |
 | add/remove a teammate's login | Grafana users | Grafana → Administration → Users (admin only) |
 | what does panel X show, what's normal | Metric contract + thresholds | `docs/features/metrics.md`, `taxonomy.md`, `thresholds.yaml` |
-| can't reach Grafana / TLS warning | Gateway | `gateway/Caddyfile`, `DASHBOARD_HOST`, `DASHBOARD_BIND_IP` (names only) |
-| want MCP call metrics on the Health dashboard | Optional MCP scrape | `prometheus/mcp-scrape.example.yml`, `docs/getting-started/deployment.md` |
+| can't reach Grafana | Port binding | `GRAFANA_BIND_IP` in root `.env`, `docker compose ps grafana` |
+| want MCP call metrics on the Health dashboard | Optional MCP scrape | `monitor/prometheus/mcp-scrape.example.yml`, `docs/getting-started/deployment.md` |
 | restart, start, stop, update stack | Docker Compose | root `docker-compose.yml` |
 
 ### Step 3: Output by Category
@@ -121,11 +118,11 @@ Read(".claude/knowledge-base/_static/thresholds.yaml") — severity bands and al
 
 **Fleet and threshold changes:**
 - Fleet: edit `instances.yaml`, then restart `collector` and the matching `data-eyes-mcp-*` service. There is no runtime registry API.
-- Thresholds: add a row to `collector/checks.yaml` (`alert_key`, `instance_name`, and any of `enabled`, `warning_threshold`, `critical_threshold`, `tier`, `confirm_samples`, `excluded_databases`; null fields inherit fleet-wide then catalog values); warning must be below critical for `above` checks and above it for `below` checks. Restart `collector`.
-- Catalog defaults change only in `.claude/knowledge-base/_static/thresholds.yaml` + `collector/app/alerts/catalog.py` together.
+- Thresholds: add a row to `monitor/collector/checks.yaml` (`alert_key`, `instance_name`, and any of `enabled`, `warning_threshold`, `critical_threshold`, `tier`, `confirm_samples`, `excluded_databases`; null fields inherit fleet-wide then catalog values); warning must be below critical for `above` checks and above it for `below` checks. Restart `collector`.
+- Catalog defaults change only in `.claude/knowledge-base/_static/thresholds.yaml` + `monitor/collector/app/alerts/catalog.py` together.
 
 **Alerts and notifications:**
-- Rules are provisioned from Git (`grafana/provisioning/alerting/rules.yml`): exporter down, SQL Server unavailable, diagnostic stale, warning, critical, events, deadlocks
+- Rules are provisioned from Git (`monitor/grafana/provisioning/alerting/data-eyes-alerts.yml`, folder "Data Eyes"): exporter down, SQL Server unavailable, diagnostic failing, warning, critical, events. There is no Alertmanager; Grafana evaluates and delivers
 - Grafana alerts are time-window evaluations, not one notification per event; configure digests and escalation in Grafana notification policies or your incident tool
 - Never send a test notification without explicit user authorization
 

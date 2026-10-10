@@ -33,10 +33,10 @@ description: Sync CLAUDE.md with current data-eyes structure — scripts, comman
 
 ```text
 # Core components
-Glob("collector/**/*")
-Glob("prometheus/**/*")
-Glob("grafana/**/*")
-Glob("gateway/**/*")
+Glob("monitor/collector/**/*")
+Glob("monitor/prometheus/**/*")
+Glob("monitor/grafana/**/*")
+Glob("agent/**/*")
 Glob("mcp/**/*")
 Glob("docs/**/*.md")
 Glob(".claude/resources/performance/**/*")
@@ -80,9 +80,9 @@ Read(".claude/agents/<name>.md")  # first 10 lines for name + description + tier
 ```text
 Read("docker-compose.yml")                   # services, profiles, ports, volumes
 Read("instances.yaml")                       # fleet — instance names/environments only, never connection strings
-Read("collector/checks.yaml")                # alert check overrides
-Glob("grafana/dashboards/*.json")            # dashboard count
-Read("grafana/provisioning/alerting/rules.yml")  # alert rule count
+Read("monitor/collector/checks.yaml")                # alert check overrides
+Glob("monitor/grafana/dashboards/*.json")            # dashboard count
+Read("monitor/grafana/provisioning/alerting/rules.yml")  # alert rule count
 Read("docs/architecture/architecture.md")    # confirm description still matches
 Glob(".claude/knowledge-base/_static/*")    # static KB coverage
 ```
@@ -132,10 +132,11 @@ Auto-generate directory tree from Glob results. Include file counts:
 
 \```
 data-eyes/
-├── collector/            SQL diagnostics exporter, {N} alert check groups
-├── prometheus/           scrape config, {N} recording rules
-├── grafana/              {N} dashboards, {N} alert rules
-├── gateway/              Caddy TLS reverse proxy
+├── monitor/
+│   ├── collector/        SQL diagnostics exporter, {N} alert check groups
+│   ├── prometheus/       scrape config, {N} recording rules
+│   └── grafana/          the UI: {N} dashboards, {N} alert rules
+├── agent/                "Ask the fleet" API (internal)
 ├── mcp/                  data-eyes-mcp server, {N} DBA diagnostic tools
 └── .claude/
     ├── commands/         {N} commands

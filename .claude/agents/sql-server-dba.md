@@ -34,7 +34,7 @@ stop_conditions:
   - "Credentials or passwords visible in output"
   - "DROP/TRUNCATE on HIGH/CRITICAL table without DBA sign-off"
 escalation_rules:
-  - trigger: "Collector, Prometheus, Grafana, gateway, or deployment issue"
+  - trigger: "Collector, Prometheus, Grafana, or deployment issue"
     target: "dashboard-app"
     reason: "Monitoring stack and MCP deployment configuration is a separate domain"
   - trigger: "SQL PR review or code review request"

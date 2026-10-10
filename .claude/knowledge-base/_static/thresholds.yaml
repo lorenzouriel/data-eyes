@@ -100,8 +100,8 @@ storage:
     critical: 5
 
 alerts:
-  # Defaults for the collector's alert catalog (collector/app/alerts/catalog.py).
-  # Deployments override them per alert and per instance in collector/checks.yaml.
+  # Defaults for the collector's alert catalog (monitor/collector/app/alerts/catalog.py).
+  # Deployments override them per alert and per instance in monitor/collector/checks.yaml.
   # Keep these and the catalog in sync by hand. direction: above = alert when the value rises to the
   # threshold; below = alert when it falls to it. Alerts with no numeric
   # threshold (fixed severity, such as a SUSPECT database) are not listed.

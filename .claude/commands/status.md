@@ -36,12 +36,12 @@ Execute all steps inline (no agent delegation).
 # Monitoring stack + MCP (root docker-compose.yml runs all of them)
 Glob("docker-compose.yml")
 Glob("instances.yaml")                 # fleet file — ignored by Git
-Glob("collector/app/**/*.py")
-Glob("collector/checks.yaml")
-Glob("prometheus/*.yml")
-Glob("prometheus/rules/*.yml")
-Glob("grafana/dashboards/*.json")
-Glob("grafana/provisioning/**/*.yml")
+Glob("monitor/collector/app/**/*.py")
+Glob("monitor/collector/checks.yaml")
+Glob("monitor/prometheus/*.yml")
+Glob("monitor/prometheus/rules/*.yml")
+Glob("monitor/grafana/dashboards/*.json")
+Glob("monitor/grafana/provisioning/**/*.yml")
 Glob("mcp/src/data_eyes_mcp/*.py")
 Glob(".claude/knowledge-base/_static/*")
 
@@ -66,12 +66,12 @@ Count files in each component.
 # Check if Docker is available
 docker --version 2>/dev/null || echo "Docker not installed"
 
-# Service state for collector, prometheus, grafana, gateway, data-eyes-mcp-*
+# Service state for collector, prometheus, grafana, agent, data-eyes-mcp-*
 docker compose ps 2>/dev/null || echo "Stack not running"
 
 # Required env files (existence only — never print contents)
 ls .env 2>/dev/null || echo "No root .env — Grafana will refuse to start (GRAFANA_ADMIN_PASSWORD is required)"
-ls mcp/.env 2>/dev/null || echo "No mcp/.env — MCP services will fail to start"
+ls .env 2>/dev/null || echo "No .env — collector, Grafana and MCP will fail to start"
 ls instances.yaml 2>/dev/null || echo "No instances.yaml — copy instances.example.yaml"
 ```
 
@@ -167,11 +167,11 @@ Glob("CLAUDE.md")
 | Check | Status |
 |-------|--------|
 | Docker installed | {Yes/No} |
-| Services running | {collector / prometheus / grafana / gateway / mcp-dev: Up/Down} |
+| Services running | {collector / prometheus / grafana / agent / mcp-dev: Up/Down} |
 | Root .env | {Present/Missing} |
-| mcp/.env | {Present/Missing} |
+| .env | {Present/Missing} |
 | instances.yaml | {N} instances — {names (environment)} |
-| Check overrides (`collector/checks.yaml`) | {N} rows |
+| Check overrides (`monitor/collector/checks.yaml`) | {N} rows |
 | Collector /health | {OK/Failed/Not checked} |
 
 ## Knowledge Base
@@ -233,7 +233,7 @@ Generate recommendations based on:
 | KB older than 30 days | "Run `/sql-kb --refresh <database>` — KB is {N} days stale" |
 | Stack not running | "Run `docker compose up -d` from the repository root" |
 | Root `.env` missing | "Copy `.env.example` to `.env` and set `GRAFANA_ADMIN_PASSWORD` — Grafana requires it" |
-| `mcp/.env` missing | "Copy `mcp/.env.example` to `mcp/.env` and set the per-environment SQL credential variables" |
+| `.env` missing | "Copy `.env.example` to `.env` and set `GF_SECURITY_ADMIN_PASSWORD`" |
 | `instances.yaml` missing | "Copy `instances.example.yaml` to `instances.yaml` and fill in the fleet locally" |
 | CLAUDE.md missing | "Run `/sync-context` to generate CLAUDE.md" |
 | Uncommitted changes | "Commit or stash {N} uncommitted files" |

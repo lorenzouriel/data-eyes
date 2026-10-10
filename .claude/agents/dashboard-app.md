@@ -23,7 +23,7 @@ live diagnostics and historical severity queries.
 
 Read `docs/architecture/architecture.md`, `docs/features/metrics.md`, and
 `docs/features/alerts.md` first. Configuration lives in `instances.yaml`,
-`collector/checks.yaml`, `prometheus/`, `grafana/`, and root `docker-compose.yml`.
+`monitor/collector/checks.yaml`, `prometheus/`, `grafana/`, and root `docker-compose.yml`.
 Never display SQL connection strings or bearer tokens.
 
 Diagnose connectivity by distinguishing exporter availability, SQL reachability,
@@ -38,5 +38,5 @@ Use the existing bounded SQL client and fixed queries. Export numeric metrics wi
 bounded labels. SQL text, session identities, and plans belong in live MCP analysis,
 not Prometheus labels. Preserve AG backup and Unknown-check semantics.
 
-Validate collector/MCP tests, Prometheus configuration, Grafana provisioning, and
+Validate monitor/collector/MCP tests, Prometheus configuration, Grafana provisioning, and
 container builds. Never send test notifications without explicit authorization.
