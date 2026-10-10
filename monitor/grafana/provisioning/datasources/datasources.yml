@@ -1,0 +1,17 @@
+apiVersion: 1
+
+# Grafana reads only the Data Eyes Prometheus (collector metrics and alert
+# checks). It never connects to SQL Server; the fleet is defined once, in
+# instances.yaml, and reaches Grafana through the collector's labels.
+
+datasources:
+  - name: Data Eyes Prometheus
+    type: prometheus
+    uid: dataeyes_prometheus
+    access: proxy
+    url: http://prometheus:9090
+    isDefault: true
+    editable: false
+    jsonData:
+      httpMethod: POST
+      timeInterval: 30s
