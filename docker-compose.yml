@@ -3,14 +3,17 @@
 # =============================================================================
 #
 #   SQL Server fleet (instances.yaml)
-#        │                         │
-#        ▼                         ▼
-#   collector ──/metrics──▶ prometheus ──▶ grafana ──┐
-#   (fixed DMV queries)     (30d history)  (dashboards,│
-#                                 ▲          alerts)   │
-#                                 │                    ▼
-#   data-eyes-mcp-{dev,staging,prod} ◀─────────── gateway (Caddy, TLS :8443)
-#   (agent tools; history read from Prometheus)
+#        │                                   │
+#        ▼                                   ▼
+#   collector ──/metrics──▶ prometheus ──▶ grafana (UI, dashboards, alerting)
+#   (fixed DMV queries)     (30d history)     http://${GRAFANA_BIND_IP}:3000
+#                                 ▲
+#                                 ├── agent ("Ask the fleet" API, internal)
+#                                 └── data-eyes-mcp-{dev,staging,prod}
+#                                     (agent tools; history from Prometheus)
+#
+#   monitor/   collector, prometheus, grafana (the monitoring pipeline)
+#   mcp/, agent/   at the repository root
 #
 # Usage:
 #   docker compose up -d                              # core stack + MCP dev
@@ -18,17 +21,19 @@
 #   docker compose --profile production up -d         # + MCP production
 #   docker compose --profile loadtest run loadgen     # synthetic MCP load
 #
-# Required files (never commit or print their contents):
-#   .env               GRAFANA_ADMIN_PASSWORD (required), GRAFANA_ADMIN_USER,
-#                      DASHBOARD_HOST, DASHBOARD_BIND_IP
-#   instances.yaml     Shared fleet definition (template: instances.example.yaml)
-#   mcp/.env           MCP credentials and settings; optional per-environment
-#                      overlays: mcp/.env.dev, mcp/.env.staging, mcp/.env.production
+# Configuration: two files (never commit or print them):
+#   instances.yaml     The fleet: SQL Servers with their connection strings and
+#                      logins (collector, MCP), and MCP principals with their
+#                      grants and token_sha256 (template: instances.example.yaml)
+#   .env               Everything else: Grafana port, admin and SMTP; agent keys
+#                      (template: .env.example)
+#   instances.yaml is mounted only into the collector and MCP containers; Grafana
+#   and the agent receive just their own .env variables.
 #
 # Rules:
 #   - Run exactly one collector per collector-state volume (checkpoint file).
-#   - Every host port binds to 127.0.0.1 by default; external access goes
-#     through the gateway only.
+#   - Every host port binds to 127.0.0.1 by default. Grafana signs users in
+#     itself; MCP needs a bearer token. Put TLS in front before exposing either.
 # =============================================================================
 
 # Project name. Volume names are prefixed with it (src_prometheus-data, ...)
@@ -61,9 +66,8 @@ x-mcp-service: &mcp-service
     retries: 3
     start_period: 10s
 
-# Environment shared by every MCP environment. Each service also blanks the
-# credentials of the other environments so a container can only ever log in
-# to the instances on its own INSTANCE_ALLOWLIST.
+# Environment shared by every MCP environment. Each service sets its own
+# DEPLOYMENT_ENVIRONMENT and INSTANCE_ALLOWLIST, so it serves only those instances.
 x-mcp-environment: &mcp-environment
   INSTANCES_FILE: /app/instances.yaml
   PROMETHEUS_URL: http://prometheus:9090
@@ -71,21 +75,21 @@ x-mcp-environment: &mcp-environment
 services:
 
   # ===========================================================================
-  # 1. Monitoring pipeline — collector → Prometheus → Grafana
+  # 1. Monitoring pipeline (monitor/) — collector → Prometheus → Grafana
   # ===========================================================================
 
   # Runs trusted, fixed, read-only queries against the fleet and serves cached
   # Prometheus metrics on :8090 (internal network only; scraped by Prometheus).
   collector:
-    build: ./collector
+    build: ./monitor/collector
     restart: unless-stopped
     environment:
       INSTANCES_FILE: /app/instances.yaml
       STATE_FILE: /state/checkpoints.json
     volumes:
     - ./instances.yaml:/app/instances.yaml:ro
-    - ./collector/checks.yaml:/app/checks.yaml:ro    # alert check overrides
-    - collector-state:/state                        # checkpoints; one collector per volume
+    - ./monitor/collector/checks.yaml:/app/checks.yaml:ro    # alert check overrides
+    - collector-state:/state                                # checkpoints; one collector per volume
     healthcheck:
       test:
       - CMD
@@ -97,7 +101,7 @@ services:
       retries: 3
 
   # Scrapes the collector and keeps 30 days of history; evaluates the
-  # recording rules in prometheus/rules/. Internal only (:9090).
+  # recording rules in monitor/prometheus/rules/. Internal only (:9090).
   prometheus:
     image: prom/prometheus:v3.13.4
     restart: unless-stopped
@@ -106,29 +110,56 @@ services:
     - --storage.tsdb.path=/prometheus
     - --storage.tsdb.retention.time=30d
     volumes:
-    - ./prometheus:/etc/prometheus:ro
+    - ./monitor/prometheus:/etc/prometheus:ro
     - prometheus-data:/prometheus
     depends_on:
     - collector
 
-  # Dashboards, alerting, and user accounts. Provisioned from grafana/;
-  # reachable only through the gateway (internal :3000).
+  # The UI: dashboards (Fleet Overview is the home page) and alerting, both on
+  # the Data Eyes Prometheus. Alert rules and delivery are provisioned from
+  # monitor/grafana/provisioning/alerting/. Grafana has its own sign-in.
   grafana:
     image: grafana/grafana:13.2.3
     restart: unless-stopped
     environment:
-      GF_SECURITY_ADMIN_USER: ${GRAFANA_ADMIN_USER:-admin}
-      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:?Set GRAFANA_ADMIN_PASSWORD in .env}
-      GF_USERS_ALLOW_SIGN_UP: 'false'
-      GF_AUTH_ANONYMOUS_ENABLED: 'false'
-      GF_SERVER_ROOT_URL: https://${DASHBOARD_HOST:-localhost}:8443
-      GF_SECURITY_COOKIE_SECURE: 'true'
-      # Read by grafana/provisioning/alerting/contact-points.yml when activated.
-      DATA_EYES_ALERT_WEBHOOK_URL: ${DATA_EYES_ALERT_WEBHOOK_URL:-}
+      GF_SECURITY_ADMIN_USER: ${GF_SECURITY_ADMIN_USER:-admin}
+      GF_SECURITY_ADMIN_PASSWORD: ${GF_SECURITY_ADMIN_PASSWORD:?Set GF_SECURITY_ADMIN_PASSWORD in .env}
+      GRAFANA_NOTIFICATION_ADDRESSES: ${GRAFANA_NOTIFICATION_ADDRESSES:-}
+      GRAFANA_SMTP_HOST: ${GRAFANA_SMTP_HOST:-}
+      GRAFANA_SMTP_USER: ${GRAFANA_SMTP_USER:-}
+      GRAFANA_SMTP_PASSWORD: ${GRAFANA_SMTP_PASSWORD:-}
+      GRAFANA_SMTP_FROM_ADDRESS: ${GRAFANA_SMTP_FROM_ADDRESS:-}
+      GRAFANA_SMTP_FROM_NAME: ${GRAFANA_SMTP_FROM_NAME:-Data Eyes}
+    ports:
+    - ${GRAFANA_BIND_IP:-127.0.0.1}:3000:3000
     volumes:
     - grafana-data:/var/lib/grafana
-    - ./grafana/provisioning:/etc/grafana/provisioning:ro
-    - ./grafana/dashboards:/var/lib/grafana/dashboards:ro
+    - ./monitor/grafana/grafana.ini:/etc/grafana/grafana.ini:ro
+    - ./monitor/grafana/provisioning:/etc/grafana/provisioning:ro
+    - ./monitor/grafana/dashboards:/etc/grafana/dashboards:ro
+    depends_on:
+    - prometheus
+
+  # "Ask the fleet": an AI model with read-only Prometheus tools and the MCP
+  # servers' live diagnostic tools (as principal ui-agent). Provider keys stay
+  # in this container. Internal only (:8000) and unauthenticated: do not
+  # publish its port without putting sign-in in front of it.
+  agent:
+    build: ./agent
+    restart: unless-stopped
+    environment:
+      PROMETHEUS_URL: http://prometheus:9090
+      AI_PROVIDER: ${AI_PROVIDER:-anthropic}
+      AI_MODEL: ${AI_MODEL:-}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      OPENAI_BASE_URL: ${OPENAI_BASE_URL:-}
+      LOCAL_AI_BASE_URL: ${LOCAL_AI_BASE_URL:-}
+      LOCAL_AI_API_KEY: ${LOCAL_AI_API_KEY:-local}
+      # Live SQL diagnostics through the MCP servers (principal ui-agent).
+      # Environments whose container is not running are skipped.
+      AGENT_MCP_TOKEN: ${AGENT_MCP_TOKEN:-}
+      AGENT_MCP_SERVERS: ${AGENT_MCP_SERVERS:-development=http://data-eyes-mcp-dev:8080/mcp,staging=http://data-eyes-mcp-staging:8080/mcp,production=http://data-eyes-mcp-prod:8080/mcp}
     depends_on:
     - prometheus
 
@@ -136,26 +167,19 @@ services:
   # 2. MCP server — one container per environment
   # ===========================================================================
   #
-  #   service                 profile      host port        gateway path
-  #   data-eyes-mcp-dev       (default)    127.0.0.1:8080   /mcp
-  #   data-eyes-mcp-staging   staging      127.0.0.1:8081   /staging/
-  #   data-eyes-mcp-prod      production   127.0.0.1:8082   /production/
+  #   service                 profile      host port (MCP endpoint /mcp)
+  #   data-eyes-mcp-dev       (default)    127.0.0.1:8080
+  #   data-eyes-mcp-staging   staging      127.0.0.1:8081
+  #   data-eyes-mcp-prod      production   127.0.0.1:8082
 
   data-eyes-mcp-dev:
     <<: *mcp-service
     container_name: data-eyes-mcp-dev
-    env_file:
-    - path: ./mcp/.env
-    - path: ./mcp/.env.dev
-      required: false
     environment:
       <<: *mcp-environment
       DEPLOYMENT_ENVIRONMENT: development
+      INTERNAL_HOST: data-eyes-mcp-dev   # the agent connects by this name
       INSTANCE_ALLOWLIST: dev
-      STAGING_MSSQL_USER: ''
-      STAGING_MSSQL_PASSWORD: ''
-      PROD_MSSQL_USER: ''
-      PROD_MSSQL_PASSWORD: ''
     ports:
     - 127.0.0.1:8080:8080
 
@@ -164,18 +188,11 @@ services:
     profiles:
     - staging
     container_name: data-eyes-mcp-staging
-    env_file:
-    - path: ./mcp/.env
-    - path: ./mcp/.env.staging
-      required: false
     environment:
       <<: *mcp-environment
       DEPLOYMENT_ENVIRONMENT: staging
+      INTERNAL_HOST: data-eyes-mcp-staging   # the agent connects by this name
       INSTANCE_ALLOWLIST: staging
-      DEV_MSSQL_USER: ''
-      DEV_MSSQL_PASSWORD: ''
-      PROD_MSSQL_USER: ''
-      PROD_MSSQL_PASSWORD: ''
     ports:
     - 127.0.0.1:8081:8080
 
@@ -184,46 +201,16 @@ services:
     profiles:
     - production
     container_name: data-eyes-mcp-prod
-    env_file:
-    - path: ./mcp/.env
-    - path: ./mcp/.env.production
-      required: false
     environment:
       <<: *mcp-environment
       DEPLOYMENT_ENVIRONMENT: production
+      INTERNAL_HOST: data-eyes-mcp-prod   # the agent connects by this name
       INSTANCE_ALLOWLIST: prod
-      DEV_MSSQL_USER: ''
-      DEV_MSSQL_PASSWORD: ''
-      STAGING_MSSQL_USER: ''
-      STAGING_MSSQL_PASSWORD: ''
     ports:
     - 127.0.0.1:8082:8080
 
   # ===========================================================================
-  # 3. Gateway — single TLS entry point (Caddy, see gateway/Caddyfile)
-  # ===========================================================================
-
-  # https://${DASHBOARD_HOST}:8443 → Grafana at /, MCP environments at
-  # /mcp, /staging/, /production/. Set DASHBOARD_BIND_IP to expose it beyond
-  # localhost.
-  gateway:
-    build: ./gateway
-    environment:
-      DASHBOARD_HOST: ${DASHBOARD_HOST:-localhost}
-    ports:
-    - ${DASHBOARD_BIND_IP:-127.0.0.1}:8443:8443
-    volumes:
-    - gateway-data:/data        # internal CA and certificates
-    - gateway-config:/config
-    depends_on:
-    - grafana
-    - data-eyes-mcp-dev
-    restart: unless-stopped
-    security_opt:
-    - no-new-privileges:true
-
-  # ===========================================================================
-  # 4. Testing tools (opt-in profiles)
+  # 3. Testing tools (opt-in profiles)
   # ===========================================================================
 
   # One-shot load generator built from the MCP image (profile: loadtest).
@@ -247,7 +234,5 @@ services:
 # =============================================================================
 volumes:
   prometheus-data:    # 30-day TSDB
-  grafana-data:       # users, sessions, alert state
   collector-state:    # collector checkpoints
-  gateway-data:       # Caddy certificates
-  gateway-config:     # Caddy autosaved config
+  grafana-data:       # Grafana users, sessions, alert state, UI-saved dashboards

@@ -11,9 +11,8 @@ docs/plan/
 **/.venv/
 **/__pycache__/
 **/.pytest_cache/
-collector/state/
-prometheus/secrets/
-grafana/provisioning/alerting/contact-points.yml
+monitor/collector/state/
+monitor/prometheus/secrets/
 **/*.egg-info/
 
 .migration-backup/

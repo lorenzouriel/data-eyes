@@ -1,11 +1,20 @@
-# Copy this file to instances.yaml and replace the placeholders locally.
+# Copy this file to instances.yaml and replace the placeholders locally. Never commit it:
+# it holds the SQL logins (inside each connection string) used by the collector and the
+# MCP server. Use a read-only login (mcp/sql/provision-readonly-login.sql), not sa.
+#
+# MCP principals: token_sha256 is the SHA-256 hex digest of the principal's HTTP bearer
+# token (the token itself never goes here). Create a token and its hash with:
+#   python -c "import secrets,hashlib;t=secrets.token_urlsafe(32);print(t);print(hashlib.sha256(t.encode()).hexdigest())"
+# A principal without token_sha256 can only be used over stdio (DEFAULT_PRINCIPAL).
 
 mcp_security:
   principals:
     development-agent:
+      token_sha256: ""
       tools: ["*"]
       instances: ["dev"]
     staging-agent:
+      token_sha256: ""
       tools:
         - list_configured_instances
         - list_databases
@@ -31,6 +40,7 @@ mcp_security:
         - fleet_health_score
       instances: ["staging"]
     production-agent:
+      token_sha256: ""
       tools:
         - list_configured_instances
         - list_databases
@@ -50,20 +60,38 @@ mcp_security:
         - job_health
         - fleet_health_score
       instances: ["prod"]
+    ui-agent:
+      token_sha256: ""
+      # The UI's "Ask" assistant (agent service, token AGENT_MCP_TOKEN). Health
+      # diagnostics only: no table rows (sample_table, distinct_values), no
+      # schema browsing, no index_fragmentation (expensive on large servers).
+      tools:
+        - list_configured_instances
+        - list_databases
+        - get_database_info
+        - wait_stats
+        - top_queries
+        - blocking_snapshot
+        - missing_indexes
+        - unused_indexes
+        - stale_statistics
+        - db_space
+        - backup_health
+        - checkdb_health
+        - ag_health
+        - job_health
+      instances: ["*"]
 
 instances:
   - name: prod
-    credential_env_prefix: PROD
     label: "Prod SQL Server"
     environment: production
-    mssql_connection_string: "Driver={ODBC Driver 18 for SQL Server};Server=prod-server,1433;Database=master;UID=user;PWD=change-me;Encrypt=yes;TrustServerCertificate=no"
+    mssql_connection_string: "Driver={ODBC Driver 18 for SQL Server};Server=prod-server,1433;Database=master;UID=data_eyes_monitor;PWD=change-me;Encrypt=yes;TrustServerCertificate=no"
   - name: staging
-    credential_env_prefix: STAGING
     label: "Staging SQL Server"
     environment: staging
-    mssql_connection_string: "Driver={ODBC Driver 18 for SQL Server};Server=staging-server,1433;Database=master;UID=user;PWD=change-me;Encrypt=yes;TrustServerCertificate=no"
+    mssql_connection_string: "Driver={ODBC Driver 18 for SQL Server};Server=staging-server,1433;Database=master;UID=data_eyes_monitor;PWD=change-me;Encrypt=yes;TrustServerCertificate=no"
   - name: dev
-    credential_env_prefix: DEV
     label: "Dev SQL Server"
     environment: development
-    mssql_connection_string: "Driver={ODBC Driver 18 for SQL Server};Server=localhost,1433;Database=master;UID=user;PWD=change-me;Encrypt=yes;TrustServerCertificate=no"
+    mssql_connection_string: "Driver={ODBC Driver 18 for SQL Server};Server=localhost,1433;Database=master;UID=data_eyes_monitor;PWD=change-me;Encrypt=yes;TrustServerCertificate=no"
