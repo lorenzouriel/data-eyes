@@ -1,0 +1,13 @@
+[build-system]
+requires = ["setuptools>=65"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "data-eyes-agent"
+version = "0.1.0"
+description = "Data Eyes fleet assistant: an AI model with read-only Prometheus tools"
+requires-python = ">=3.11"
+dependencies = ["fastapi>=0.110", "uvicorn>=0.27", "pydantic-settings>=2", "httpx>=0.27", "anthropic>=0.60", "openai>=1.60", "mcp>=1.28,<2"]
+
+[tool.setuptools.packages.find]
+include = ["app*"]
