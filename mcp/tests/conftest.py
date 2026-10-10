@@ -4,7 +4,6 @@ from pathlib import Path
 
 for key, value in {
     "INSTANCES_FILE": str(Path(__file__).parent / "nonexistent-test-fleet.yaml"),
-    "HTTP_TOKEN_HASHES": "{}",
     "PROMETHEUS_URL": "",
     "DEFAULT_PRINCIPAL": "",
     "DEFAULT_INSTANCE": "",
@@ -33,25 +32,21 @@ instances:
   - name: dev
     label: Dev
     environment: development
-    credential_env_prefix: DEV
-    mssql_connection_string: 'Driver={ODBC Driver 18 for SQL Server};Server=dev;Database=master;UID=old;PWD=old'
+    mssql_connection_string: 'Driver={ODBC Driver 18 for SQL Server};Server=dev;Database=master;UID=dev_reader;PWD={s3cret;{x}}}'
   - name: beta
     label: Beta
     environment: development
-    credential_env_prefix: BETA
-    mssql_connection_string: 'Driver={ODBC Driver 18 for SQL Server};Server=beta'
+    mssql_connection_string: 'Driver={ODBC Driver 18 for SQL Server};Server=beta;UID=beta_reader;PWD=beta-pw'
   - name: prod
     label: Prod
     environment: production
-    credential_env_prefix: PROD
-    mssql_connection_string: 'Driver={ODBC Driver 18 for SQL Server};Server=prod'
+    mssql_connection_string: 'Driver={ODBC Driver 18 for SQL Server};Server=prod;UID=prod_reader;PWD=prod-pw'
 """
 
 
 @pytest.fixture(autouse=True)
 def isolated_settings(monkeypatch):
-    """A developer's mcp/.env is merged into dict settings, so pin them per test."""
-    monkeypatch.setattr(config.settings, "HTTP_TOKEN_HASHES", {})
+    """A developer's environment may set these, so pin them per test."""
     monkeypatch.setattr(config.settings, "PROMETHEUS_URL", None)
     monkeypatch.setattr(config.settings, "DEFAULT_DATABASE", None)
     monkeypatch.setattr(config.settings, "ALLOWED_HOST", None)
@@ -67,8 +62,5 @@ def fleet(tmp_path, monkeypatch):
     monkeypatch.setattr(config.settings, "DEFAULT_INSTANCE", None)
     monkeypatch.setattr(config.settings, "RATE_LIMIT_PER_MINUTE", 0)
     monkeypatch.setattr(auth, "http_mode", False)
-    for prefix in ("DEV", "BETA"):
-        monkeypatch.setenv(f"{prefix}_MSSQL_USER", f"{prefix.lower()}_reader")
-        monkeypatch.setenv(f"{prefix}_MSSQL_PASSWORD", "s3cret;{x}")
     auth._calls.clear()
     return path

@@ -13,17 +13,11 @@ def test_odbc_pairs_honour_braces():
         ("Driver", "{ODBC Driver 18}"), ("PWD", "{a;b}}c}"), ("Server", "x")]
 
 
-def test_connection_string_uses_the_scoped_login_and_tags_the_session(fleet):
+def test_connection_string_keeps_the_login_and_tags_the_session(fleet):
     value = db.connection_string(config.resolve_instance("dev"), "Sales")
-    assert "UID=old" not in value and "PWD=old" not in value and "Database=master" not in value
+    assert "Database=master" not in value
     assert "UID=dev_reader;PWD={s3cret;{x}}};Database=Sales;APP=Data Eyes MCP;" in value
     assert dict(db._odbc_pairs(value))["PWD"] == "{s3cret;{x}}}"
-
-
-def test_trusted_connection_replaces_the_login(fleet, monkeypatch):
-    monkeypatch.setenv("DEV_MSSQL_TRUSTED_CONNECTION", "yes")
-    value = db.connection_string(config.resolve_instance("dev"))
-    assert "Trusted_Connection=yes" in value and "UID=" not in value
 
 
 class _Cursor:

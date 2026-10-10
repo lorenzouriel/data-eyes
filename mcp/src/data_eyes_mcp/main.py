@@ -3,11 +3,11 @@
 import argparse
 import json
 import logging
-import os
 import sys
 
 from data_eyes_mcp import auth
 from data_eyes_mcp.config import load_fleet, settings, validate
+from data_eyes_mcp.db import _odbc_pairs
 
 
 class _Redact(logging.Filter):
@@ -15,9 +15,12 @@ class _Redact(logging.Filter):
 
     def __init__(self) -> None:
         super().__init__()
-        secrets = {value for key, value in os.environ.items() if key.endswith("_MSSQL_PASSWORD")}
+        secrets = set()
         try:
-            secrets |= {instance.mssql_connection_string for instance in load_fleet().instances.values()}
+            for instance in load_fleet().instances.values():
+                secrets.add(instance.mssql_connection_string)
+                secrets |= {value.strip("{}") for key, value in _odbc_pairs(instance.mssql_connection_string)
+                            if key.lower() in ("pwd", "password")}
         except ValueError:
             pass  # validate() reports the broken fleet file
         self.secrets = sorted((s for s in secrets if s), key=len, reverse=True)

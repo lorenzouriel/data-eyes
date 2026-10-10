@@ -1,7 +1,7 @@
 """Who is calling, and may they use this tool on this instance.
 
-HTTP callers are identified only by a bearer token whose SHA-256 hash is in
-HTTP_TOKEN_HASHES; identity headers are never trusted. stdio uses
+HTTP callers are identified only by a bearer token whose SHA-256 hash is a
+principal's token_sha256 in instances.yaml; identity headers are never trusted. stdio uses
 DEFAULT_PRINCIPAL. Grants are fnmatch patterns over tool and instance names.
 """
 
@@ -17,6 +17,7 @@ from typing import Optional
 
 from starlette.responses import JSONResponse
 
+from data_eyes_mcp import config
 from data_eyes_mcp.config import load_fleet, settings
 
 audit_log = logging.getLogger("data_eyes_mcp.audit")
@@ -57,7 +58,7 @@ class BearerAuthMiddleware:
             return None
         digest = hashlib.sha256(token).hexdigest()
         match = None
-        for name, expected in settings.HTTP_TOKEN_HASHES.items():  # no early exit: constant time
+        for name, expected in config.token_hashes().items():  # no early exit: constant time
             if hmac.compare_digest(digest, expected):
                 match = name
         return match

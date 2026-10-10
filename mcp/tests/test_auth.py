@@ -14,7 +14,7 @@ TOKEN = "synthetic-random-token-for-unit-tests"
 
 @pytest.fixture
 def tokens(monkeypatch):
-    monkeypatch.setattr(config.settings, "HTTP_TOKEN_HASHES", {"alice": hashlib.sha256(TOKEN.encode()).hexdigest()})
+    monkeypatch.setattr(config, "token_hashes", lambda: {"alice": hashlib.sha256(TOKEN.encode()).hexdigest()})
 
 
 async def test_http_requires_a_token_and_ignores_identity_headers(tokens):

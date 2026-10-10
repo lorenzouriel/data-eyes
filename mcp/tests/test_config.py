@@ -35,21 +35,30 @@ def test_instance_must_be_selected_when_ambiguous(fleet):
         config.resolve_instance("prod")
 
 
-def test_validate_requires_scoped_credentials(fleet, monkeypatch):
+def _rewrite(fleet, old, new):
+    fleet.write_text(fleet.read_text().replace(old, new))
+    stat = fleet.stat()
+    os.utime(fleet, ns=(stat.st_atime_ns, stat.st_mtime_ns + 1_000_000))
+
+
+def test_validate_requires_a_login_in_each_connection_string(fleet):
     config.validate("stdio")
-    monkeypatch.delenv("BETA_MSSQL_PASSWORD")
-    with pytest.raises(ValueError, match="BETA_MSSQL_PASSWORD"):
+    _rewrite(fleet, ";UID=beta_reader;PWD=beta-pw", "")
+    with pytest.raises(ValueError, match="'beta'.*UID and PWD"):
         config.validate("stdio")
+    _rewrite(fleet, "Server=beta'", "Server=beta;Trusted_Connection=yes'")
+    config.validate("stdio")
 
 
-def test_validate_requires_hashed_tokens_for_known_principals(fleet, monkeypatch):
-    with pytest.raises(ValueError, match="HTTP_TOKEN_HASHES"):
+def test_validate_requires_principal_token_hashes_for_http(fleet):
+    with pytest.raises(ValueError, match="token_sha256"):
         config.validate("http")
-    monkeypatch.setattr(config.settings, "HTTP_TOKEN_HASHES", {"mallory": "a" * 64})
-    with pytest.raises(ValueError, match="policy"):
+    _rewrite(fleet, "    alice:\n", "    alice:\n      token_sha256: not-a-hash\n")
+    with pytest.raises(ValueError, match="hex digest"):
         config.validate("http")
-    monkeypatch.setattr(config.settings, "HTTP_TOKEN_HASHES", {"alice": "a" * 64})
+    _rewrite(fleet, "token_sha256: not-a-hash", "token_sha256: " + "a" * 64)
     config.validate("http")
+    assert config.token_hashes() == {"alice": "a" * 64}
 
 
 def test_relative_fleet_path_is_relative_to_the_mcp_project(monkeypatch, tmp_path):

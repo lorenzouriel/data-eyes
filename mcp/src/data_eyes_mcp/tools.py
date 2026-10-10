@@ -49,6 +49,8 @@ def _transport_security() -> TransportSecuritySettings:
     if settings.ALLOWED_HOST:
         hosts.append(f"{settings.ALLOWED_HOST}:*")
         origins.append(f"https://{settings.ALLOWED_HOST}:*")
+    if settings.INTERNAL_HOST:  # server-to-server on the Compose network; no browser Origin
+        hosts.append(f"{settings.INTERNAL_HOST}:*")
     return TransportSecuritySettings(enable_dns_rebinding_protection=True, allowed_hosts=hosts, allowed_origins=origins)
 
 

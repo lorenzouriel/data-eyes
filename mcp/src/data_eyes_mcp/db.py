@@ -15,7 +15,7 @@ from typing import Any, List, Optional, Sequence, Tuple
 
 import pyodbc
 
-from data_eyes_mcp.config import Instance, credentials, resolve_instance, settings
+from data_eyes_mcp.config import Instance, resolve_instance, settings
 
 logger = logging.getLogger(__name__)
 TRUNCATED = "…[TRUNCATED_UNTRUSTED_DATA]"
@@ -70,17 +70,10 @@ def _quote(value: str) -> str:
 
 
 def connection_string(instance: Instance, database: Optional[str] = None) -> str:
-    """The instance's base string with its scoped login, database, and APP name applied."""
-    user, password, trusted = credentials(instance)
+    """The instance's connection string (with its login) plus database and APP name."""
     database = database or settings.DEFAULT_DATABASE
-    replaced = {"uid", "user id", "pwd", "password", "trusted_connection"}
-    if database:
-        replaced |= {"database", "initial catalog"}
+    replaced = {"database", "initial catalog"} if database else set()
     pairs = [(k, v) for k, v in _odbc_pairs(instance.mssql_connection_string) if k.lower() not in replaced]
-    if trusted:
-        pairs.append(("Trusted_Connection", "yes"))
-    else:
-        pairs += [("UID", _quote(user or "")), ("PWD", _quote(password or ""))]
     if database:
         pairs.append(("Database", _quote(database)))
     if settings.MSSQL_APPLICATION_NAME and not any(k.lower() == "app" for k, _ in pairs):
