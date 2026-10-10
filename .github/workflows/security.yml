@@ -9,11 +9,13 @@ jobs:
       - uses: actions/checkout@v4
       - uses: astral-sh/setup-uv@v6
       - run: sudo apt-get update && sudo apt-get install -y unixodbc
-      - run: uv run --project collector --frozen python -c "import app.main"
+      - run: uv run --project monitor/collector --frozen python -c "import app.main"
+      - run: uv run --project agent --frozen python -c "import app.main"
       - run: uv run --project mcp --frozen --extra dev pytest mcp/tests -q
-      - run: docker run --rm --entrypoint promtool -v "$PWD/prometheus:/etc/prometheus:ro" prom/prometheus:v3.13.4 check config /etc/prometheus/prometheus.yml
-      - run: docker build -t data-eyes-collector-test collector
+      - run: docker run --rm --entrypoint promtool -v "$PWD/monitor/prometheus:/etc/prometheus:ro" prom/prometheus:v3.13.4 check config /etc/prometheus/prometheus.yml
+      - run: docker build -t data-eyes-collector-test monitor/collector
       - run: docker build -t data-eyes-mcp-test mcp
+      - run: docker build -t data-eyes-agent-test agent
   audit:
     runs-on: ubuntu-latest
     steps:
@@ -22,10 +24,12 @@ jobs:
           fetch-depth: 0
       - uses: astral-sh/setup-uv@v6
       - run: |
-          uv export --project collector --frozen --no-dev --no-emit-project --format requirements-txt > /tmp/collector.txt
+          uv export --project monitor/collector --frozen --no-dev --no-emit-project --format requirements-txt > /tmp/collector.txt
           uv export --project mcp --frozen --no-dev --no-emit-project --format requirements-txt > /tmp/mcp.txt
+          uv export --project agent --frozen --no-dev --no-emit-project --format requirements-txt > /tmp/agent.txt
           uvx pip-audit --disable-pip -r /tmp/collector.txt
           uvx pip-audit --disable-pip -r /tmp/mcp.txt
+          uvx pip-audit --disable-pip -r /tmp/agent.txt
       - uses: gitleaks/gitleaks-action@v2
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

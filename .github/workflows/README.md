@@ -1,0 +1,96 @@
+# GitHub Actions workflows
+
+| Workflow | Runs on | What it checks |
+|---|---|---|
+| [security.yml](security.yml) | every push and pull request | Imports, tests, config, image builds, dependency and secret scans |
+
+## `security.yml`
+
+**`tests` job**
+
+1. Imports the collector (`monitor/collector`) and agent apps to catch broken imports.
+2. Runs the MCP test suite (`mcp/tests`).
+3. Validates `monitor/prometheus/prometheus.yml` with `promtool check config`.
+4. Builds the collector, MCP and agent Docker images.
+
+**`audit` job**
+
+1. Exports each project's locked dependencies and scans them with `pip-audit`.
+2. Scans the full Git history for committed secrets with gitleaks.
+
+The workflow has `contents: read` permission only. To reproduce it locally, use the
+commands in the root README's [Development](../../README.md#development) section.
+
+<!-- project-map:start -->
+## Where this fits
+
+- Imports the collector and agent apps, runs the MCP tests, checks `monitor/prometheus/prometheus.yml` with promtool, and builds the three images.
+- Audits the `uv.lock` files of the collector, MCP and agent, and scans history for secrets.
+
+```mermaid
+flowchart LR
+  dba(["DBA"])
+  fleet[("SQL Server fleet")]
+  inst["instances.yaml<br/>fleet + MCP principals"]
+  login["mcp/sql<br/>monitoring login"]
+  subgraph monitor["monitor/"]
+    col["collector<br/>metrics + alert checks"]
+    prom["prometheus<br/>30 days of history"]
+    graf["grafana<br/>UI + alerting"]
+  end
+  mcp["mcp/<br/>MCP server, 27 tools"]
+  agent["agent/<br/>Ask the fleet API"]
+  subgraph claude[".claude/"]
+    cmd["commands + agents"]
+    kb["knowledge-base<br/>thresholds, taxonomy"]
+    res["resources<br/>SQL toolkits + scripts"]
+  end
+  ci["GitHub Actions<br/>.github/workflows"]
+
+  login -. "grants" .-> fleet
+  inst --> col
+  inst --> mcp
+  col -- "read-only SQL" --> fleet
+  prom -- "scrape /metrics" --> col
+  graf -- "PromQL" --> prom
+  graf -- "email alerts" --> dba
+  dba --> graf
+  mcp -- "diagnostic SQL" --> fleet
+  mcp -- "severity history" --> prom
+  agent -- "PromQL" --> prom
+  agent -- "MCP tools" --> mcp
+  dba --> cmd
+  cmd -- "MCP tools" --> mcp
+  cmd --> kb
+  cmd --> res
+  kb -. "mirrored thresholds" .-> col
+  kb -. "severity rules" .-> mcp
+  res -. "run by hand" .-> fleet
+  ci -. "test + build" .-> col
+  ci -.-> mcp
+  ci -.-> agent
+  classDef here fill:#4a3aa7,stroke:#1baf7a,stroke-width:3px,color:#ffffff
+  class ci here
+```
+
+The highlighted box is this folder. Solid arrows are runtime calls; dotted arrows are configuration, mirrored rules, or manual use.
+
+### In the repository
+
+```text
+data-eyes/
+├── .claude/                                  Claude Code toolkit
+├── .github/                                  GitHub configuration
+│   └── workflows/                            CI: tests, builds, audits  ◀ you are here
+├── agent/                                    "Ask the fleet" API
+├── assets/                                   Logo
+├── mcp/                                      MCP server (27 read-only tools)
+├── monitor/                                  Collector -> Prometheus -> Grafana
+├── .env.example                              Template for .env (Grafana, agent)
+├── .mcp.json                                 Claude Code MCP registration (stdio, dev)
+├── CLAUDE.md                                 Project instructions for Claude Code
+├── README.md                                 Setup, configuration, security
+├── docker-compose.yml                        The whole stack
+└── instances.example.yaml                    Template for instances.yaml (fleet, MCP principals)
+```
+<!-- project-map:end -->
