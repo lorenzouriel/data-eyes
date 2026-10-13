@@ -33,5 +33,7 @@ jobs:
           uvx pip-audit --disable-pip -r /tmp/agent.txt
       - uses: gitleaks/gitleaks-action@v2
         env:
+          # Keep read-only permissions; findings remain in the summary/artifact.
+          GITLEAKS_ENABLE_COMMENTS: "false"
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GITLEAKS_LICENSE: ${{ secrets.GITLEAKS_LICENSE }}

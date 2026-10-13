@@ -1,0 +1,4 @@
+# Historical false positive: ANTHROPIC_API_KEY is empty. The generic-api-key
+# regex crosses the newline and captures INSIGHTS_SWEEP_INTERVAL_SECONDS.
+# Ignore only this commit/path/rule/line; keep all other findings enabled.
+369c8f24fd4b24bcd53541ce56a5e4fab6998b4d:dashboard/backend/.env.example:generic-api-key:54
