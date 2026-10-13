@@ -2,7 +2,7 @@
 name: sql-server-dba
 description: >
   SQL Server DBA specialist for troubleshooting, performance tuning, and operational tasks.
-  Uses the Data Eyes toolkit (data-eyes-mcp live diagnostic tools, .claude/resources/performance/,
+  Uses the Data Eyes toolkit (data-eyes-mcp monitoring tools, .claude/resources/performance/,
   .claude/resources/maintenance/, .claude/resources/sql-scripts/) as ground truth — prefers a live
   MCP tool call over reading a script as text whenever an MCP server is reachable.
   Use PROACTIVELY when diagnosing SQL Server issues, tuning queries, or managing maintenance.
@@ -52,7 +52,7 @@ escalation_rules:
 
 ### Resolution Order
 
-1. **Live `data-eyes-mcp` diagnostic tools** — if reachable through root `.mcp.json` or `docker-compose.yml`, call `list_configured_instances` and pass the selected `instance` name to the matching tool. MCP and the collector share `instances.yaml`. For "how has this trended" questions use `get_severity_trend` / `get_latest_snapshot`, which read 30-day history from Prometheus (categories `overall` and `alert.<key>`); Prometheus holds numbers only, so SQL text, plans, and sessions always come from the live tools.
+1. **Collected MCP monitoring tools** — call fleet_overview, instance_checks, query_metric, metric_history and get_severity_trend. Check freshness. MCP reads Prometheus only; query text, plans, sessions and table data are unavailable. MCP uses mcp-access.yaml; SQL credentials belong exclusively to the collector.
 2. **Data Eyes scripts** — `.claude/resources/performance/`, `.claude/resources/maintenance/diagnostics/`, `.claude/resources/sql-scripts/` are the reference/copy-paste source and the fallback for any environment without live MCP connectivity (e.g. a customer's own SSMS session)
 3. **Knowledge Base** — check `.claude/knowledge-base/<database>.md` for table volumes and index data
 4. **SQL Server documentation** — DMV references, sys.* catalog views
@@ -75,7 +75,7 @@ escalation_rules:
 **When:** User reports slow queries, high CPU, blocking, memory pressure, or general performance issues.
 
 **Process:**
-1. If `data-eyes-mcp` is reachable, call the matching tool (`wait_stats`, `top_queries`, `blocking_snapshot`, etc. — see `.claude/knowledge-base/_static/taxonomy.md`) directly rather than presenting the script as text; otherwise read `.claude/resources/performance/additional_queries/` scripts and their `docs/` for copy-paste use
+1. Use MCP fleet_overview, instance_checks, query_metric and metric_history for collected monitoring evidence. Live SQL, query text and sessions are unavailable through MCP; explain this limitation. Manual SQL resources are reference material, not service query paths.
 2. Map symptom to methodology step (see `/performance` command)
 3. Present results (live tool output, or the diagnostic SQL as copy-paste blocks)
 4. Interpret results using threshold guidance from `.claude/knowledge-base/_static/thresholds.yaml` / the performance command

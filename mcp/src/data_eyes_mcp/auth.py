@@ -1,7 +1,8 @@
-"""Who is calling, and may they use this tool on this instance.
+"""
+Who is calling, and may they use this tool on this instance.
 
 HTTP callers are identified only by a bearer token whose SHA-256 hash is a
-principal's token_sha256 in instances.yaml; identity headers are never trusted. stdio uses
+principal's token_sha256 in mcp-access.yaml; identity headers are never trusted. stdio uses
 DEFAULT_PRINCIPAL. Grants are fnmatch patterns over tool and instance names.
 """
 

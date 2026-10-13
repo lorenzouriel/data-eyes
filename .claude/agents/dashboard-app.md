@@ -19,7 +19,7 @@ anti_pattern_refs: []
 
 Data Eyes uses Grafana for dashboards, Prometheus for 30-day metric history,
 and a Python collector for scheduled SQL diagnostics. MCP provides authorized
-live diagnostics and historical severity queries.
+collector-backed monitoring and historical queries.
 
 Read `docs/architecture/architecture.md`, `docs/features/metrics.md`, and
 `docs/features/alerts.md` first. Configuration lives in `instances.yaml`,
@@ -35,8 +35,7 @@ alert provisioning in Git. Manage human users and contact points in Grafana. Pre
 `prometheus-data`, `grafana-data`, and `collector-state` volumes during upgrades.
 
 Use the existing bounded SQL client and fixed queries. Export numeric metrics with
-bounded labels. SQL text, session identities, and plans belong in live MCP analysis,
-not Prometheus labels. Preserve AG backup and Unknown-check semantics.
+bounded labels. SQL text, session identities, and plans are not exposed by monitoring MCP and must not become Prometheus labels. Preserve AG backup and Unknown-check semantics.
 
 Validate monitor/collector/MCP tests, Prometheus configuration, Grafana provisioning, and
 container builds. Never send test notifications without explicit authorization.

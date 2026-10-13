@@ -41,13 +41,17 @@ def _rewrite(fleet, old, new):
     os.utime(fleet, ns=(stat.st_atime_ns, stat.st_mtime_ns + 1_000_000))
 
 
-def test_validate_requires_a_login_in_each_connection_string(fleet):
+def test_sql_credentials_are_rejected(fleet):
     config.validate("stdio")
-    _rewrite(fleet, ";UID=beta_reader;PWD=beta-pw", "")
-    with pytest.raises(ValueError, match="'beta'.*UID and PWD"):
+    _rewrite(fleet, "    label: Beta", "    label: Beta\n    mssql_connection_string: forbidden")
+    with pytest.raises(ValueError):
+        config.load_fleet()
+
+
+def test_prometheus_is_required(fleet, monkeypatch):
+    monkeypatch.setattr(config.settings, "PROMETHEUS_URL", "")
+    with pytest.raises(ValueError, match="PROMETHEUS_URL"):
         config.validate("stdio")
-    _rewrite(fleet, "Server=beta'", "Server=beta;Trusted_Connection=yes'")
-    config.validate("stdio")
 
 
 def test_validate_requires_principal_token_hashes_for_http(fleet):
@@ -62,6 +66,6 @@ def test_validate_requires_principal_token_hashes_for_http(fleet):
 
 
 def test_relative_fleet_path_is_relative_to_the_mcp_project(monkeypatch, tmp_path):
-    monkeypatch.setattr(config.settings, "INSTANCES_FILE", "../instances.yaml")
+    monkeypatch.setattr(config.settings, "MCP_ACCESS_FILE", "../mcp-access.yaml")
     monkeypatch.chdir(tmp_path)
-    assert config.fleet_path() == config.Path(config.__file__).resolve().parents[3] / "instances.yaml"
+    assert config.fleet_path() == config.Path(config.__file__).resolve().parents[3] / "mcp-access.yaml"

@@ -1,4 +1,6 @@
-"""Storage and tempdb: disk, logs, file growth, VLFs, I/O latency, tempdb."""
+"""
+Storage and tempdb: disk, logs, file growth, VLFs, I/O latency, tempdb.
+"""
 
 from datetime import datetime
 
@@ -35,9 +37,8 @@ async def disk_space(ctx):
 
 @check("transaction_log_health")
 async def transaction_log_health(ctx):
-    # DBCC SQLPERF(LOGSPACE) rather than the Percent Log Used counter: some
-    # builds (SQL Server 2025 on Linux) publish that counter only for system
-    # databases, so user databases were silently skipped.
+    # DBCC SQLPERF(LOGSPACE) rather than the Percent Log Used counter 
+    # because the counter is only updated on log flushes, which can be delayed by long transactions.
     rows = await ctx.query("""
     SET NOCOUNT ON;
     CREATE TABLE #log (DatabaseName sysname, LogSizeMB float, LogUsedPct float, Status int);

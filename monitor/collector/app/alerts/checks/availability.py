@@ -1,4 +1,6 @@
-"""Availability: restarts, Agent, database state, AGs, clusters, log shipping."""
+"""
+Availability: restarts, Agent, database state, AGs, clusters, log shipping.
+"""
 
 from app.alerts.checks.registry import TO_UTC
 from app.alerts.checks.registry import check

@@ -114,7 +114,7 @@ Read(".claude/knowledge-base/_static/thresholds.yaml") — severity bands and al
 **Unknown / stale diagnostics:**
 - Unknown (severity 1) means the measurement failed or is stale — the collector omits values instead of reporting zero
 - Checks run at different cadences (fast 60s, standard 5 min, slow 1h, daily 24h; connection probe 30s) — check the key's cadence in `docs/features/alerts.md` before calling it stale
-- Missing permissions are the usual cause — compare with `mcp/sql/provision-readonly-login.sql` and `provision-alerting-permissions.sql`
+- Missing permissions are the usual cause — compare with `monitor/collector/sql/provision-readonly-login.sql` and `provision-alerting-permissions.sql`
 
 **Fleet and threshold changes:**
 - Fleet: edit `instances.yaml`, then restart `collector` and the matching `data-eyes-mcp-*` service. There is no runtime registry API.

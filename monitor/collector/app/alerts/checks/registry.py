@@ -1,4 +1,5 @@
-"""Check registry and helpers shared by the check modules.
+"""
+Check registry and helpers shared by the check modules.
 
 Every check is read-only. SQL returns raw measurements; severity comes from
 the user-editable thresholds in app/alerts/evaluation.py. Details
@@ -83,8 +84,6 @@ async def read_error_log(ctx: CheckContext, search: str, limit: int = 500) -> Op
         return None
     search = search.replace("'", "''")
     last_size = ctx.memory.get("log_size")
-    # The current log shrinking means it was cycled (sp_cycle_errorlog or a
-    # restart); lines written before the cycle are now in archive #1.
     archive = "" if last_size is None else f"""
     IF @size < {int(last_size)}
         INSERT INTO #log EXEC master.dbo.xp_readerrorlog 1, 1, N'{search}', NULL, @since, NULL, N'asc';"""

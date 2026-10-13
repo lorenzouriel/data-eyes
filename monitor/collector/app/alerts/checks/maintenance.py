@@ -1,4 +1,6 @@
-"""Maintenance: Agent jobs, index/statistics upkeep, identity limits, new databases, version support."""
+"""
+Maintenance: Agent jobs, index/statistics upkeep, identity limits, new databases, version support.
+"""
 
 from datetime import date
 
@@ -152,8 +154,7 @@ async def new_database(ctx):
             for row in rows if previous.get(row["DatabaseName"]) != row["CreateDate"]]
 
 
-# Microsoft extended-support end dates by major version. Lifecycle dates are
-# fixed when a version ships, unlike cumulative-update lists that go stale.
+# Microsoft extended-support end dates by major version.
 END_OF_SUPPORT = {
     10: date(2019, 7, 9), 11: date(2022, 7, 12), 12: date(2024, 7, 9), 13: date(2026, 7, 14),
     14: date(2027, 10, 12), 15: date(2030, 1, 8), 16: date(2033, 1, 11),

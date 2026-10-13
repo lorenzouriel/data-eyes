@@ -1,4 +1,6 @@
-"""Configuration and security: setting drift, sysadmin, logins, sa, certificates."""
+"""
+Configuration and security: setting drift, sysadmin, logins, sa, certificates.
+"""
 
 from app.alerts.checks.registry import TO_UTC
 from app.alerts.checks.registry import check

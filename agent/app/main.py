@@ -1,4 +1,5 @@
-"""Data Eyes agent API (internal only; it has no sign-in of its own).
+"""
+Data Eyes agent API (internal only; it has no sign-in of its own).
 
 GET  /api/agent/status  provider, model, and whether the agent can answer
 POST /api/agent/ask     Server-Sent Events: `status` (progress), `text`

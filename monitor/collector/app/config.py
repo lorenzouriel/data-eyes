@@ -1,4 +1,6 @@
-"""Collector settings. Fleet and check settings are deployment-owned YAML."""
+"""
+Collector settings. Fleet and check settings are deployment-owned YAML.
+"""
 from pathlib import Path
 import yaml
 from pydantic import BaseModel, Field, ConfigDict, field_validator

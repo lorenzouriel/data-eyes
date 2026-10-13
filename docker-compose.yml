@@ -1,42 +1,4 @@
-# =============================================================================
-# Data Eyes — integrated stack
-# =============================================================================
-#
-#   SQL Server fleet (instances.yaml)
-#        │                                   │
-#        ▼                                   ▼
-#   collector ──/metrics──▶ prometheus ──▶ grafana (UI, dashboards, alerting)
-#   (fixed DMV queries)     (30d history)     http://${GRAFANA_BIND_IP}:3000
-#                                 ▲
-#                                 ├── agent ("Ask the fleet" API, internal)
-#                                 └── data-eyes-mcp-{dev,staging,prod}
-#                                     (agent tools; history from Prometheus)
-#
-#   monitor/   collector, prometheus, grafana (the monitoring pipeline)
-#   mcp/, agent/   at the repository root
-#
-# Usage:
-#   docker compose up -d                              # core stack + MCP dev
-#   docker compose --profile staging up -d            # + MCP staging
-#   docker compose --profile production up -d         # + MCP production
-#   docker compose --profile loadtest run loadgen     # synthetic MCP load
-#
-# Configuration: two files (never commit or print them):
-#   instances.yaml     The fleet: SQL Servers with their connection strings and
-#                      logins (collector, MCP), and MCP principals with their
-#                      grants and token_sha256 (template: instances.example.yaml)
-#   .env               Everything else: Grafana port, admin and SMTP; agent keys
-#                      (template: .env.example)
-#   instances.yaml is mounted only into the collector and MCP containers; Grafana
-#   and the agent receive just their own .env variables.
-#
-# Rules:
-#   - Run exactly one collector per collector-state volume (checkpoint file).
-#   - Every host port binds to 127.0.0.1 by default. Grafana signs users in
-#     itself; MCP needs a bearer token. Put TLS in front before exposing either.
-# =============================================================================
-
-# Project name. Volume names are prefixed with it (src_prometheus-data, ...)
+# Data Eyes: SQL Server -> collector -> Prometheus -> Grafana / MCP -> agent -> UI.
 name: src
 
 # Common definition for every MCP environment. Each environment service
@@ -53,14 +15,14 @@ x-mcp-service: &mcp-service
   - --bind
   - 0.0.0.0:8080
   volumes:
-  - ./instances.yaml:/app/instances.yaml:ro
+  - ./mcp-access.yaml:/app/mcp-access.yaml:ro
   restart: unless-stopped
   healthcheck:
     test:
     - CMD
-    - curl
-    - -f
-    - http://localhost:8080/health
+    - python
+    - -c
+    - import urllib.request; urllib.request.urlopen('http://localhost:8080/health')
     interval: 30s
     timeout: 10s
     retries: 3
@@ -69,7 +31,7 @@ x-mcp-service: &mcp-service
 # Environment shared by every MCP environment. Each service sets its own
 # DEPLOYMENT_ENVIRONMENT and INSTANCE_ALLOWLIST, so it serves only those instances.
 x-mcp-environment: &mcp-environment
-  INSTANCES_FILE: /app/instances.yaml
+  MCP_ACCESS_FILE: /app/mcp-access.yaml
   PROMETHEUS_URL: http://prometheus:9090
 
 services:
@@ -103,6 +65,8 @@ services:
   # Scrapes the collector and keeps 30 days of history; evaluates the
   # recording rules in monitor/prometheus/rules/. Internal only (:9090).
   prometheus:
+    ports:
+    - 127.0.0.1:9090:9090
     image: prom/prometheus:v3.13.4
     restart: unless-stopped
     command:
@@ -122,6 +86,9 @@ services:
     image: grafana/grafana:13.2.3
     restart: unless-stopped
     environment:
+      GF_PANELS_DISABLE_SANITIZE_HTML: "true"
+      GF_AUTH_ANONYMOUS_ENABLED: "false"
+      GF_USERS_EDITORS_CAN_ADMIN: "false"
       GF_SECURITY_ADMIN_USER: ${GF_SECURITY_ADMIN_USER:-admin}
       GF_SECURITY_ADMIN_PASSWORD: ${GF_SECURITY_ADMIN_PASSWORD:?Set GF_SECURITY_ADMIN_PASSWORD in .env}
       GRAFANA_NOTIFICATION_ADDRESSES: ${GRAFANA_NOTIFICATION_ADDRESSES:-}
@@ -130,8 +97,6 @@ services:
       GRAFANA_SMTP_PASSWORD: ${GRAFANA_SMTP_PASSWORD:-}
       GRAFANA_SMTP_FROM_ADDRESS: ${GRAFANA_SMTP_FROM_ADDRESS:-}
       GRAFANA_SMTP_FROM_NAME: ${GRAFANA_SMTP_FROM_NAME:-Data Eyes}
-    ports:
-    - ${GRAFANA_BIND_IP:-127.0.0.1}:3000:3000
     volumes:
     - grafana-data:/var/lib/grafana
     - ./monitor/grafana/grafana.ini:/etc/grafana/grafana.ini:ro
@@ -140,15 +105,23 @@ services:
     depends_on:
     - prometheus
 
-  # "Ask the fleet": an AI model with read-only Prometheus tools and the MCP
-  # servers' live diagnostic tools (as principal ui-agent). Provider keys stay
-  # in this container. Internal only (:8000) and unauthenticated: do not
-  # publish its port without putting sign-in in front of it.
+  # Shared browser entry point. Only authenticated Grafana users reach the chat.
+  gateway:
+    image: nginx:stable-alpine@sha256:0985e772fb9f729e6fa0980da05fca5d9c468e870eed43071545afa9d2e27d94
+    restart: unless-stopped
+    ports:
+    - ${GRAFANA_BIND_IP:-127.0.0.1}:3000:3000
+    volumes:
+    - ./monitor/gateway/default.conf:/etc/nginx/conf.d/default.conf:ro
+    depends_on:
+    - grafana
+    - agent-ui
+
+  # The agent calls MCP monitoring tools; only MCP queries Prometheus.
   agent:
     build: ./agent
     restart: unless-stopped
     environment:
-      PROMETHEUS_URL: http://prometheus:9090
       AI_PROVIDER: ${AI_PROVIDER:-anthropic}
       AI_MODEL: ${AI_MODEL:-}
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
@@ -156,7 +129,7 @@ services:
       OPENAI_BASE_URL: ${OPENAI_BASE_URL:-}
       LOCAL_AI_BASE_URL: ${LOCAL_AI_BASE_URL:-}
       LOCAL_AI_API_KEY: ${LOCAL_AI_API_KEY:-local}
-      # Live SQL diagnostics through the MCP servers (principal ui-agent).
+      # Collector-backed monitoring tools (principal ui-agent).
       # Environments whose container is not running are skipped.
       AGENT_MCP_TOKEN: ${AGENT_MCP_TOKEN:-}
       AGENT_MCP_SERVERS: ${AGENT_MCP_SERVERS:-development=http://data-eyes-mcp-dev:8080/mcp,staging=http://data-eyes-mcp-staging:8080/mcp,production=http://data-eyes-mcp-prod:8080/mcp}
@@ -171,6 +144,16 @@ services:
   #   data-eyes-mcp-dev       (default)    127.0.0.1:8080
   #   data-eyes-mcp-staging   staging      127.0.0.1:8081
   #   data-eyes-mcp-prod      production   127.0.0.1:8082
+
+  # Browser chat client; model credentials remain in the agent service.
+  agent-ui:
+    build: ./agent
+    restart: unless-stopped
+    command: ["streamlit", "run", "app/ui.py", "--server.address=0.0.0.0", "--server.port=8501", "--server.baseUrlPath=assistant", "--server.headless=true", "--browser.gatherUsageStats=false"]
+    environment:
+      AGENT_API_URL: http://agent:8000
+    depends_on:
+    - agent
 
   data-eyes-mcp-dev:
     <<: *mcp-service
@@ -225,7 +208,7 @@ services:
     environment:
       PYTHONUNBUFFERED: '1'
     volumes:
-    - ./instances.yaml:/app/instances.yaml:ro
+    - ./mcp-access.yaml:/app/mcp-access.yaml:ro
     - ./loadgen:/app/loadgen:ro
     restart: 'no'
 

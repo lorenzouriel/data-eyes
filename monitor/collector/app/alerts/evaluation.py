@@ -1,4 +1,6 @@
-"""Pure alert evaluation: settings inheritance, thresholds, double check."""
+"""
+Pure alert evaluation: settings inheritance, thresholds, double check.
+"""
 
 from typing import Iterable, Mapping, Optional, Sequence, Tuple
 

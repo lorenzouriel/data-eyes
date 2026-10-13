@@ -1,122 +1,56 @@
 # Agent
 
-The "Ask the fleet" assistant: an internal HTTP API that answers DBA questions about
-the monitored SQL Server fleet with an AI model. The root
-[docker-compose.yml](../docker-compose.yml) starts it as the `agent` service (internal port 8000).
+The agent answers monitoring questions using MCP tools backed by the collector's
+Prometheus measurements. It does not connect to SQL Server or query Prometheus directly.
 
-```text
-question ──► agent (:8000) ──► model (anthropic | openai | local)
-                 │
-                 ├── Prometheus tools (read-only, 30 days of collector metrics)
-                 └── MCP tools as principal ui-agent (live health diagnostics, optional)
-```
+`Streamlit -> agent API -> MCP -> Prometheus <- collector <- SQL Server`
 
-## Layout
+Configure the model provider and `AGENT_MCP_TOKEN` in the root `.env`. The token's
+hash must belong to `ui-agent` in `mcp-access.yaml`. `AGENT_MCP_SERVERS` contains
+comma-separated `environment=url` pairs. Stopped/unreachable environments are skipped;
+if no tools are available, the agent reports monitoring unavailable.
+Tools are namespaced by environment, with instance arguments restricted to discovered names.
 
-| Path | Contents |
-|---|---|
-| [app/](app/) | FastAPI app, tool loop, Prometheus and MCP tools, settings |
-| `pyproject.toml`, `uv.lock` | Dependencies (FastAPI, httpx, anthropic, openai, mcp) |
-| `Dockerfile` | Python 3.11 slim image, runs as UID 10001 |
+The agent can explain health checks, collected performance measurements and trends.
+It cannot inspect SQL text, sessions, plans, schema, or table rows. The system prompt
+requires checking measurement freshness and reporting missing/stale data explicitly.
 
-## Endpoints
-
-| Method | Path | Returns |
-|---|---|---|
-| `GET` | `/api/agent/status` | Provider, model, whether it is configured, whether live diagnostics are on |
-| `POST` | `/api/agent/ask` | Server-Sent Events: `status`, `text`, `error`, then `done` |
-
-## Configuration
-
-Settings come from the repository `.env` (template [.env.example](../.env.example)):
-`AI_PROVIDER`, `AI_MODEL`, the provider key, and `AGENT_MCP_TOKEN`. Without
-`AGENT_MCP_TOKEN` the agent uses Prometheus only. Limits: `AI_MAX_TOOL_CALLS` (8),
-`AI_MAX_TOKENS` (2000), `AI_TIMEOUT_SECONDS` (120), `AI_MAX_CONCURRENT_ASKS` (4).
-
-## Security
-
-The API has no sign-in of its own, so Compose does not publish its port. Put
-authentication in front of it before exposing it. Provider keys stay in this
-container and are never returned by `/status`.
-
-## Development
+## Chat UI
 
 ```powershell
-uv run --project agent python -c "import app.main"
-docker build -t data-eyes-agent agent
+docker compose up -d --build gateway
 ```
 
-<!-- project-map:start -->
-## Where this fits
+Open http://localhost:3000/d/ask-the-fleet/ask-the-fleet and sign in to Grafana.
+The gateway protects `/assistant/` using the Grafana session. Streamlit port 8501
+is internal only. The UI shows model configuration, history, progress, and errors.
+See [gateway deployment](../monitor/gateway/README.md) for HTTPS routing and access scope.
+Provider keys stay in the API service. History is session-only; the latest 19 successful
+exchanges are sent with the next question, with each message capped at 8000 characters.
 
-- Reads the collector's metrics from Prometheus (`PROMETHEUS_URL`).
-- Calls the MCP servers as principal `ui-agent` for live diagnostics. Its `AGENT_MCP_TOKEN` hash is that principal's `token_sha256` in `instances.yaml`.
-- Settings come from the root `.env`; `docker-compose.yml` starts it. It never connects to SQL Server itself.
+Local development, in separate terminals from `agent/`:
 
-```mermaid
-flowchart LR
-  dba(["DBA"])
-  fleet[("SQL Server fleet")]
-  inst["instances.yaml<br/>fleet + MCP principals"]
-  login["mcp/sql<br/>monitoring login"]
-  subgraph monitor["monitor/"]
-    col["collector<br/>metrics + alert checks"]
-    prom["prometheus<br/>30 days of history"]
-    graf["grafana<br/>UI + alerting"]
-  end
-  mcp["mcp/<br/>MCP server, 27 tools"]
-  agent["agent/<br/>Ask the fleet API"]
-  subgraph claude[".claude/"]
-    cmd["commands + agents"]
-    kb["knowledge-base<br/>thresholds, taxonomy"]
-    res["resources<br/>SQL toolkits + scripts"]
-  end
-  ci["GitHub Actions<br/>.github/workflows"]
-
-  login -. "grants" .-> fleet
-  inst --> col
-  inst --> mcp
-  col -- "read-only SQL" --> fleet
-  prom -- "scrape /metrics" --> col
-  graf -- "PromQL" --> prom
-  graf -- "email alerts" --> dba
-  dba --> graf
-  mcp -- "diagnostic SQL" --> fleet
-  mcp -- "severity history" --> prom
-  agent -- "PromQL" --> prom
-  agent -- "MCP tools" --> mcp
-  dba --> cmd
-  cmd -- "MCP tools" --> mcp
-  cmd --> kb
-  cmd --> res
-  kb -. "mirrored thresholds" .-> col
-  kb -. "severity rules" .-> mcp
-  res -. "run by hand" .-> fleet
-  ci -. "test + build" .-> col
-  ci -.-> mcp
-  ci -.-> agent
-  classDef here fill:#4a3aa7,stroke:#1baf7a,stroke-width:3px,color:#ffffff
-  class agent here
+```powershell
+uv run uvicorn app.main:app --host 127.0.0.1 --port 8000
+uv run streamlit run app/ui.py --server.address=127.0.0.1 --browser.gatherUsageStats=false
 ```
 
-The highlighted box is this folder. Solid arrows are runtime calls; dotted arrows are configuration, mirrored rules, or manual use.
+Set `AGENT_MCP_SERVERS` to host-reachable MCP endpoints when running locally.
+The UI uses `AGENT_API_URL`, default `http://localhost:8000`.
 
-### In the repository
+## API and source
 
-```text
-data-eyes/
-├── .claude/                                  Claude Code toolkit
-├── .github/                                  GitHub configuration
-├── agent/                                    "Ask the fleet" API  ◀ you are here
-│   └── app/                                  FastAPI app, tool loop, tools
-├── assets/                                   Logo
-├── mcp/                                      MCP server (27 read-only tools)
-├── monitor/                                  Collector -> Prometheus -> Grafana
-├── .env.example                              Template for .env (Grafana, agent)
-├── .mcp.json                                 Claude Code MCP registration (stdio, dev)
-├── CLAUDE.md                                 Project instructions for Claude Code
-├── README.md                                 Setup, configuration, security
-├── docker-compose.yml                        The whole stack
-└── instances.example.yaml                    Template for instances.yaml (fleet, MCP principals)
+| File | Responsibility |
+|---|---|
+| `app/main.py` | `/health`, `/api/agent/status`, `/api/agent/ask` (SSE) |
+| `app/agent.py` | Model prompt and bounded tool loop |
+| `app/mcp_tools.py` | MCP discovery, environment namespacing and calls |
+| `app/config.py` | Provider configuration and monitoring token |
+| `app/ui.py` | Streamlit chat |
+
+`monitoring_configured` reports token configuration, not live connectivity.
+Limits: `AI_MAX_TOOL_CALLS`, `AI_MAX_TOKENS`, `AI_TIMEOUT_SECONDS`, `AI_MAX_CONCURRENT_ASKS`.
+
+```powershell
+uv run --project agent --frozen python -m unittest discover -s agent/tests -v
 ```
-<!-- project-map:end -->

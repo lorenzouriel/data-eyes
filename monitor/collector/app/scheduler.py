@@ -1,4 +1,5 @@
-"""Scheduled SQL collection, bounded labels, persistent check watermarks.
+"""
+Scheduled SQL collection, bounded labels, persistent check watermarks.
 
 Two loops per instance: the fast metric cycle (app.metrics) and the alert
 check cycle (app.alerts). Results are cached in memory; a Prometheus scrape
@@ -69,6 +70,7 @@ class Exporter:
                 base = {"sql_instance": name, "environment": instance.environment}
                 fresh = now - entry["attempt"] <= entry["ttl"]
                 rows = metric("collection_success", int(entry["ok"] and fresh), {"collector": group})
+                rows += metric("collection_fresh", int(fresh), {"collector": group})
                 rows += metric("collection_last_success_timestamp_seconds", entry["last_success"], {"collector": group})
                 rows += metric("collection_duration_seconds", entry["duration"], {"collector": group})
                 if entry["ok"] and fresh:

@@ -1,4 +1,6 @@
-"""Cached Prometheus exporter. HTTP requests never execute SQL."""
+"""
+Cached Prometheus exporter. HTTP requests never execute SQL.
+"""
 import asyncio
 from contextlib import asynccontextmanager, suppress
 from fastapi import FastAPI

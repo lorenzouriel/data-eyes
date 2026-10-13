@@ -1,18 +1,10 @@
-"""Live SQL diagnostics through the Data Eyes MCP servers.
-
-The agent is an MCP client, like Claude Code. It connects to each configured
-MCP environment (dev, staging, production) with its own bearer token as the
-`ui-agent` principal, so SQL credentials, per-principal grants, limits and the
-audit log all stay in the MCP servers. Only the diagnostic tools in
-ALLOWED_TOOLS are offered to the model; the MCP server enforces the same grants
-again. Environments whose container is not running are skipped.
-
-Tools are exposed to the model as `sql_<tool>`. Each call is routed to the MCP
-environment that serves the requested `instance`.
+"""
+MCP monitoring client. All measurements come from the collector via Prometheus.
 """
 import copy
 import json
 import logging
+import re
 from contextlib import AsyncExitStack
 from datetime import timedelta
 from typing import Dict, List
@@ -25,19 +17,11 @@ from app.config import settings
 
 LOG = logging.getLogger("data_eyes_agent")
 
-# Health diagnostics only. Excluded on purpose: sample_table / distinct_values
-# (return table rows: business data to the model provider, and possible prompt
-# injection), schema discovery, and index_fragmentation (reads every index page;
-# expensive on large servers).
-ALLOWED_TOOLS = (
-    "wait_stats", "top_queries", "blocking_snapshot", "missing_indexes", "unused_indexes",
-    "stale_statistics", "db_space", "backup_health", "checkdb_health", "ag_health", "job_health",
-    "list_databases", "get_database_info",
-)
-PREFIX = "sql_"
+ALLOWED_TOOLS = ("fleet_overview", "instance_checks", "list_metrics", "query_metric", "metric_history",
+                 "get_latest_snapshot", "get_severity_trend", "list_databases")
 CONNECT_TIMEOUT = 5
 CALL_TIMEOUT = 60
-MAX_RESULT_CHARS = 20_000
+MAX_RESULT_CHARS = 100_000
 
 
 def servers() -> Dict[str, str]:
@@ -72,7 +56,7 @@ class McpTools:
     def __init__(self):
         self._stack = AsyncExitStack()
         self.sessions: Dict[str, ClientSession] = {}
-        self.instance_env: Dict[str, str] = {}
+        self.instance_env: Dict[str, list] = {}
         self.tools: Dict[str, dict] = {}  # model-facing name -> {description, schema}
 
     async def __aenter__(self):
@@ -98,12 +82,16 @@ class McpTools:
                 continue
             self._stack.push_async_exit(sub)
             self.sessions[env] = session
-            for name in instances:
-                self.instance_env.setdefault(name, env)
+            self.instance_env[env] = instances
             for tool in listing.tools:
-                if tool.name in ALLOWED_TOOLS and PREFIX + tool.name not in self.tools:
-                    self.tools[PREFIX + tool.name] = {"description": tool.description or tool.name,
-                                                      "schema": tool.inputSchema or {"type": "object", "properties": {}}}
+                if tool.name in ALLOWED_TOOLS:
+                    # Namespace every tool so global fleet queries retain environment scope.
+                    name = re.sub(r"[^a-zA-Z0-9_]", "_", env) + "_" + tool.name
+                    if name in self.tools:
+                        raise ValueError("MCP environment tool names collide")
+                    self.tools[name] = {"description": tool.description or tool.name,
+                                        "schema": tool.inputSchema or {"type": "object", "properties": {}},
+                                        "environment": env, "remote_name": tool.name}
         return self
 
     async def __aexit__(self, *exc):
@@ -115,39 +103,44 @@ class McpTools:
             body = json.loads(text)
         except json.JSONDecodeError:
             return []
-        rows = body.get("rows", body) if isinstance(body, dict) else body
+        rows = body.get("rows", []) if isinstance(body, dict) else body
+        if not isinstance(rows, list):
+            return []
         return [row["name"] for row in rows if isinstance(row, dict) and row.get("name")]
 
     def definitions(self) -> List[dict]:
-        """Tool definitions for the model: `instance` is required and limited
-        to the instances the running MCP environments serve."""
-        available = sorted(self.instance_env)
         result = []
         for name, tool in self.tools.items():
             schema = copy.deepcopy(tool["schema"])
-            schema.setdefault("properties", {})["instance"] = {
-                "type": "string", "enum": available, "description": "Instance to run the diagnostic on"}
-            schema["required"] = sorted(set(schema.get("required", [])) | {"instance"})
-            summary = tool["description"].strip().split("\n\n")[0]
-            result.append({"name": name, "schema": schema, "status": f"Running {name[len(PREFIX):]} on the server",
-                           "description": f"[Live SQL diagnostic; runs a query on the server] {summary}"})
+            env = tool["environment"]
+            if "instance" in schema.get("properties", {}):
+                available = sorted(self.instance_env[env])
+                if not available:
+                    continue
+                schema["properties"]["instance"] = {"type": "string", "enum": available}
+            result.append({"name": name, "schema": schema,
+                           "status": f"Reading {env} monitoring data",
+                           "description": f"[{env}; collected metrics, no live SQL] {tool['description']}"})
         return result
 
     def handles(self, name: str) -> bool:
         return name in self.tools
 
     async def run(self, name: str, arguments: dict) -> str:
-        instance = (arguments or {}).get("instance")
-        env = self.instance_env.get(instance or "")
-        if env is None:
-            return json.dumps({"error": f"instance {instance!r} is not served by a running MCP environment; "
-                                        f"live diagnostics are available for {sorted(self.instance_env)}. "
-                                        "Use the Prometheus tools for other instances."})
+        tool = self.tools.get(name)
+        if not tool:
+            return json.dumps({"error": "Unknown monitoring tool"})
+        if not isinstance(arguments, dict):
+            return json.dumps({"error": "Tool arguments must be an object"})
+        env = tool["environment"]
+        if "instance" in tool["schema"].get("properties", {}):
+            if arguments.get("instance") not in self.instance_env[env]:
+                return json.dumps({"error": "Instance is not available in this MCP environment"})
         try:
-            result = await self.sessions[env].call_tool(name[len(PREFIX):], arguments)
+            result = await self.sessions[env].call_tool(tool["remote_name"], arguments)
         except Exception as exc:
-            return json.dumps({"error": f"MCP call failed ({type(exc).__name__})"})
-        text = _text(result) or "(no output)"
-        if result.isError:
-            text = json.dumps({"error": text[:2000]})
-        return text if len(text) <= MAX_RESULT_CHARS else text[:MAX_RESULT_CHARS] + "\n[truncated]"
+            return json.dumps({"error": f"Monitoring call failed ({type(exc).__name__})"})
+        text = _text(result) or json.dumps({"error": "No monitoring output"})
+        if len(text) > MAX_RESULT_CHARS:
+            return json.dumps({"error": "Monitoring response too large; narrow the request"})
+        return text

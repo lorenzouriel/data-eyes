@@ -1,4 +1,5 @@
-"""The 30-second metric groups: fixed DMV reads exported as Prometheus samples.
+"""
+The 30-second metric groups: fixed DMV reads exported as Prometheus samples.
 
 Each group returns (metric, value, labels, is_counter) rows. Cumulative values
 since instance start are exported as counters; Prometheus computes rates and

@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "data-eyes-mcp"
 version = "0.2.0"
-description = "MCP server exposing fixed, read-only SQL Server diagnostics for the Data Eyes fleet"
+description = "MCP server exposing collector-backed Prometheus monitoring tools for the Data Eyes fleet"
 readme = "README.md"
 requires-python = ">=3.10"
 license = { text = "MIT" }
@@ -34,7 +34,6 @@ classifiers = [
 
 dependencies = [
     "mcp>=1.28,<2",  # 2.0 removed mcp.server.fastmcp (used by this server)
-    "pyodbc>=4.0.35",
     "pydantic>=2.0.0",
     "pydantic-settings>=2.0.0",
     "pyyaml>=6.0",

@@ -14,7 +14,7 @@ docker compose -f .claude/resources/sql-scripts/sql_docker/docker-compose.yml up
 
 Set your own `sa` password before starting it. Never reuse a real one or commit it.
 To monitor this instance, add it to `instances.yaml` with a login from
-[mcp/sql/](../../../../mcp/sql/).
+[monitor/collector/sql/](../../../../monitor/collector/sql/).
 
 <!-- project-map:start -->
 ## Where this fits
@@ -27,14 +27,14 @@ To monitor this instance, add it to `instances.yaml` with a login from
 flowchart LR
   dba(["DBA"])
   fleet[("SQL Server fleet")]
-  inst["instances.yaml<br/>fleet + MCP principals"]
-  login["mcp/sql<br/>monitoring login"]
+  inst["instances.yaml<br/>collector SQL inventory"]
+  login["monitor/collector/sql<br/>monitoring login"]
   subgraph monitor["monitor/"]
     col["collector<br/>metrics + alert checks"]
     prom["prometheus<br/>30 days of history"]
     graf["grafana<br/>UI + alerting"]
   end
-  mcp["mcp/<br/>MCP server, 27 tools"]
+  mcp["mcp/<br/>MCP monitoring tools"]
   agent["agent/<br/>Ask the fleet API"]
   subgraph claude[".claude/"]
     cmd["commands + agents"]
@@ -45,15 +45,13 @@ flowchart LR
 
   login -. "grants" .-> fleet
   inst --> col
-  inst --> mcp
+  access["mcp-access.yaml<br/>metadata + grants"] --> mcp
   col -- "read-only SQL" --> fleet
   prom -- "scrape /metrics" --> col
   graf -- "PromQL" --> prom
   graf -- "email alerts" --> dba
   dba --> graf
-  mcp -- "diagnostic SQL" --> fleet
   mcp -- "severity history" --> prom
-  agent -- "PromQL" --> prom
   agent -- "MCP tools" --> mcp
   dba --> cmd
   cmd -- "MCP tools" --> mcp
@@ -104,13 +102,13 @@ data-eyes/
 ├── .github/                                  GitHub configuration
 ├── agent/                                    "Ask the fleet" API
 ├── assets/                                   Logo
-├── mcp/                                      MCP server (27 read-only tools)
+├── mcp/                                      MCP monitoring tools
 ├── monitor/                                  Collector -> Prometheus -> Grafana
 ├── .env.example                              Template for .env (Grafana, agent)
 ├── .mcp.json                                 Claude Code MCP registration (stdio, dev)
 ├── CLAUDE.md                                 Project instructions for Claude Code
 ├── README.md                                 Setup, configuration, security
 ├── docker-compose.yml                        The whole stack
-└── instances.example.yaml                    Template for instances.yaml (fleet, MCP principals)
+└── instances.example.yaml                    Template for collector SQL inventory
 ```
 <!-- project-map:end -->

@@ -1,5 +1,7 @@
-"""Agent settings. Provider keys come from the environment and are never logged
-or returned by the API."""
+"""
+Agent settings. Provider keys come from the environment and are never logged
+or returned by the API.
+"""
 from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
@@ -15,9 +17,7 @@ class Settings(BaseSettings):
     LOCAL_AI_BASE_URL: str = ""
     LOCAL_AI_API_KEY: str = Field(default="local", repr=False)
 
-    PROMETHEUS_URL: str = "http://prometheus:9090"
-    # Live diagnostics through the MCP servers as principal ui-agent. Empty
-    # token: Prometheus tools only. "env=url" pairs, comma-separated.
+    # Required bearer token for the collector-backed MCP monitoring tools.
     AGENT_MCP_TOKEN: str = Field(default="", repr=False)
     AGENT_MCP_SERVERS: str = "development=http://data-eyes-mcp-dev:8080/mcp"
     AI_MAX_TOOL_CALLS: int = Field(default=8, ge=1, le=20)
@@ -51,12 +51,14 @@ def status() -> dict:
         reason = "LOCAL_AI_BASE_URL is not configured."
     elif not model_name():
         reason = "AI_MODEL is required for this provider."
+    if reason is None and not settings.AGENT_MCP_TOKEN:
+        reason = "AGENT_MCP_TOKEN is required for monitoring access."
     return {
         "provider": provider,
         "provider_label": PROVIDER_LABELS.get(provider, provider),
         "model": model_name(),
         "base_url": settings.LOCAL_AI_BASE_URL if provider == "local" else (settings.OPENAI_BASE_URL or None if provider == "openai" else None),
         "configured": reason is None,
-        "live_diagnostics": bool(settings.AGENT_MCP_TOKEN),
+        "monitoring_configured": bool(settings.AGENT_MCP_TOKEN),
         "reason": reason,
     }

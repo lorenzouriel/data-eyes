@@ -1,9 +1,7 @@
 FROM python:3.11-slim-bookworm
 
 # pyodbc (app/sql.py) needs an actual ODBC driver manager plus the
-# Microsoft driver on the library path — python:3.11-slim ships neither.
-# Without this, every connection to a monitored SQL Server fails at import
-# time with "Can't open lib 'ODBC Driver 18 for SQL Server'".
+# Microsoft driver on the library path 
 RUN apt-get update \
     && apt-get install -y --no-install-recommends curl gnupg unixodbc libgssapi-krb5-2 \
     && curl -sSL https://packages.microsoft.com/keys/microsoft.asc | gpg --dearmor -o /usr/share/keyrings/microsoft-prod.gpg \
@@ -14,9 +12,7 @@ RUN apt-get update \
     && rm -rf /var/lib/apt/lists/*
 
 # Reuse connections instead of a new TCP + TLS login per query. unixODBC
-# pools only with Pooling=Yes and a positive CPTimeout (seconds an idle
-# connection is kept; longer than the 30-second collection interval). Both
-# drivers reset a reused session, so temp tables do not leak between queries.
+# pools only with Pooling=Yes and a positive CPTimeout.
 RUN sed -i '1i [ODBC]\nPooling=Yes\n' /etc/odbcinst.ini \
     && sed -i '/^\[ODBC Driver 1[78] for SQL Server\]/a CPTimeout=120' /etc/odbcinst.ini
 

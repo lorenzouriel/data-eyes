@@ -1,125 +1,59 @@
-> **Security:** Read the [security hardening guide](../README.md#security) before deploying. HTTP MCP requires bearer tokens; ad-hoc SQL is disabled; MCP ports bind to 127.0.0.1 unless you change them.
+# MCP monitoring server
 
-# Data Eyes MCP server
+MCP exposes collector measurements stored in Prometheus. It has no SQL client,
+SQL credentials, ODBC drivers, schema tools, or live DMV tools.
 
-This package is the agent-facing interface to Data Eyes. It provides
-fixed, read-only SQL Server exploration and DBA tools for the configured fleet
-over stdio or Streamable HTTP.
+## Tools
 
-```text
-src/data_eyes_mcp/
-  main.py     arguments, logging with secret redaction, stdio/HTTP startup
-  config.py   settings and instances.yaml (instances + principals), cached by mtime
-  auth.py     bearer-token middleware, tool/instance grants, rate limit, audit log
-  db.py       scoped-login connections, timeouts with cursor cancel, row/byte caps
-  output.py   JSON envelope that marks rows as untrusted database content
-  queries.py  fixed diagnostic SQL and severity rules
-  tools.py    all 27 tools: discovery, diagnostics, Prometheus history
-```
+| Tool | Purpose |
+|---|---|
+| `list_configured_instances` | Authorized routing metadata; not proof of collection |
+| `fleet_overview` | Current reachability, severity, and collection freshness |
+| `get_latest_snapshot` | One instance's collected severity |
+| `instance_checks` | Check values, severity, units, and database checks |
+| `list_databases` | Collected database metadata, state, and size |
+| `list_metrics` | Named metric catalog and units |
+| `query_metric` | Current measurement; optional counter rate/increase |
+| `metric_history` | Last 0.25–720 hours, roughly 121 points per series |
+| `get_severity_trend` | Overall or per-check severity history |
 
-The canonical guide is [docs/features/mcp.md](../README.md#mcp-server). Related guides:
+`query_metric` and `metric_history` take `instance`, `metric`, `operation`
+(`value`, `rate`, `increase`), and optional exact `database`, `category`, `check`
+filters. Rate and increase use five-minute windows. No arbitrary PromQL is accepted.
+The server constructs selectors with exact authorized instance and environment labels.
 
-- [Architecture](../README.md)
-- [Shared configuration](../README.md#configuration)
-- [Deployment](../README.md#quick-start)
-- [Development](../README.md#development)
-- [MCP security model](../README.md#security)
+Every measurement response includes collection status and last-success timestamps.
+`evaluated_at` is Prometheus query time, not SQL collection time. Missing data is
+an empty series, not zero. History includes current collection status separately.
+Responses are capped at 100 series and 2 MB; queries have a 15-second server timeout,
+a 20-second HTTP timeout, and concurrency and per-principal rate limits.
 
-## Quick local start
+## Configuration and migration
 
-```powershell
-cd mcp
-uv sync --extra dev
-uv run pytest
-uv run data-eyes-mcp --transport http --bind 127.0.0.1:8080
-```
+Copy `../mcp-access.example.yaml` to `../mcp-access.yaml`. It contains instance
+names, labels, environments, and `mcp_security.principals` (tool/instance grants and
+SHA-256 bearer-token hashes). SQL credentials are rejected in its instance entries.
+The collector alone reads `instances.yaml`.
 
-The fleet, SQL logins (inside each connection string) and principals with their
-`token_sha256` come from the repository's `instances.yaml`; other settings are
-environment variables with code defaults. In the integrated stack, start MCP
-together with the collector, Prometheus, and Grafana from the repository root:
+For an existing installation, run from the repository root:
 
 ```powershell
-docker compose up -d --build
+uv run --project mcp python scripts/migrate_monitoring_access.py
 ```
 
-The shared fleet belongs in `instances.yaml`; do not duplicate production
-connection strings in MCP client configuration.
+This creates a new policy without overwriting an existing one or modifying the source.
+Principals that had tools receive the new monitoring catalog, retaining their instance
+scope and token hashes. Review grants when a principal previously had a narrow tool role.
+New/remapped instances must be updated in both collector inventory and MCP access policy.
+An access-policy entry with no current collection is reported as not currently collected.
 
-<!-- project-map:start -->
-## Where this fits
+Set `PROMETHEUS_URL`, `MCP_ACCESS_FILE`, `DEPLOYMENT_ENVIRONMENT`, and optional
+`INSTANCE_ALLOWLIST`. Access configuration reloads when its file changes.
+HTTP requires bearer authentication. Stdio requires `DEFAULT_PRINCIPAL`.
+The existing `.mcp.json` uses loopback Prometheus at port 9090; keep that port local.
 
-- Reads the fleet and its principals from `instances.yaml`, and connects with the login created from `mcp/sql/`.
-- Clients: Claude Code over stdio (`.mcp.json`), the agent over HTTP, and any other MCP client with a token.
-- History tools read the collector's severities (`alert.<key>`) from Prometheus.
-- `docker-compose.yml` runs one container per environment (dev, staging, prod).
-
-```mermaid
-flowchart LR
-  dba(["DBA"])
-  fleet[("SQL Server fleet")]
-  inst["instances.yaml<br/>fleet + MCP principals"]
-  login["mcp/sql<br/>monitoring login"]
-  subgraph monitor["monitor/"]
-    col["collector<br/>metrics + alert checks"]
-    prom["prometheus<br/>30 days of history"]
-    graf["grafana<br/>UI + alerting"]
-  end
-  mcp["mcp/<br/>MCP server, 27 tools"]
-  agent["agent/<br/>Ask the fleet API"]
-  subgraph claude[".claude/"]
-    cmd["commands + agents"]
-    kb["knowledge-base<br/>thresholds, taxonomy"]
-    res["resources<br/>SQL toolkits + scripts"]
-  end
-  ci["GitHub Actions<br/>.github/workflows"]
-
-  login -. "grants" .-> fleet
-  inst --> col
-  inst --> mcp
-  col -- "read-only SQL" --> fleet
-  prom -- "scrape /metrics" --> col
-  graf -- "PromQL" --> prom
-  graf -- "email alerts" --> dba
-  dba --> graf
-  mcp -- "diagnostic SQL" --> fleet
-  mcp -- "severity history" --> prom
-  agent -- "PromQL" --> prom
-  agent -- "MCP tools" --> mcp
-  dba --> cmd
-  cmd -- "MCP tools" --> mcp
-  cmd --> kb
-  cmd --> res
-  kb -. "mirrored thresholds" .-> col
-  kb -. "severity rules" .-> mcp
-  res -. "run by hand" .-> fleet
-  ci -. "test + build" .-> col
-  ci -.-> mcp
-  ci -.-> agent
-  classDef here fill:#4a3aa7,stroke:#1baf7a,stroke-width:3px,color:#ffffff
-  class mcp here
+```powershell
+uv run --project mcp --extra dev pytest mcp/tests -q
 ```
 
-The highlighted box is this folder. Solid arrows are runtime calls; dotted arrows are configuration, mirrored rules, or manual use.
-
-### In the repository
-
-```text
-data-eyes/
-├── .claude/                                  Claude Code toolkit
-├── .github/                                  GitHub configuration
-├── agent/                                    "Ask the fleet" API
-├── assets/                                   Logo
-├── mcp/                                      MCP server (27 read-only tools)  ◀ you are here
-│   ├── sql/                                  Monitoring login templates
-│   ├── src/                                  Package source
-│   └── tests/                                Unit tests
-├── monitor/                                  Collector -> Prometheus -> Grafana
-├── .env.example                              Template for .env (Grafana, agent)
-├── .mcp.json                                 Claude Code MCP registration (stdio, dev)
-├── CLAUDE.md                                 Project instructions for Claude Code
-├── README.md                                 Setup, configuration, security
-├── docker-compose.yml                        The whole stack
-└── instances.example.yaml                    Template for instances.yaml (fleet, MCP principals)
-```
-<!-- project-map:end -->
+Manual SQL permission templates for the collector are in `monitor/collector/sql/`.

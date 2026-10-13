@@ -1,4 +1,5 @@
-"""SQL Server client: fixed read-only queries with time, size and concurrency limits.
+"""
+SQL Server client: fixed read-only queries with time, size and concurrency limits.
 
 pyodbc is synchronous, so each query runs in a worker thread and the event
 loop stays free. Queries are grouped into lanes: the fast metric cycle and

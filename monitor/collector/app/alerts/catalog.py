@@ -1,4 +1,5 @@
-"""The alert catalog: every alert users can enable, disable and tune.
+"""
+The alert catalog: every alert users can enable, disable and tune.
 
 State alerts hold a severity that later clears (log 92% full). Event alerts
 are one-off occurrences that never clear (a deadlock, a failed job) and are

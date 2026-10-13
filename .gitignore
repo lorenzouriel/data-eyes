@@ -19,3 +19,5 @@ monitor/prometheus/secrets/
 **/node_modules/
 **/dist/
 **/build/
+
+mcp-access.yaml

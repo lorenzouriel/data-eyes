@@ -1,4 +1,6 @@
-"""Check results, the per-cycle check context, and API input models."""
+"""
+Check results, the per-cycle check context, and API input models.
+"""
 
 from dataclasses import dataclass, field
 from datetime import datetime

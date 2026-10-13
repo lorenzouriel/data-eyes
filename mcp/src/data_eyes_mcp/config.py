@@ -1,13 +1,6 @@
-"""Settings and the shared instances.yaml fleet file.
-
-The fleet file holds the SQL Server instances (each connection string carries
-its SQL login) and the `mcp_security` principals (allowed tools and instances,
-and the SHA-256 hash of each principal's HTTP bearer token). It is re-read only
-when its mtime changes.
-Object-level access (databases, schemas, tables, columns) is enforced by the
-SQL Server login each instance uses, not here.
 """
-
+Credential-free monitoring access policy; SQL credentials belong to the collector.
+"""
 import re
 from pathlib import Path
 from typing import Callable, Dict, List, Optional
@@ -21,9 +14,8 @@ class Settings(BaseSettings):
     """Process settings from the environment (Compose or .mcp.json); defaults otherwise."""
     model_config = SettingsConfigDict(extra="ignore", hide_input_in_errors=True)
 
-    INSTANCES_FILE: str = "../instances.yaml"
+    MCP_ACCESS_FILE: str = "../mcp-access.yaml"
     DEFAULT_INSTANCE: Optional[str] = None
-    DEFAULT_DATABASE: Optional[str] = None
     DEPLOYMENT_ENVIRONMENT: Optional[str] = None
     INSTANCE_ALLOWLIST: str = ""
 
@@ -36,12 +28,7 @@ class Settings(BaseSettings):
     INTERNAL_HOST: Optional[str] = None
     PROMETHEUS_URL: Optional[str] = None
 
-    MSSQL_APPLICATION_NAME: str = Field(default="Data Eyes MCP", max_length=128)
-    MSSQL_CONNECTION_TIMEOUT: int = Field(default=30, ge=1)
-    MSSQL_QUERY_TIMEOUT: int = Field(default=30, ge=1)
-    MAX_ROWS_PER_QUERY: int = Field(default=50000, ge=1)
     MAX_RESPONSE_BYTES: int = Field(default=2_000_000, ge=1024)
-    MAX_CELL_LENGTH: int = Field(default=4000, ge=1)
     MAX_CONCURRENT_QUERIES: int = Field(default=8, ge=1)
     RATE_LIMIT_PER_MINUTE: int = Field(default=60, ge=0)  # tool calls per principal; 0 disables
 
@@ -55,7 +42,7 @@ settings = Settings()
 class Instance(BaseModel):
     name: str
     label: str
-    mssql_connection_string: str
+    model_config = SettingsConfigDict(extra="forbid", hide_input_in_errors=True)
     environment: Optional[str] = None
 
 
@@ -75,8 +62,8 @@ _cache: tuple = (None, Fleet())
 
 
 def fleet_path() -> Path:
-    """Resolve INSTANCES_FILE; relative paths are relative to the mcp/ project."""
-    path = Path(settings.INSTANCES_FILE).expanduser()
+    """Resolve MCP_ACCESS_FILE; relative paths are relative to the mcp/ project."""
+    path = Path(settings.MCP_ACCESS_FILE).expanduser()
     if not path.is_absolute():
         path = Path(__file__).resolve().parents[2] / path
     return path.resolve()
@@ -140,16 +127,11 @@ def validate(transport: str) -> None:
     if not fleet.instances:
         raise ValueError(f"No instances for this deployment in {fleet_path()}")
     if not fleet.principals:
-        raise ValueError("instances.yaml needs at least one mcp_security principal")
+        raise ValueError("mcp-access.yaml needs at least one mcp_security principal")
     if settings.DEFAULT_INSTANCE and settings.DEFAULT_INSTANCE not in fleet.instances:
         raise ValueError(f"DEFAULT_INSTANCE {settings.DEFAULT_INSTANCE!r} is not in this deployment")
-    from data_eyes_mcp.db import _odbc_pairs
-
-    for instance in fleet.instances.values():
-        keys = {key.lower(): value for key, value in _odbc_pairs(instance.mssql_connection_string)}
-        trusted = keys.get("trusted_connection", "").lower() in ("yes", "true")
-        if not trusted and not ((keys.get("uid") or keys.get("user id")) and (keys.get("pwd") or keys.get("password"))):
-            raise ValueError(f"Instance {instance.name!r}: its connection string needs UID and PWD (or Trusted_Connection=yes)")
+    if not settings.PROMETHEUS_URL:
+        raise ValueError("PROMETHEUS_URL is required")
     if transport == "http":
         hashes = token_hashes()
         if not hashes:

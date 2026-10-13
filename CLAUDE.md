@@ -1,6 +1,6 @@
 # Data Eyes — SQL Server Monitoring, Performance & Maintenance Toolkit
 
-Open-source toolkit for complete visibility and best-practice automation on Microsoft SQL Server. The monitoring pipeline lives in `monitor/`: a Python collector, Prometheus, and Grafana. The MCP server and the "Ask" agent stay at the repository root, next to the shared `instances.yaml` fleet configuration. The collector runs trusted fixed read-only queries against the fleet and exposes cached `/metrics`; Prometheus keeps 30 days of history and recording rules; Grafana is the UI (Fleet Overview dashboard) and does the alerting (rules, contact point, policy). MCP exposes the same configured fleet to agents and reads history from Prometheus.
+Open-source toolkit for complete visibility and best-practice automation on Microsoft SQL Server. The monitoring pipeline lives in `monitor/`: a Python collector, Prometheus, and Grafana. The MCP server and the "Ask" agent stay at the repository root, with separate collector inventory (`instances.yaml`) and MCP access policy (`mcp-access.yaml`). The collector runs trusted fixed read-only queries against the fleet and exposes cached `/metrics`; Prometheus keeps 30 days of history and recording rules; Grafana is the UI (Fleet Overview dashboard) and does the alerting (rules, contact point, policy). MCP exposes only collector-backed monitoring tools; the agent uses MCP, and only the collector connects to SQL Server.
 
 ## Repository Structure
 ```text
@@ -24,7 +24,7 @@ data-eyes/
 |                            13 allow-listed health diagnostics as sql_<tool>, routed per instance to dev/staging/prod
 |                            MCP as the ui-agent principal), config (anthropic | openai | local)
 |-- mcp/
-|   |-- src/data_eyes_mcp/   main, config, auth, db, output, queries (diagnostic SQL), tools (27 tools)
+|   |-- src/data_eyes_mcp/   main, config, auth, tools (collector-backed monitoring)
 |   |-- tests/               Config, auth, db, and tool tests
 |   `-- sql/                 SQL Server login provisioning (read-only, alerting permissions)
 |-- assets/                  Project branding (logo.png, logo.svg)
@@ -52,7 +52,7 @@ data-eyes/
 - Connection via $MSSQL_CONNECTION env var or manual credential prompt
 - Ola Hallengren parameters use @Databases, @Directory, @CleanupTime etc.
 - Prefer a live `data-eyes-mcp` tool call over reading a script as text whenever an MCP server is reachable — scripts remain the reference/copy-paste source, not the primary path (see `sql-server-dba` agent's Knowledge Resolution order)
-- The root `docker-compose.yml` starts the collector, Prometheus, Grafana, agent, and MCP together; configuration is two files: `instances.yaml` (the fleet with each connection string's SQL login, and MCP principals with grants and `token_sha256`; read by the collector and MCP) and `.env` (Grafana and agent settings; template `.env.example`). Grafana never connects to SQL Server. Run exactly one collector per checkpoint volume. Never display `.env` contents or connection strings.
+- The root `docker-compose.yml` starts the collector, Prometheus, Grafana, agent, UI and MCP. Only the collector mounts `instances.yaml` and connects to SQL. MCP mounts credential-free `mcp-access.yaml`; `.env` configures Grafana and the agent. Run one collector per checkpoint volume. Never display secrets.
 
 ## SQL Naming Standards (Data Eyes Guidelines)
 
@@ -86,7 +86,7 @@ data-eyes/
 
 Two layers:
 
-- **Static domain KB** (`.claude/knowledge-base/_static/`) — thresholds, taxonomy, naming conventions, methodology, and the scripts index. Diagnostic severity SQL for the MCP tools lives in `mcp/src/data_eyes_mcp/queries.py`; keep it synchronized with the KB. The collector keeps its own fixed SQL (`monitor/collector/app/metrics.py`, `monitor/collector/app/alerts/checks/`). Alert catalog defaults (`monitor/collector/app/alerts/catalog.py`) mirror the `alerts:` section of `thresholds.yaml` — change both together; deployment overrides go in `monitor/collector/checks.yaml`. Alert checks live only in the collector, and MCP sees their results as `alert.<key>` history from Prometheus.
+- **Static domain KB** (`.claude/knowledge-base/_static/`) — thresholds, taxonomy, naming conventions, methodology, and the scripts index. All diagnostic SQL lives in the collector (`monitor/collector/app/metrics.py`, `monitor/collector/app/alerts/checks/`). Alert catalog defaults (`monitor/collector/app/alerts/catalog.py`) mirror the `alerts:` section of `thresholds.yaml` — change both together; deployment overrides go in `monitor/collector/checks.yaml`. Alert checks live only in the collector, and MCP sees their results as `alert.<key>` history from Prometheus.
 - **Per-database KB** (none built yet) (`.claude/knowledge-base/<database-name>.md`) — built by /sql-kb, consumed by /sql-pr-review. Contains:
   - Table volumes with SMALL/MEDIUM/HIGH/CRITICAL classification
   - Existing index inventory with usage stats

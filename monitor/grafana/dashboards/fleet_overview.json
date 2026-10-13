@@ -18,7 +18,17 @@
   "timezone": "browser",
   "schemaVersion": 39,
   "version": 1,
-  "links": [],
+  "links": [
+    {
+      "title": "Ask the fleet",
+      "type": "link",
+      "url": "/d/ask-the-fleet/ask-the-fleet",
+      "icon": "comment",
+      "targetBlank": false,
+      "includeVars": false,
+      "keepTime": false
+    }
+  ],
   "annotations": {
     "list": [
       {

@@ -1,4 +1,6 @@
-"""Backup and integrity: backup age, failed backups, CHECKDB, corruption."""
+"""
+Backup and integrity: backup age, failed backups, CHECKDB, corruption.
+"""
 
 import re
 

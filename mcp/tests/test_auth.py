@@ -52,21 +52,21 @@ def test_http_never_falls_back_to_the_stdio_principal(fleet, monkeypatch):
 
 
 def test_grants_are_default_deny(fleet):
-    authorize("alice", "sample_table", "dev")
-    authorize("bob", "list_tables", "dev")
-    for principal, tool, instance in [("bob", "sample_table", "dev"), ("bob", "list_tables", "beta"),
-                                      ("alice", "list_tables", "prod"), ("nobody", "list_tables", "dev")]:
+    authorize("alice", "metric_history", "dev")
+    authorize("bob", "query_metric", "dev")
+    for principal, tool, instance in [("bob", "metric_history", "dev"), ("bob", "query_metric", "beta"),
+                                      ("alice", "query_metric", "prod"), ("nobody", "query_metric", "dev")]:
         with pytest.raises(AuthorizationError):
             authorize(principal, tool, instance)
 
 
 def test_rate_limit_is_per_principal(fleet, monkeypatch):
     monkeypatch.setattr(config.settings, "RATE_LIMIT_PER_MINUTE", 2)
-    authorize("alice", "list_tables", "dev")
-    authorize("alice", "list_tables", "dev")
-    authorize("bob", "list_tables", "dev")
+    authorize("alice", "query_metric", "dev")
+    authorize("alice", "query_metric", "dev")
+    authorize("bob", "query_metric", "dev")
     with pytest.raises(AuthorizationError, match="Rate limit"):
-        authorize("alice", "list_tables", "dev")
+        authorize("alice", "query_metric", "dev")
 
 
 async def test_real_mcp_transport_uses_the_verified_principal(fleet, tokens, monkeypatch):
@@ -84,5 +84,5 @@ async def test_real_mcp_transport_uses_the_verified_principal(fleet, tokens, mon
                 "jsonrpc": "2.0", "id": 2, "method": "tools/call",
                 "params": {"name": "list_configured_instances", "arguments": {}}})
     assert '"execute_sql"' not in listed.text and '"ctx"' not in listed.text
-    assert '"sample_table"' in listed.text and '"instance"' in listed.text
+    assert '"metric_history"' in listed.text and '"instance"' in listed.text
     assert "Beta" in called.text  # alice's grant, not bob's

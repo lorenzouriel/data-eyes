@@ -1,121 +1,101 @@
-import json
+﻿import json
 from unittest.mock import AsyncMock
 
+import httpx
 import pytest
 
-from data_eyes_mcp import config, db, output, tools
+from data_eyes_mcp import config, tools
 
 
 @pytest.fixture
 def captured(fleet, monkeypatch):
-    """Record every statement instead of connecting."""
-    calls = []
-
-    async def run(instance, sql, params=(), database=None, max_rows=None):
-        calls.append({"instance": instance, "sql": sql, "params": list(params), "database": database})
-        return db.Result(["severity"], [("OK",)])
-
-    monkeypatch.setattr(db, "run", run)
-    return calls
+    mock = AsyncMock(return_value=[])
+    monkeypatch.setattr(tools, 'prometheus', mock)
+    return mock
 
 
-@pytest.mark.parametrize("name, parts", [
-    ("t", ["t"]),
-    ("dbo.t", ["dbo", "t"]),
-    ("[My DB].dbo.[a.b]", ["My DB", "dbo", "a.b"]),
-    ('"x""y".[z]]w]', ['x"y', "z]w"]),
-])
-def test_split_name(name, parts):
-    assert tools.split_name(name) == parts
+async def test_tool_catalog_has_no_sql_access(fleet):
+    listing = {t.name for t in await tools.mcp.list_tools()}
+    assert listing == {'list_configured_instances', 'fleet_overview', 'instance_checks', 'list_databases',
+                       'list_metrics', 'query_metric', 'metric_history', 'get_latest_snapshot', 'get_severity_trend'}
 
 
-@pytest.mark.parametrize("name", ["", "a..b", "a.", "a.b.c.d", "[open"])
-def test_split_name_rejects_bad_names(name):
-    with pytest.raises(ValueError):
-        tools.split_name(name)
+async def test_unauthorized_queries_never_reach_prometheus(captured):
+    result = json.loads(await tools.query_metric(instance='prod', metric='sql_cpu_pct'))
+    assert 'error' in result
+    captured.assert_not_called()
+    assert 'Prod' not in result['error']
 
 
-async def test_sample_table_queries_exactly_the_named_object(captured):
-    await tools.sample_table(table="[Sales].hr.[pay;roll]", limit=500, instance="dev")
-    assert captured[0]["sql"] == "SELECT TOP (100) * FROM [hr].[pay;roll]"
-    assert captured[0]["database"] == "Sales"
+async def test_fleet_filters_before_querying(captured):
+    result = json.loads(await tools.fleet_overview())
+    assert [i['instance'] for i in result['instances']] == ['dev', 'beta']
+    assert all('prod' not in str(call) for call in captured.call_args_list)
+    assert all(i['availability'] == 'not_currently_collected' for i in result['instances'])
 
 
-async def test_discovery_filters_are_bound_parameters(captured):
-    await tools.list_tables(schema="x' OR 1=1 --", instance="dev")
-    assert "x'" not in captured[0]["sql"] and captured[0]["params"] == [200, "x' OR 1=1 --"]
+async def test_query_is_scoped_and_label_injection_is_escaped(captured):
+    database = 'x"} or data_eyes_instance_info or {x="'
+    result = json.loads(await tools.query_metric(instance='dev', metric='sql_cpu_pct', database=database))
+    query = captured.call_args_list[0].args[0]
+    assert 'sql_instance="dev"' in query and 'environment="development"' in query
+    assert 'database=' + json.dumps(database) in query
+    assert result['unit'] == 'percent'
+    assert result['series'] == []  # missing is never a fabricated zero
 
 
-async def test_db_space_filter_applies_and_connects_to_that_database(captured):
-    await tools.db_space(database="O'Brien", instance="dev")
-    assert "d.name = N'O''Brien'" in captured[0]["sql"] and captured[0]["database"] == "O'Brien"
+@pytest.mark.parametrize('metric,operation', [('up or vector(1)', 'value'), ('sql_cpu_pct', 'rate'), ('sql_cpu_pct', 'sum')])
+async def test_reject_arbitrary_queries(captured, metric, operation):
+    assert 'error' in json.loads(await tools.query_metric(instance='dev', metric=metric, operation=operation))
+    captured.assert_not_called()
 
 
-async def test_tools_deny_ungranted_instances(captured, monkeypatch):
-    monkeypatch.setattr(config.settings, "DEFAULT_PRINCIPAL", "bob")
-    assert (await tools.list_tables(instance="beta")).startswith("ERROR:")
-    assert (await tools.sample_table(table="t", instance="dev")).startswith("ERROR:")
-    assert captured == []
+async def test_history_bounds_and_counter_rate(captured):
+    result = json.loads(await tools.metric_history(instance='dev', metric='batch_requests_total', operation='rate', hours=720))
+    query, start, end, step = captured.call_args_list[0].args
+    assert query.startswith('rate(data_eyes_batch_requests_total{') and query.endswith('[5m])')
+    assert end - start == 720 * 3600
+    assert (end - start) / step <= 120
+    assert result['unit'] == 'requests/second'
+    captured.reset_mock()
+    for hours in (0, 721, float('nan')):
+        assert 'error' in json.loads(await tools.metric_history(instance='dev', metric='sql_cpu_pct', hours=hours))
+    captured.assert_not_called()
 
 
-async def test_fleet_score_ranks_unknown_above_ok(fleet, monkeypatch):
-    async def run(instance, sql, *args, **kwargs):
-        if "backupset" in sql:
-            raise db.DatabaseError("permission denied")
-        return db.Result(["severity"], [("OK",)])
-
-    monkeypatch.setattr(db, "run", run)
-    result = json.loads(await tools.fleet_health_score(instance="dev"))
-    assert result["categories"]["backup_health"] == "UNKNOWN"
-    assert result["overall_severity"] == "UNKNOWN"
-
-
-def test_json_output_obeys_the_byte_cap(monkeypatch):
-    monkeypatch.setattr(config.settings, "MAX_RESPONSE_BYTES", 1024)
-    rendered = output.as_json(["note"], [("x" * 600,), ("y" * 600,)])
-    data = json.loads(rendered)
-    assert len(rendered.encode()) <= 1024 and data["_meta"]["truncated"] and len(data["rows"]) == 1
-    assert data["_meta"]["trust"] == "untrusted_database_content"
+async def test_freshness_uses_collection_time_not_query_time(captured):
+    captured.return_value = [
+        {'metric': {'__name__': 'data_eyes_collection_' + key, 'collector': 'cpu'}, 'value': [2000, str(value)]}
+        for key, value in [('success', 1), ('fresh', 1), ('last_success_timestamp_seconds', 1000)]]
+    result = await tools.freshness('dev')
+    assert result['cpu']['last_success_timestamp_seconds'] == 1000
+    assert result['cpu']['status'] == 'fresh'
+    captured.return_value[1]['value'][1] = '0'
+    assert (await tools.freshness('dev'))['cpu']['status'] == 'unavailable_or_stale'
+    captured.return_value = []
+    assert await tools.freshness('dev') == {}
 
 
-def test_promql_label_values_are_escaped():
-    value = 'dev"} or up{job="x'
-    assert tools._selector(value, "overall") == "data_eyes_overall_severity{sql_instance=" + json.dumps(value) + "}"
+async def test_severity_history_keeps_original_permission(captured, monkeypatch):
+    monkeypatch.setattr(config.settings, 'DEFAULT_PRINCIPAL', 'bob')
+    assert 'error' in json.loads(await tools.get_severity_trend(instance='dev'))
+    captured.assert_not_called()
 
 
-async def test_history_never_queries_outside_the_deployment(fleet, monkeypatch):
-    query = AsyncMock()
-    monkeypatch.setattr(tools, "_prometheus", query)
-    assert (await tools.get_latest_snapshot(instance="prod")).startswith("ERROR:")
-    query.assert_not_called()
+def test_non_finite_measurements_and_output_limit(monkeypatch):
+    assert tools.number('NaN') is None
+    monkeypatch.setattr(config.settings, 'MAX_RESPONSE_BYTES', 1024)
+    with pytest.raises(ValueError, match='too large'):
+        tools.encode({'rows': ['x' * 2000]})
 
 
-async def test_history_lookback_is_bounded(fleet, monkeypatch):
-    query = AsyncMock(return_value=[{"values": [[100, "2"]]}])
-    monkeypatch.setattr(tools, "_prometheus", query)
-    result = json.loads(await tools.get_severity_trend(instance="dev", hours=100000))
-    start, end, step = query.call_args.args[1:]
-    assert round(end - start) == 720 * 3600 and step >= 1296
-    assert result["rows"][0]["severity"] == "WARNING"
-
-
-async def test_errors_never_reveal_ungranted_instances(captured, monkeypatch):
-    monkeypatch.setattr(config.settings, "DEFAULT_PRINCIPAL", "bob")  # granted only dev
-    result = await tools.list_tables(instance="nope")
-    assert "available: dev" in result and "beta" not in result
-    # bob's only granted instance becomes his default
-    await tools.list_tables()
-    assert captured[-1]["instance"] == "dev"
-
-
-async def test_principal_without_the_tool_learns_nothing_about_instances(captured, monkeypatch):
-    monkeypatch.setattr(config.settings, "DEFAULT_PRINCIPAL", "bob")
-    result = await tools.db_space(instance="nope")
-    assert "may not use 'db_space'" in result and "dev" not in result and captured == []
-
-
-async def test_unidentified_callers_are_audited(fleet, monkeypatch, caplog):
-    monkeypatch.setattr(config.settings, "DEFAULT_PRINCIPAL", None)
-    with caplog.at_level("WARNING", logger="data_eyes_mcp.audit"):
-        assert (await tools.list_configured_instances()).startswith("ERROR:")
-    assert '"reason": "unauthenticated"' in caplog.text
+async def test_prometheus_transport_and_size_limit(fleet, monkeypatch):
+    real_client = httpx.AsyncClient
+    def handler(request):
+        assert request.url.params['timeout'] == '15s'
+        return httpx.Response(200, json={'status': 'success', 'data': {'result': []}})
+    monkeypatch.setattr(tools.httpx, 'AsyncClient', lambda **kw: real_client(transport=httpx.MockTransport(handler), **kw))
+    assert await tools.prometheus('test') == []
+    monkeypatch.setattr(config.settings, 'MAX_RESPONSE_BYTES', 10)
+    with pytest.raises(ValueError, match='too large'):
+        await tools.prometheus('test')

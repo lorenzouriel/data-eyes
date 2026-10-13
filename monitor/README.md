@@ -123,14 +123,14 @@ Dashboards edited in the UI are saved in Grafana's database; copy the JSON back 
 flowchart LR
   dba(["DBA"])
   fleet[("SQL Server fleet")]
-  inst["instances.yaml<br/>fleet + MCP principals"]
-  login["mcp/sql<br/>monitoring login"]
+  inst["instances.yaml<br/>collector SQL inventory"]
+  login["monitor/collector/sql<br/>monitoring login"]
   subgraph monitor["monitor/"]
     col["collector<br/>metrics + alert checks"]
     prom["prometheus<br/>30 days of history"]
     graf["grafana<br/>UI + alerting"]
   end
-  mcp["mcp/<br/>MCP server, 27 tools"]
+  mcp["mcp/<br/>MCP monitoring tools"]
   agent["agent/<br/>Ask the fleet API"]
   subgraph claude[".claude/"]
     cmd["commands + agents"]
@@ -141,15 +141,13 @@ flowchart LR
 
   login -. "grants" .-> fleet
   inst --> col
-  inst --> mcp
+  access["mcp-access.yaml<br/>metadata + grants"] --> mcp
   col -- "read-only SQL" --> fleet
   prom -- "scrape /metrics" --> col
   graf -- "PromQL" --> prom
   graf -- "email alerts" --> dba
   dba --> graf
-  mcp -- "diagnostic SQL" --> fleet
   mcp -- "severity history" --> prom
-  agent -- "PromQL" --> prom
   agent -- "MCP tools" --> mcp
   dba --> cmd
   cmd -- "MCP tools" --> mcp
@@ -175,7 +173,7 @@ data-eyes/
 ├── .github/                                  GitHub configuration
 ├── agent/                                    "Ask the fleet" API
 ├── assets/                                   Logo
-├── mcp/                                      MCP server (27 read-only tools)
+├── mcp/                                      MCP monitoring tools
 ├── monitor/                                  Collector -> Prometheus -> Grafana  ◀ you are here
 │   ├── collector/                            SQL diagnostics exporter
 │   ├── grafana/                              UI and alerting
@@ -185,6 +183,6 @@ data-eyes/
 ├── CLAUDE.md                                 Project instructions for Claude Code
 ├── README.md                                 Setup, configuration, security
 ├── docker-compose.yml                        The whole stack
-└── instances.example.yaml                    Template for instances.yaml (fleet, MCP principals)
+└── instances.example.yaml                    Template for collector SQL inventory
 ```
 <!-- project-map:end -->

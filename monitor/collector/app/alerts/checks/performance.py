@@ -1,4 +1,6 @@
-"""Performance and activity: CPU, memory, workers, blocking, queries, errors."""
+"""
+Performance and activity: CPU, memory, workers, blocking, queries, errors.
+"""
 
 import re
 from collections import Counter
