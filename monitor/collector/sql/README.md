@@ -1,10 +1,5 @@
 # Collector SQL permissions
 
-These are manual templates for the collector's monitoring login. Review grants before
-execution. Only the collector connects to SQL Server; MCP has no SQL login.
+These SQL templates provision the collector monitoring login and optional permissions needed by individual checks. They are manually reviewed setup scripts, separate from scheduled collection. SQL connection strings belong only to the collector inventory.
 
-- `provision-readonly-login.sql`: base login and permissions.
-- `provision-alerting-permissions.sql`: optional grants required by specific checks.
-
-Configure SQL connection strings only in `instances.yaml`. Disable checks lacking the
-required permissions in `monitor/collector/checks.yaml`.
+See the [Data Eyes project guide](../../../README.md) for architecture, setup, and development.

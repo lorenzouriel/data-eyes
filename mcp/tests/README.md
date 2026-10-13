@@ -1,5 +1,5 @@
 # MCP tests
 
-Run `uv run --project mcp --extra dev pytest mcp/tests -q` from the repository root.
-Tests use synthetic policies and mocked Prometheus responses; no SQL or provider credentials.
-Cover authentication, authorization, environment scoping, escaping, bounds, freshness, and HTTP MCP transport.
+These tests exercise authentication, authorization, environment scoping, query bounds, freshness, and MCP transport. Synthetic policies and mocked Prometheus responses allow the monitoring boundary to be checked without SQL Server or model-provider credentials.
+
+See the [Data Eyes project guide](../../README.md) for architecture, setup, and development.

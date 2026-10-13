@@ -1,14 +1,7 @@
 # Technology icons
 
-SVGs from [Devicon](https://github.com/devicons/devicon), downloaded 2026-10-12.
-The upstream MIT license is included in `LICENSE`. Product marks belong to their respective owners.
+These SVG technology marks are embedded into the standalone architecture diagrams by the diagram generator. They identify Python, SQL Server, Prometheus, Grafana, and Streamlit without loading external icon assets.
 
-Sources under `https://raw.githubusercontent.com/devicons/devicon/master/icons/`:
+Icons come from [Devicon](https://github.com/devicons/devicon); the upstream [MIT license](LICENSE) is included. Product marks belong to their respective owners.
 
-- `python.svg`: `python/python-original.svg`
-- `grafana.svg`: `grafana/grafana-original.svg`
-- `prometheus.svg`: `prometheus/prometheus-original.svg`
-- `sqlserver.svg`: `microsoftsqlserver/microsoftsqlserver-plain.svg`
-- `streamlit.svg`: `streamlit/streamlit-original.svg`
-
-`../build_main.py` embeds these assets into each standalone HTML diagram and gives gradient IDs unique prefixes. No icon network requests are needed to view the diagrams.
+See the [Data Eyes project guide](../../../README.md) for architecture, setup, and development.

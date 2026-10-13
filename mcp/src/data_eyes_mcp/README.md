@@ -1,5 +1,5 @@
 # MCP source
 
-`main.py`: transport and logging. `config.py`: credential-free access policy.
-`auth.py`: identity, grants and audit. `tools.py`: bounded Prometheus monitoring tools.
-SQL execution exists only in `monitor/collector`. See [server documentation](../../README.md).
+This package implements MCP transport startup, credential-free access policy, authentication, authorization, audit logging, and bounded Prometheus queries. Its tools return collected measurements with freshness information.
+
+See the [Data Eyes project guide](../../../README.md) for architecture, setup, and development.

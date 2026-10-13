@@ -4,316 +4,347 @@
 
 # Data Eyes
 
-Data Eyes monitors SQL Server through one scheduled collector. Prometheus stores its
-measurements for 30 days. Grafana and MCP read those measurements; the agent uses MCP.
-Only the collector connects to SQL Server.
+Data Eyes is a SQL Server monitoring platform that combines health dashboards,
+automated alerts, and an AI assistant to help you understand and troubleshoot your database fleet.
+
+One scheduled collector reads SQL Server. Prometheus stores its measurements for
+30 days. Grafana displays those measurements and sends alerts; the AI agent reads
+them through MCP monitoring tools. Only the collector connects to SQL Server.
+
+## Architecture
+
+![Data Eyes architecture](assets/diagrams/architecture.png)
+
+The request paths below describe the current runtime architecture. Arrows point
+from the caller to the service it queries; results return along the same path.
 
 ```mermaid
 flowchart LR
-  SQL[(SQL Server)] --> Collector --> Prometheus
-  Prometheus --> Grafana
-  Prometheus --> MCP --> Agent --> Streamlit
+  browser[Browser] --> gateway[Nginx gateway]
+  gateway -->|Dashboards and session check| grafana[Grafana]
+  gateway -->|Authenticated /assistant/| ui[Streamlit chat]
+  ui -->|Question and streamed answer| agent[Agent API + model]
+  agent -->|MCP tool calls| mcp[MCP monitoring server]
+  clients[External MCP clients] --> mcp
+  grafana -->|PromQL| prom[(Prometheus)]
+  mcp -->|Scoped metric queries| prom
+  prom -->|Scrape cached /metrics| collector[Collector]
+  collector -->|Scheduled read-only SQL| sql[(SQL Server fleet)]
 ```
+
+The collector evaluates health checks independently of dashboard refreshes and chat
+requests. Prometheus scrapes its cache every 30 seconds. Grafana and MCP see the same
+collected measurements, including whether collection is fresh, stale, or unavailable.
+
+For a chat question, Streamlit calls the agent API. The model chooses a monitoring
+tool, the agent invokes it on MCP, and MCP checks permissions before querying
+Prometheus. The agent streams progress and the answer back to the chat. It does not
+query Prometheus directly. MCP has no SQL client, SQL credentials, or live SQL tools.
 
 ## Quick start
 
-Requirements: Docker with Compose, and network access from Docker to your SQL Servers.
+Requirements: Docker with Compose and network access from its containers to your
+SQL Servers. Python 3.11+ and `uv` are needed for local development and helper scripts.
+Run the following commands from the repository root unless stated otherwise.
 
-1. **Create the local config files.** They are ignored by Git.
+1. **Create the local configuration files for a new installation.** Keep existing
+   files when upgrading; the copy commands overwrite them.
+
    ```powershell
    Copy-Item .env.example .env
    Copy-Item instances.example.yaml instances.yaml
    Copy-Item mcp-access.example.yaml mcp-access.yaml
    ```
-2. **Create a read-only SQL login** on each SQL Server (review the script first):
-   ```powershell
-   sqlcmd -S <server> -v LoginName="data_eyes_monitor" Password="<generated>" DatabaseName="master" SchemaName="dbo" -i monitor/collector/sql/provision-readonly-login.sql
-   ```
+
+2. **Prepare a monitoring login on each SQL Server.** Review
+   [provision-readonly-login.sql](monitor/collector/sql/provision-readonly-login.sql)
+   before executing it with your server, login, password, database, and schema values.
    [provision-alerting-permissions.sql](monitor/collector/sql/provision-alerting-permissions.sql)
-   adds the optional grants some alert checks need (msdb history, CommandLog,
-   `VIEW ANY DEFINITION`). Each section says which alerts it enables.
-3. **Fill in the config** as described in [Configuration](#configuration): your
-   servers and their SQL logins in `instances.yaml`, and a strong
-   `GF_SECURITY_ADMIN_PASSWORD` in `.env`.
-4. **Start the stack:**
+   documents optional grants for checks that read job history, maintenance logs, and
+   other server metadata. Configure the resulting connection strings only in `instances.yaml`.
+   Keep only the instances you intend to monitor. The hostname must resolve from Docker;
+   `localhost` inside the collector refers to that container.
+
+3. **Configure access and the UI.** Match instance names and environments in
+   `mcp-access.yaml` to the collector inventory. Set `GF_SECURITY_ADMIN_PASSWORD`
+   in `.env`. In [grafana.ini](monitor/grafana/grafana.ini), set `[server] root_url`
+   to your browser-facing address: `http://localhost:3000` for local use or your HTTPS
+   URL for deployment. The checked-in file currently names an existing deployment domain.
+
+4. **Configure the assistant if you want chat.** Set the model provider, model, and
+   credentials in `.env`. Generate a bearer token and its hash locally:
+
+   ```powershell
+   python -c "import secrets,hashlib; t=secrets.token_urlsafe(32); print('TOKEN='+t); print('SHA256='+hashlib.sha256(t.encode()).hexdigest())"
+   ```
+
+   Put the token in `.env` as `AGENT_MCP_TOKEN`, and its hash in
+   `mcp-access.yaml` under `mcp_security.principals.ui-agent.token_sha256`.
+   Grant that principal the tools and instances the assistant should access.
+   Monitoring and dashboards work without a configured model; chat reports unavailable.
+
+5. **Start the stack and open Grafana.**
+
    ```powershell
    docker compose up -d --build
    ```
-5. **Open http://localhost:3000** and sign in to Grafana with
-   `GF_SECURITY_ADMIN_USER` / `GF_SECURITY_ADMIN_PASSWORD`. The home page is the
-   Fleet Overview dashboard.
 
-Alerts are evaluated from the start. Email delivery needs the SMTP settings in
-`.env` (see [Alerting](#alerting)).
+   Open [localhost:3000](http://localhost:3000) and sign in using
+   `GF_SECURITY_ADMIN_USER` / `GF_SECURITY_ADMIN_PASSWORD`. Fleet Overview is the
+   home dashboard. Open [Ask the fleet](http://localhost:3000/d/ask-the-fleet/ask-the-fleet)
+   for the embedded chat. SMTP configuration enables alert email delivery.
 
 ## Configuration
 
-Three local files configure the stack; all are ignored by Git.
+These three local files are ignored by Git. Keep credentials and token values out
+of commits and shared logs; use the corresponding example files as templates.
 
 | File | Contents | Read by |
 |---|---|---|
-| `instances.yaml` | SQL fleet and collector connection strings | Collector only |
-| `mcp-access.yaml` | Instance metadata, tool/instance permissions, token hashes | MCP only |
-| `.env` | Grafana settings and agent provider keys/MCP token | Compose |
+| [instances.example.yaml](instances.example.yaml) -> `instances.yaml` | SQL fleet, environment labels, connection strings | Collector only |
+| [mcp-access.example.yaml](mcp-access.example.yaml) -> `mcp-access.yaml` | Instance metadata, tool/instance grants, bearer-token hashes | MCP only |
+| [.env.example](.env.example) -> `.env` | Grafana, SMTP, model settings, agent MCP token | Compose, which passes each service its settings |
 
-Copy the corresponding `.example` files for a new install. Existing installations
-can extract their MCP policy with:
+### Fleet and MCP environments
+
+The same instance name and environment must identify a server in both YAML files.
+SQL credentials are rejected in MCP instance entries. Grafana discovers instances
+from metric labels and does not read either inventory file.
+
+Each MCP service restricts access using `DEPLOYMENT_ENVIRONMENT` and
+`INSTANCE_ALLOWLIST` in [docker-compose.yml](docker-compose.yml), in addition to
+principal grants. Defaults allow `dev`, `staging`, and `prod` in their respective
+services. Update the allowlist when using other instance names; an empty allowlist
+allows the configured instances in that service's environment, subject to grants.
+
+The default stack starts the development MCP server. Enable the others with:
+
+```powershell
+docker compose --profile staging --profile production up -d --build
+```
+
+Profiles control MCP services, not collection: the collector monitors the inventory
+in `instances.yaml` regardless of which MCP environments are running.
+
+For installations migrating from the old combined inventory/security file:
 
 ```powershell
 uv run --project mcp python scripts/migrate_monitoring_access.py
 ```
 
 The migration preserves instance grants and token hashes, grants the new monitoring
-tool catalog to existing tool users, and leaves the source file unchanged. It refuses
-to overwrite an existing access policy. Review narrow tool roles after migration.
-Set the agent's token hash for `ui-agent` in `mcp-access.yaml`.
+tool catalog to existing tool users, and leaves the source unchanged. It refuses to
+overwrite an existing policy. Review previously narrow tool grants after migration.
 
-The collector loads `instances.yaml` at startup: restart it after fleet changes.
-MCP reloads `mcp-access.yaml` on file changes. Add new instance metadata and grants
-there to make newly collected instances available to MCP clients. SQL credentials
-must never go into MCP access policy. Grafana discovers instances from metrics.
+### Service settings
 
-### `.env`
+| Purpose | Variables |
+|---|---|
+| Grafana | `GRAFANA_BIND_IP` (default `127.0.0.1`), `GF_SECURITY_ADMIN_USER`, `GF_SECURITY_ADMIN_PASSWORD` |
+| Alert email | `GRAFANA_NOTIFICATION_ADDRESSES`, `GRAFANA_SMTP_HOST`, `GRAFANA_SMTP_USER`, `GRAFANA_SMTP_PASSWORD`, `GRAFANA_SMTP_FROM_ADDRESS`, `GRAFANA_SMTP_FROM_NAME` |
+| Model | `AI_PROVIDER` (`anthropic`, `openai`, `local`), `AI_MODEL`, provider-specific key and endpoint |
+| Provider credentials/endpoints | `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, `OPENAI_BASE_URL`, `LOCAL_AI_BASE_URL`, optional `LOCAL_AI_API_KEY` |
+| Agent monitoring access | `AGENT_MCP_TOKEN`, optional `AGENT_MCP_SERVERS` |
 
-| Group | Variables | Purpose |
-|---|---|---|
-| Grafana | `GRAFANA_BIND_IP` (default `127.0.0.1`), `GF_SECURITY_ADMIN_USER`, `GF_SECURITY_ADMIN_PASSWORD` (required) | UI address and admin. The admin password applies only when Grafana first creates its database; change it later with `docker compose exec grafana grafana cli admin reset-admin-password <new>`. |
-| Alert email | `GRAFANA_NOTIFICATION_ADDRESSES`, `GRAFANA_SMTP_HOST`, `GRAFANA_SMTP_USER`, `GRAFANA_SMTP_PASSWORD`, `GRAFANA_SMTP_FROM_ADDRESS`, `GRAFANA_SMTP_FROM_NAME` | SMTP for Grafana's email contact point |
-| Agent | `AI_PROVIDER`, `AI_MODEL`, `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, `OPENAI_BASE_URL`, `LOCAL_AI_BASE_URL`, `AGENT_MCP_TOKEN` | Model provider for the "Ask the fleet" agent, and its MCP token (whose hash is the `ui-agent` principal's `token_sha256`) |
+Choose a model supported by your provider. The `openai` and `local` providers require
+`AI_MODEL`; `local` also requires `LOCAL_AI_BASE_URL`. The agent's provider keys remain
+in its API container. `AGENT_MCP_SERVERS` accepts comma-separated `environment=url`
+pairs; Compose supplies the internal MCP URLs by default. Unreachable environments
+are skipped, and no available tools means monitoring is unavailable.
 
-Each container receives only its own variables. MCP applies query timeouts,
-response/series limits, instance and environment restrictions, concurrency caps,
-and per-principal rate limits. See [MCP configuration](mcp/README.md).
+Grafana's initial admin password only applies when its database is created. For an
+existing installation, use Grafana's account settings or admin password reset command.
+
+### Applying changes
+
+| Change | Apply it |
+|---|---|
+| Collector inventory or `monitor/collector/checks.yaml` | `docker compose restart collector` |
+| MCP metadata, grants, or token hashes | Policy reloads when `mcp-access.yaml` changes; reconnect clients after token changes |
+| `.env` or Compose settings | `docker compose up -d` with the deployment's profiles |
+| Python service source | Rebuild the affected service with `docker compose up -d --build <service>` |
+| Grafana provisioning/configuration | `docker compose restart grafana` |
+| Prometheus configuration/rules | Validate configuration, then `docker compose restart prometheus` |
+| Gateway routing | `docker compose exec gateway nginx -t`, then `docker compose restart gateway` |
 
 ## Services and ports
 
-| Service | Port | Notes |
+Compose services communicate by service name, such as `http://agent:8000` and
+`http://prometheus:9090`. Internal ports do not need host publication.
+
+| Service | Host access | Role |
 |---|---|---|
-| `gateway` | `127.0.0.1:3000` | Grafana and authenticated `/assistant/` chat |
-| `grafana` | internal 3000 | Dashboards, sign-in and alerting |
-| `prometheus` | `127.0.0.1:9090` | Scrapes the collector every 30 s, keeps 30 days |
-| `collector` | internal 8090 | `/metrics`, `/health` |
-| `agent` | internal 8000 | "Ask the fleet" API. It has no sign-in, so it is not published. |
-| `agent-ui` | internal 8501 | Streamlit embedded in Grafana; [setup](agent/README.md#chat-ui) |
-| `data-eyes-mcp-dev` | `127.0.0.1:8080` | Always started; endpoint `/mcp` |
-| `data-eyes-mcp-staging` | `127.0.0.1:8081` | `docker compose --profile staging up -d` |
-| `data-eyes-mcp-prod` | `127.0.0.1:8082` | `docker compose --profile production up -d` |
+| `gateway` | `127.0.0.1:3000` by default | Browser entry for Grafana and `/assistant/` |
+| `grafana` | Internal `3000` | Sign-in, dashboards, alerting |
+| `agent-ui` | Internal `8501` | Streamlit chat |
+| `agent` | Internal `8000` | `/api/agent/status`, `/api/agent/ask` with server-sent events |
+| `collector` | Internal `8090` | Cached `/metrics` and scheduler `/health` |
+| `prometheus` | `127.0.0.1:9090` | Metrics, history, query API |
+| `data-eyes-mcp-dev` | `127.0.0.1:8080/mcp` | Development monitoring tools |
+| `data-eyes-mcp-staging` | `127.0.0.1:8081/mcp` | Staging profile |
+| `data-eyes-mcp-prod` | `127.0.0.1:8082/mcp` | Production profile |
 
-Each MCP service sees only its own environment's instances and credentials; Compose
-blanks the other environments' passwords. Run exactly one collector per
-`collector-state` volume.
+Named volumes keep Prometheus history (`prometheus-data`), collector checkpoints
+(`collector-state`), and Grafana users/settings/alert state (`grafana-data`). Run one
+collector per checkpoint volume. Removing volumes removes that persisted state.
 
-## Collector
+## Collector and alerting
 
-[monitor/collector/](monitor/collector) is a FastAPI app that queries each instance on its own
-schedule and serves cached results at `/metrics`. Prometheus scrapes never trigger SQL.
+The collector runs resource, memory, I/O, wait, counter, and activity groups every
+30 seconds by default; database metadata runs every five minutes. Its 56 checks cover
+availability, backup and integrity, storage, tempdb, performance, maintenance, and security.
 
-- **Metric groups** every 30 s: resources, memory, I/O, waits, counters, activity;
-  databases every 5 minutes.
-- **56 alert checks** in 7 groups: Availability (9), Backup & integrity (7), Storage (8),
-  Tempdb (4), Performance & activity (12), Maintenance (8), Configuration & security (8).
-  Defaults live in [catalog.py](monitor/collector/app/alerts/catalog.py) and mirror
-  `.claude/knowledge-base/_static/thresholds.yaml`. Override thresholds, exclusions, or
-  per-instance settings in [checks.yaml](monitor/collector/checks.yaml) and restart the collector.
-- **Severity** is exported as `data_eyes_health_severity{category="alert.<key>"}` and
-  `data_eyes_overall_severity`: 0 OK, 1 Unknown, 2 Warning, 3 Critical.
-- **Light on production:** separate concurrency lanes for slow checks, a 30-second
-  query limit, and checks that time out back off for up to an hour instead of
-  retrying every minute. Sessions are tagged `APP=Data Eyes Collector` for Resource
-  Governor, and the image pools ODBC connections instead of logging in per query. See [monitor/collector/README.md](monitor/collector/README.md).
+Check defaults live in [catalog.py](monitor/collector/app/alerts/catalog.py).
+Thresholds, exclusions, and per-instance overrides belong in
+[checks.yaml](monitor/collector/checks.yaml). Severity values are **0 OK, 1 Unknown,
+2 Warning, 3 Critical**. A check that cannot run is not treated as healthy.
 
-## Prometheus
+Queries have time/result limits. Fast collection and slower checks use separate
+concurrency lanes; checks hitting limits back off up to an hour. Sessions identify
+as `Data Eyes Collector` unless the connection string overrides the application name.
 
-[monitor/prometheus/prometheus.yml](monitor/prometheus/prometheus.yml) scrapes the collector every
-30 seconds and keeps 30 days (`--storage.tsdb.retention.time=30d`). Three recording
-rules compute batch requests per second, I/O bytes per second, and I/O latency.
+Prometheus recording rules derive batch request rate, I/O throughput, and latency.
+Grafana's Fleet Overview presents fleet status, resources, instance details, alerts,
+and collector health. Grafana evaluates six alert rules every minute for exporter
+availability, SQL availability, diagnostic failures, warnings, critical checks, and
+events. Notifications group by rule and instance and repeat every four hours.
+See [alert rules](monitor/grafana/provisioning/alerting/data-eyes-alerts.yml) and
+[notification policy](monitor/grafana/provisioning/alerting/contact-points.yml).
 
-## Grafana (UI)
+## MCP tools and AI behavior
 
-[monitor/grafana/](monitor/grafana) is provisioned from Git: one Prometheus
-datasource, the dashboard, and alerting. Grafana never connects to SQL Server. The
-**Fleet Overview** dashboard is the home page:
+MCP exposes nine read-only tools backed by collected data:
 
-- **Fleet:** status counts, health per check group, every instance with ON/OFF,
-  health, wait rate, alert count and the seven check-group columns, plus a 24-hour
-  wait trend and Always On / read-only databases.
-- **Fleet resources:** CPU, memory, worker threads, disk free, I/O throughput and
-  latency per instance.
-- **Instance** (pick it with the `instance` variable, or click a name): server
-  details, health per check group, resources, databases (state, access mode, Always
-  On role, size), checks that are not OK with affected databases, and top activity
-  (waits, I/O stall by database, file and drive, deadlocks) over 30 days.
-- **Alerts:** open checks with affected databases, checks that could not run, a
-  24-hour status timeline, events by hour over 7 days, and the check catalog.
-- **Collector:** whether Prometheus scrapes the collector, and every collection
-  group's status, last success and duration per instance.
+| Tool | Purpose |
+|---|---|
+| `list_configured_instances` | Authorized instance metadata; not proof of successful collection |
+| `fleet_overview` | Collected reachability, severity, and freshness |
+| `instance_checks` | Check results, severity, units, and database checks |
+| `list_databases` | Collected database metadata, state, and size |
+| `list_metrics` | Available metric names and units |
+| `query_metric` | Current measurement, rate, or increase |
+| `metric_history` | Measurement history over 0.25-720 hours |
+| `get_latest_snapshot` | An instance's collected severity |
+| `get_severity_trend` | Overall or per-check severity history |
 
-## Alerting
+Metric queries use named metrics and exact authorized labels, rather than arbitrary
+PromQL. Rate/increase operations use five-minute windows. Responses include collection
+status; Prometheus evaluation time is not the SQL collection time. Missing data stays
+missing instead of becoming zero. Default limits include 100 series, 2 MB responses,
+eight concurrent queries, and 60 tool calls per minute per principal.
 
-Grafana evaluates 6 alert rules from
-[data-eyes-alerts.yml](monitor/grafana/provisioning/alerting/data-eyes-alerts.yml)
-every minute against Prometheus: exporter unavailable, SQL Server unavailable,
-diagnostic failing, SQL Server warning, SQL Server critical, and SQL Server events.
-They forward the severities the collector computes; per-check thresholds stay in
-[checks.yaml](monitor/collector/checks.yaml). The email contact point and the
-notification policy (grouped by rule and instance, repeated every 4 hours) are in
-[contact-points.yml](monitor/grafana/provisioning/alerting/contact-points.yml).
+The agent discovers MCP tools, exposes an environment-scoped subset to the model,
+and executes a bounded tool loop. It explains checks and trends but cannot inspect
+live SQL text, sessions, plans, schema, or table rows. Conversation history is kept
+in the browser session; the latest 19 successful exchanges accompany the next question.
 
-## MCP server
+External HTTP MCP clients use the environment's `/mcp` URL with
+`Authorization: Bearer <token>`, whose hash belongs to an authorized principal.
+Claude Code's [.mcp.json](.mcp.json) starts a separate stdio MCP process with
+`DEFAULT_PRINCIPAL=development-agent` and reads Prometheus at `localhost:9090`.
 
-[MCP](mcp/README.md) exposes nine monitoring tools: `list_configured_instances`,
-`fleet_overview`, `instance_checks`, `list_databases`, `list_metrics`, `query_metric`,
-`metric_history`, `get_latest_snapshot`, and `get_severity_trend`.
-Queries use named metrics and exact scoped labels, not arbitrary PromQL.
+## Gateway, authentication, and HTTPS
 
-Claude Code uses [.mcp.json](.mcp.json) and the `development-agent` stdio principal.
-HTTP clients use `/mcp` with a bearer token matching a hash in `mcp-access.yaml`.
-The agent reads MCP tools; its chat is embedded at http://localhost:3000/d/ask-the-fleet/ask-the-fleet.
+Nginx routes `/` to Grafana and `/assistant/` to Streamlit. Before assistant HTTP
+requests and WebSocket handshakes, it checks the Grafana session cookie through
+`/api/user`. Anonymous chat requests receive 401; Basic/Bearer headers do not replace
+that browser session. Established WebSockets are authorized at connection time;
+logout applies to subsequent requests and connections.
 
-## Security
+All signed-in Grafana users share the assistant's `ui-agent` MCP grants. Grafana
+variables filter displays, not permissions. Scope that shared principal to the fleet
+those users may inspect. The agent API and Streamlit have no independent sign-in and
+remain internal in Compose.
 
-- Only the collector receives SQL credentials or has SQL drivers. Its SQL is scheduled.
-- MCP authenticates HTTP tokens and enforces tool, instance, and environment scope.
-- MCP access policy contains no SQL connection strings; unknown fields are rejected.
-- Missing/stale collection is reported explicitly, never converted to healthy zero.
-- The gateway requires a Grafana session for chat. Prometheus binds to loopback.
-- Grafana HTML panels allow the iframe; restrict dashboard editing to trusted users.
-- Grafana variables are filters, not access controls. Grafana users see the fleet.
-- Model-facing values are untrusted monitoring data, never instructions.
-- CI runs tests, configuration checks, container builds, dependency audits and secret scans.
+For HTTPS deployment, route your TLS proxy/tunnel to **gateway port 3000**. Forward
+both `/` and `/assistant/` to that same upstream, preserving the URI, `Host`,
+`X-Forwarded-Proto=https`, `Upgrade`, and `Connection` headers. Set Grafana's `root_url`
+to the public URL. Certificates and DNS are managed outside this repository.
 
-## Claude Code toolkit
+Streamlit CORS/XSRF protections remain enabled. The gateway supports WebSockets,
+disables assistant response buffering, and permits same-origin framing. Grafana's
+HTML panel embeds the chat using `GF_PANELS_DISABLE_SANITIZE_HTML=true`; restrict
+dashboard editing to trusted users. MCP enforces token, tool, instance, and environment
+permissions separately and logs access decisions. Model-facing values are untrusted
+monitoring data, not instructions.
 
-[.claude/](.claude) adds SQL Server DBA workflows for Claude Code:
+## Verify and troubleshoot
 
-- **Agents:** `sql-server-dba` (troubleshooting, tuning, maintenance; uses collected monitoring tools) and `dashboard-app` (collector, Prometheus, Grafana, deployment).
-- **Commands:** `/sql-performance`, `/sql-maintenance`, `/sql-scripts`, `/sql-monitor`,
-  `/sql-document`, `/sql-kb`, `/sql-pr-review`, `/sql-guidelines`, `/sql-visual-report`,
-  `/status`, `/sync-context`, `/memory`.
-- **Resources:** performance queries and a tuning workbook, maintenance playbooks with
-  Ola Hallengren use cases, and 84 copy-paste-safe scripts in 18 folders.
-- **Knowledge base:** static thresholds, taxonomy, naming conventions, and methodology,
-  plus per-database knowledge built by `/sql-kb`.
+```powershell
+docker compose ps
+docker compose logs --tail=100 collector data-eyes-mcp-dev agent gateway
+docker compose exec gateway nginx -t
+uv run --project agent python scripts/verify_grafana_embed.py
+```
+
+The verification script reads local Grafana credentials without printing them,
+creates a temporary login session, checks dashboard provisioning and authenticated
+HTTP/WebSocket access, then logs out. It does not call a model provider.
+
+| Symptom | Check |
+|---|---|
+| Empty dashboards | Prometheus targets at `http://localhost:9090/targets`, collector logs, SQL connectivity and grants |
+| Scrape succeeds but SQL data is missing | Collector group/check freshness and last-success times; scrape health alone does not prove SQL collection |
+| Instance missing from MCP | Matching names/environments in both YAML files, service allowlist, principal grants, enabled MCP profile |
+| Chat unavailable | Provider key/model, agent token/hash match, reachable MCP services and available tools |
+| Chat returns 401 or does not stream | Grafana session, shared gateway origin, proxy WebSocket headers, Grafana `root_url` |
+| No alert email | SMTP settings, recipient addresses, Grafana contact point and notification state |
 
 ## Development
 
+Python services are separate `uv` projects: `monitor/collector`, `mcp`, and `agent`.
+Keep the monitoring stack in Docker while developing the agent locally. From `agent/`,
+run these in separate terminals:
+
 ```powershell
-uv run --project monitor/collector python -c "import app.main"   # no test suite for now
-cd mcp; uv run --extra dev pytest; uv run ruff check src tests
-docker build -t data-eyes-mcp mcp
-docker build -t data-eyes-collector monitor/collector
-docker build -t data-eyes-agent agent
+$env:AGENT_MCP_SERVERS="development=http://localhost:8080/mcp"
+uv run uvicorn app.main:app --host 127.0.0.1 --port 8000
 ```
 
-<!-- project-map:start -->
-## Architecture
-
-```mermaid
-flowchart LR
-  dba(["DBA"])
-  fleet[("SQL Server fleet")]
-  inst["instances.yaml<br/>collector SQL inventory"]
-  login["monitor/collector/sql<br/>monitoring login"]
-  subgraph monitor["monitor/"]
-    col["collector<br/>metrics + alert checks"]
-    prom["prometheus<br/>30 days of history"]
-    graf["grafana<br/>UI + alerting"]
-  end
-  mcp["mcp/<br/>MCP monitoring tools"]
-  agent["agent/<br/>Ask the fleet API"]
-  subgraph claude[".claude/"]
-    cmd["commands + agents"]
-    kb["knowledge-base<br/>thresholds, taxonomy"]
-    res["resources<br/>SQL toolkits + scripts"]
-  end
-  ci["GitHub Actions<br/>.github/workflows"]
-
-  login -. "grants" .-> fleet
-  inst --> col
-  access["mcp-access.yaml<br/>metadata + grants"] --> mcp
-  col -- "read-only SQL" --> fleet
-  prom -- "scrape /metrics" --> col
-  graf -- "PromQL" --> prom
-  graf -- "email alerts" --> dba
-  dba --> graf
-  mcp -- "severity history" --> prom
-  agent -- "MCP tools" --> mcp
-  dba --> cmd
-  cmd -- "MCP tools" --> mcp
-  cmd --> kb
-  cmd --> res
-  kb -. "mirrored thresholds" .-> col
-  kb -. "severity rules" .-> mcp
-  res -. "run by hand" .-> fleet
-  ci -. "test + build" .-> col
-  ci -.-> mcp
-  ci -.-> agent
+```powershell
+uv run streamlit run app/ui.py --server.address=127.0.0.1 --browser.gatherUsageStats=false
 ```
 
-Solid arrows are runtime calls; dotted arrows are configuration, mirrored rules, or manual use.
+The agent loads the root `.env` when started from `agent/`. Streamlit defaults to
+`AGENT_API_URL=http://localhost:8000`. This standalone development UI uses port 8501
+without the Compose gateway login. Native collector development also needs the
+SQL Server ODBC driver; the collector Docker image installs its drivers.
 
-### Repository tree
+Run the existing checks from the repository root:
 
-```text
-data-eyes/
-├── .claude/                                  Claude Code toolkit
-│   ├── agents/                               sql-server-dba, dashboard-app
-│   ├── commands/                             12 slash commands
-│   ├── knowledge-base/                       Static KB + per-database KBs
-│   │   └── _static/                          Thresholds, taxonomy, naming, methodology
-│   └── resources/                            SQL toolkits and script library
-│       ├── maintenance/                      Ola Hallengren playbooks and schedules
-│       │   ├── diagnostics/                  7 live health queries
-│       │   │   └── docs/                     One guide per diagnostic
-│       │   └── use_cases/                    Ola Hallengren examples
-│       ├── performance/                      10-step tuning methodology, workbook
-│       │   └── additional_queries/           Diagnostic queries (+ .json.sql)
-│       │       └── docs/                     One guide per query
-│       └── sql-scripts/                      84 scripts in 18 topics
-├── .github/                                  GitHub configuration
-│   └── workflows/                            CI: tests, builds, audits
-├── agent/                                    "Ask the fleet" API
-│   └── app/                                  FastAPI app, tool loop, tools
-├── assets/                                   Logo
-├── mcp/                                      MCP monitoring tools
-│   ├── sql/                                  Monitoring login templates
-│   ├── src/                                  Package source
-│   │   └── data_eyes_mcp/                    Tools, auth, db, queries
-│   └── tests/                                Unit tests
-├── monitor/                                  Collector -> Prometheus -> Grafana
-│   ├── collector/                            SQL diagnostics exporter
-│   │   └── app/                              Scheduler, SQL client, metrics
-│   │       └── alerts/                       Alert catalog and evaluation
-│   │           └── checks/                   Check implementations
-│   ├── grafana/                              UI and alerting
-│   │   ├── dashboards/                       Fleet Overview
-│   │   └── provisioning/                     Applied at startup
-│   │       ├── alerting/                     6 rules, email, policy
-│   │       ├── dashboards/                   Dashboard file provider
-│   │       ├── datasources/                  Data Eyes Prometheus
-│   │       └── plugins/                      None yet
-│   └── prometheus/                           Scrape config, 30 days
-│       └── rules/                            3 recording rules
-├── .env.example                              Template for .env (Grafana, agent)
-├── .mcp.json                                 Claude Code MCP registration (stdio, dev)
-├── CLAUDE.md                                 Project instructions for Claude Code
-├── README.md                                 Setup, configuration, security
-├── docker-compose.yml                        The whole stack
-└── instances.example.yaml                    Template for collector SQL inventory
+```powershell
+uv run --project mcp --frozen --extra dev pytest mcp/tests -q
+uv run --project agent --frozen python -m unittest discover -s agent/tests -v
+uv run --project monitor/collector --frozen python -c "import app.main"
+uv run --project agent --frozen python -c "import app.main"
+docker run --rm --entrypoint promtool -v "${PWD}/monitor/prometheus:/etc/prometheus:ro" prom/prometheus:v3.13.4 check config /etc/prometheus/prometheus.yml
 ```
-<!-- project-map:end -->
+
+CI additionally builds all three Python images, audits locked dependencies with
+`pip-audit`, and scans for secrets with gitleaks. See [.github/workflows/security.yml](.github/workflows/security.yml).
 
 ## Repository map
 
-| Path | Contents |
+| Path | Responsibility |
 |---|---|
-| `monitor/collector/` | Scheduled SQL collection, alert checks, Prometheus exporter |
-| `monitor/prometheus/` | Scrape config, recording rules |
-| `monitor/grafana/` | The UI: dashboards, datasources, alert rules and delivery |
-| `agent/` | "Ask the fleet" API (internal) |
-| `mcp/` | MCP server, tests, SQL login provisioning scripts |
-| `.claude/` | Agents, commands, knowledge base, SQL resources |
-| `instances.example.yaml` | Fleet and MCP access template |
-| `docker-compose.yml` | The whole stack, with staging and production MCP profiles |
+| [monitor/collector/](monitor/collector/) | SQL client, scheduled collection, metrics, health checks, login templates |
+| [monitor/prometheus/](monitor/prometheus/) | Scrape configuration and recording rules |
+| [monitor/grafana/](monitor/grafana/) | Fleet and chat dashboards, datasource, alert rules and delivery |
+| [monitor/gateway/](monitor/gateway/) | Shared browser routing and Grafana session checks |
+| [mcp/](mcp/) | Monitoring tools, access policy, authentication, tests |
+| [agent/](agent/) | Model/tool loop, MCP client, FastAPI endpoints, Streamlit UI, tests |
+| [scripts/](scripts/) | Access-policy migration and authenticated UI verification |
+| [.claude/](.claude/) | DBA agents, commands, knowledge base, manual SQL resources |
+| [docs/diagrams/](docs/diagrams/) | Main architecture HTML variants, generator, embedded icons |
+| [assets/](assets/) | Branding and documentation images |
 
-Data Eyes is MIT licensed. See [CONTRIBUTING.md](CONTRIBUTING.md).
+For code changes, start with collector `app/metrics.py` and `app/alerts/` for new
+measurements/checks, MCP `src/data_eyes_mcp/tools.py` for monitoring tools, and agent
+`app/mcp_tools.py`, `app/agent.py`, and `app/ui.py` for tool access, model behavior,
+and chat presentation. Folder READMEs explain each component's role.
+
+The `.claude` toolkit supplies DBA workflows, a knowledge base, tuning material,
+and maintenance/script references. These manual SQL resources are separate from the
+runtime monitoring path and may change databases or server configuration.
+
+Data Eyes is [MIT licensed](LICENSE). See [CONTRIBUTING.md](CONTRIBUTING.md) for contributions.
