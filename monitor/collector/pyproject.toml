@@ -1,0 +1,12 @@
+[build-system]
+requires = ["setuptools>=65"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "data-eyes-collector"
+version = "0.2.0"
+requires-python = ">=3.11"
+dependencies = ["fastapi>=0.110", "uvicorn>=0.27", "pydantic-settings>=2", "pyyaml>=6", "pyodbc>=5", "prometheus-client>=0.19"]
+
+[tool.setuptools.packages.find]
+include = ["app*"]

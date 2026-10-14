@@ -1,0 +1,221 @@
+# Data Eyes: SQL Server -> collector -> Prometheus -> Grafana / MCP -> agent -> UI.
+name: src
+
+# Common definition for every MCP environment. Each environment service
+# merges this and adds its own profile, env files, allowlist, and host port.
+x-mcp-service: &mcp-service
+  build: ./mcp
+  image: data-eyes-mcp
+  command:
+  - python
+  - -m
+  - data_eyes_mcp.main
+  - --transport
+  - http
+  - --bind
+  - 0.0.0.0:8080
+  volumes:
+  - ./mcp-access.yaml:/app/mcp-access.yaml:ro
+  restart: unless-stopped
+  healthcheck:
+    test:
+    - CMD
+    - python
+    - -c
+    - import urllib.request; urllib.request.urlopen('http://localhost:8080/health')
+    interval: 30s
+    timeout: 10s
+    retries: 3
+    start_period: 10s
+
+# Environment shared by every MCP environment. Each service sets its own
+# DEPLOYMENT_ENVIRONMENT and INSTANCE_ALLOWLIST, so it serves only those instances.
+x-mcp-environment: &mcp-environment
+  MCP_ACCESS_FILE: /app/mcp-access.yaml
+  PROMETHEUS_URL: http://prometheus:9090
+
+services:
+
+  # ===========================================================================
+  # 1. Monitoring pipeline (monitor/) — collector → Prometheus → Grafana
+  # ===========================================================================
+
+  # Runs trusted, fixed, read-only queries against the fleet and serves cached
+  # Prometheus metrics on :8090 (internal network only; scraped by Prometheus).
+  collector:
+    build: ./monitor/collector
+    restart: unless-stopped
+    environment:
+      INSTANCES_FILE: /app/instances.yaml
+      STATE_FILE: /state/checkpoints.json
+    volumes:
+    - ./instances.yaml:/app/instances.yaml:ro
+    - ./monitor/collector/checks.yaml:/app/checks.yaml:ro    # alert check overrides
+    - collector-state:/state                                # checkpoints; one collector per volume
+    healthcheck:
+      test:
+      - CMD
+      - python
+      - -c
+      - import urllib.request; urllib.request.urlopen('http://localhost:8090/health')
+      interval: 30s
+      timeout: 5s
+      retries: 3
+
+  # Scrapes the collector and keeps 30 days of history; evaluates the
+  # recording rules in monitor/prometheus/rules/. Internal only (:9090).
+  prometheus:
+    ports:
+    - 127.0.0.1:9090:9090
+    image: prom/prometheus:v3.13.4
+    restart: unless-stopped
+    command:
+    - --config.file=/etc/prometheus/prometheus.yml
+    - --storage.tsdb.path=/prometheus
+    - --storage.tsdb.retention.time=30d
+    volumes:
+    - ./monitor/prometheus:/etc/prometheus:ro
+    - prometheus-data:/prometheus
+    depends_on:
+    - collector
+
+  # The UI: dashboards (Fleet Overview is the home page) and alerting, both on
+  # the Data Eyes Prometheus. Alert rules and delivery are provisioned from
+  # monitor/grafana/provisioning/alerting/. Grafana has its own sign-in.
+  grafana:
+    image: grafana/grafana:13.2.3
+    restart: unless-stopped
+    environment:
+      GF_PANELS_DISABLE_SANITIZE_HTML: "true"
+      GF_AUTH_ANONYMOUS_ENABLED: "false"
+      GF_USERS_EDITORS_CAN_ADMIN: "false"
+      GF_SECURITY_ADMIN_USER: ${GF_SECURITY_ADMIN_USER:-admin}
+      GF_SECURITY_ADMIN_PASSWORD: ${GF_SECURITY_ADMIN_PASSWORD:?Set GF_SECURITY_ADMIN_PASSWORD in .env}
+      GRAFANA_NOTIFICATION_ADDRESSES: ${GRAFANA_NOTIFICATION_ADDRESSES:-}
+      GRAFANA_SMTP_HOST: ${GRAFANA_SMTP_HOST:-}
+      GRAFANA_SMTP_USER: ${GRAFANA_SMTP_USER:-}
+      GRAFANA_SMTP_PASSWORD: ${GRAFANA_SMTP_PASSWORD:-}
+      GRAFANA_SMTP_FROM_ADDRESS: ${GRAFANA_SMTP_FROM_ADDRESS:-}
+      GRAFANA_SMTP_FROM_NAME: ${GRAFANA_SMTP_FROM_NAME:-Data Eyes}
+    volumes:
+    - grafana-data:/var/lib/grafana
+    - ./monitor/grafana/grafana.ini:/etc/grafana/grafana.ini:ro
+    - ./monitor/grafana/provisioning:/etc/grafana/provisioning:ro
+    - ./monitor/grafana/dashboards:/etc/grafana/dashboards:ro
+    depends_on:
+    - prometheus
+
+  # Shared browser entry point. Only authenticated Grafana users reach the chat.
+  gateway:
+    image: nginx:stable-alpine@sha256:0985e772fb9f729e6fa0980da05fca5d9c468e870eed43071545afa9d2e27d94
+    restart: unless-stopped
+    ports:
+    - ${GRAFANA_BIND_IP:-127.0.0.1}:3000:3000
+    volumes:
+    - ./monitor/gateway/default.conf:/etc/nginx/conf.d/default.conf:ro
+    depends_on:
+    - grafana
+    - agent-ui
+
+  # The agent calls MCP monitoring tools; only MCP queries Prometheus.
+  agent:
+    build: ./agent
+    restart: unless-stopped
+    environment:
+      AI_PROVIDER: ${AI_PROVIDER:-anthropic}
+      AI_MODEL: ${AI_MODEL:-}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      OPENAI_BASE_URL: ${OPENAI_BASE_URL:-}
+      LOCAL_AI_BASE_URL: ${LOCAL_AI_BASE_URL:-}
+      LOCAL_AI_API_KEY: ${LOCAL_AI_API_KEY:-local}
+      # Collector-backed monitoring tools (principal ui-agent).
+      # Environments whose container is not running are skipped.
+      AGENT_MCP_TOKEN: ${AGENT_MCP_TOKEN:-}
+      AGENT_MCP_SERVERS: ${AGENT_MCP_SERVERS:-development=http://data-eyes-mcp-dev:8080/mcp,staging=http://data-eyes-mcp-staging:8080/mcp,production=http://data-eyes-mcp-prod:8080/mcp}
+    depends_on:
+    - prometheus
+
+  # ===========================================================================
+  # 2. MCP server — one container per environment
+  # ===========================================================================
+  #
+  #   service                 profile      host port (MCP endpoint /mcp)
+  #   data-eyes-mcp-dev       (default)    127.0.0.1:8080
+  #   data-eyes-mcp-staging   staging      127.0.0.1:8081
+  #   data-eyes-mcp-prod      production   127.0.0.1:8082
+
+  # Browser chat client; model credentials remain in the agent service.
+  agent-ui:
+    build: ./agent
+    restart: unless-stopped
+    command: ["streamlit", "run", "app/ui.py", "--server.address=0.0.0.0", "--server.port=8501", "--server.baseUrlPath=assistant", "--server.headless=true", "--browser.gatherUsageStats=false"]
+    environment:
+      AGENT_API_URL: http://agent:8000
+    depends_on:
+    - agent
+
+  data-eyes-mcp-dev:
+    <<: *mcp-service
+    container_name: data-eyes-mcp-dev
+    environment:
+      <<: *mcp-environment
+      DEPLOYMENT_ENVIRONMENT: development
+      INTERNAL_HOST: data-eyes-mcp-dev   # the agent connects by this name
+      INSTANCE_ALLOWLIST: dev
+    ports:
+    - 127.0.0.1:8080:8080
+
+  data-eyes-mcp-staging:
+    <<: *mcp-service
+    profiles:
+    - staging
+    container_name: data-eyes-mcp-staging
+    environment:
+      <<: *mcp-environment
+      DEPLOYMENT_ENVIRONMENT: staging
+      INTERNAL_HOST: data-eyes-mcp-staging   # the agent connects by this name
+      INSTANCE_ALLOWLIST: staging
+    ports:
+    - 127.0.0.1:8081:8080
+
+  data-eyes-mcp-prod:
+    <<: *mcp-service
+    profiles:
+    - production
+    container_name: data-eyes-mcp-prod
+    environment:
+      <<: *mcp-environment
+      DEPLOYMENT_ENVIRONMENT: production
+      INTERNAL_HOST: data-eyes-mcp-prod   # the agent connects by this name
+      INSTANCE_ALLOWLIST: prod
+    ports:
+    - 127.0.0.1:8082:8080
+
+  # ===========================================================================
+  # 3. Testing tools (opt-in profiles)
+  # ===========================================================================
+
+  # One-shot load generator built from the MCP image (profile: loadtest).
+  loadgen:
+    profiles:
+    - loadtest
+    build: ./mcp
+    image: data-eyes-mcp
+    entrypoint:
+    - python
+    - /app/loadgen/run.py
+    environment:
+      PYTHONUNBUFFERED: '1'
+    volumes:
+    - ./mcp-access.yaml:/app/mcp-access.yaml:ro
+    - ./loadgen:/app/loadgen:ro
+    restart: 'no'
+
+# =============================================================================
+# Named volumes — persistent state
+# =============================================================================
+volumes:
+  prometheus-data:    # 30-day TSDB
+  collector-state:    # collector checkpoints
+  grafana-data:       # Grafana users, sessions, alert state, UI-saved dashboards

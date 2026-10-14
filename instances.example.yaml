@@ -1,0 +1,15 @@
+# Collector-only SQL credentials. MCP access is in mcp-access.example.yaml.
+# Copy to instances.yaml; never commit credentials.
+instances:
+  - name: prod
+    label: "Prod SQL Server"
+    environment: production
+    mssql_connection_string: "Driver={ODBC Driver 18 for SQL Server};Server=prod-server,1433;Database=master;UID=data_eyes_monitor;PWD=change-me;Encrypt=yes;TrustServerCertificate=no"
+  - name: staging
+    label: "Staging SQL Server"
+    environment: staging
+    mssql_connection_string: "Driver={ODBC Driver 18 for SQL Server};Server=staging-server,1433;Database=master;UID=data_eyes_monitor;PWD=change-me;Encrypt=yes;TrustServerCertificate=no"
+  - name: dev
+    label: "Dev SQL Server"
+    environment: development
+    mssql_connection_string: "Driver={ODBC Driver 18 for SQL Server};Server=localhost,1433;Database=master;UID=data_eyes_monitor;PWD=change-me;Encrypt=yes;TrustServerCertificate=no"

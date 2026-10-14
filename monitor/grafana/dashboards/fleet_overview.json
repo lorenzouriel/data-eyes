@@ -1,392 +1,2126 @@
 {
-  "annotations": {
-    "list": [
-      {
-        "builtIn": 1,
-        "datasource": {
-          "type": "grafana",
-          "uid": "-- Grafana --"
-        },
-        "enable": true,
-        "hide": true,
-        "iconColor": "rgba(0, 211, 255, 1)",
-        "name": "Annotations & Alerts",
-        "type": "dashboard"
-      }
-    ]
-  },
-  "description": "Fleet-wide view of every monitored SQL Server instance. Each instance is validated for Availability Group membership, replica role (PRIMARY/SECONDARY), synchronization health, and whether it is a readable secondary (read replica). See monitor/docs/availability_groups.md.",
-  "editable": true,
-  "fiscalYearStartMonth": 0,
-  "graphTooltip": 0,
-  "id": null,
-  "links": [],
-  "panels": [
-    {
-      "collapsed": false,
-      "gridPos": {
-        "h": 1,
-        "w": 24,
-        "x": 0,
-        "y": 0
-      },
-      "id": 1,
-      "panels": [],
-      "title": "Fleet Overview — Availability Group & Replica Status",
-      "type": "row"
-    },
-    {
-      "datasource": {
-        "type": "mssql",
-        "uid": "${instance}"
-      },
-      "description": "Instance identity, current AG role, uptime and active sessions. Color: PRIMARY = green, SECONDARY = blue, STANDALONE = gray.",
-      "fieldConfig": {
-        "defaults": {
-          "mappings": [],
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "green",
-                "value": 0
-              }
-            ]
-          }
-        },
-        "overrides": [
-          {
-            "matcher": {
-              "id": "byName",
-              "options": "replica_role"
-            },
-            "properties": [
-              {
-                "id": "mappings",
-                "value": [
-                  {
-                    "type": "value",
-                    "options": {
-                      "PRIMARY": {
-                        "color": "green",
-                        "index": 0
-                      },
-                      "SECONDARY": {
-                        "color": "blue",
-                        "index": 1
-                      },
-                      "STANDALONE": {
-                        "color": "gray",
-                        "index": 2
-                      }
-                    }
-                  }
-                ]
-              },
-              {
-                "id": "color",
-                "value": {
-                  "mode": "thresholds"
-                }
-              }
-            ]
-          }
-        ]
-      },
-      "gridPos": {
-        "h": 4,
-        "w": 6,
-        "x": 0,
-        "y": 1
-      },
-      "id": 2,
-      "options": {
-        "colorMode": "background",
-        "graphMode": "none",
-        "justifyMode": "center",
-        "orientation": "horizontal",
-        "reduceOptions": {
-          "calcs": [
-            "lastNotNull"
-          ],
-          "fields": "/.*/",
-          "values": true
-        },
-        "textMode": "value_and_name",
-        "wideLayout": true
-      },
-      "pluginVersion": "12.2.0",
-      "repeat": "instance",
-      "repeatDirection": "h",
-      "targets": [
-        {
-          "datasource": {
-            "type": "mssql",
-            "uid": "${instance}"
-          },
-          "editorMode": "code",
-          "format": "table",
-          "rawQuery": true,
-          "rawSql": "SELECT\n    CAST(SERVERPROPERTY('ServerName') AS varchar(128)) AS instance,\n    ISNULL(ars.role_desc, 'STANDALONE') AS replica_role,\n    DATEDIFF(MINUTE, si.sqlserver_start_time, GETDATE()) AS uptime_min,\n    (SELECT COUNT(*) FROM sys.dm_exec_sessions WHERE is_user_process = 1) AS active_sessions\nFROM sys.dm_os_sys_info si\nLEFT JOIN sys.dm_hadr_availability_replica_states ars ON ars.is_local = 1;",
-          "refId": "A"
-        }
-      ],
-      "title": "Instance Health",
-      "type": "stat"
-    },
-    {
-      "datasource": {
-        "type": "mssql",
-        "uid": "${instance}"
-      },
-      "description": "AG membership and replica role for this instance. is_read_replica = YES only when this instance is a SECONDARY with read-only (or ALL) connections allowed — that is the actual read replica.",
-      "fieldConfig": {
-        "defaults": {
-          "custom": {
-            "align": "left",
-            "cellOptions": {
-              "type": "auto"
-            },
-            "filterable": false
-          },
-          "mappings": []
-        },
-        "overrides": [
-          {
-            "matcher": {
-              "id": "byName",
-              "options": "is_read_replica"
-            },
-            "properties": [
-              {
-                "id": "mappings",
-                "value": [
-                  {
-                    "type": "value",
-                    "options": {
-                      "YES": {
-                        "color": "blue",
-                        "index": 0
-                      },
-                      "NO": {
-                        "color": "gray",
-                        "index": 1
-                      },
-                      "N/A": {
-                        "color": "text",
-                        "index": 2
-                      }
-                    }
-                  }
-                ]
-              },
-              {
-                "id": "custom.cellOptions",
-                "value": {
-                  "type": "color-background"
-                }
-              }
-            ]
-          },
-          {
-            "matcher": {
-              "id": "byName",
-              "options": "sync_health"
-            },
-            "properties": [
-              {
-                "id": "mappings",
-                "value": [
-                  {
-                    "type": "value",
-                    "options": {
-                      "HEALTHY": {
-                        "color": "green",
-                        "index": 0
-                      },
-                      "NOT_HEALTHY": {
-                        "color": "red",
-                        "index": 1
-                      },
-                      "N/A": {
-                        "color": "text",
-                        "index": 2
-                      }
-                    }
-                  }
-                ]
-              },
-              {
-                "id": "custom.cellOptions",
-                "value": {
-                  "type": "color-background"
-                }
-              }
-            ]
-          }
-        ]
-      },
-      "gridPos": {
-        "h": 6,
-        "w": 12,
-        "x": 0,
-        "y": 5
-      },
-      "id": 3,
-      "options": {
-        "cellHeight": "sm",
-        "footer": {
-          "countRows": false,
-          "fields": "",
-          "reducer": [
-            "sum"
-          ],
-          "show": false
-        },
-        "showHeader": true
-      },
-      "pluginVersion": "12.2.0",
-      "repeat": "instance",
-      "repeatDirection": "h",
-      "targets": [
-        {
-          "datasource": {
-            "type": "mssql",
-            "uid": "${instance}"
-          },
-          "editorMode": "code",
-          "format": "table",
-          "rawQuery": true,
-          "rawSql": "SELECT\n    CAST(SERVERPROPERTY('ServerName') AS varchar(128)) AS instance,\n    CASE WHEN CAST(SERVERPROPERTY('IsHadrEnabled') AS int) = 1 THEN 'Yes' ELSE 'No' END AS hadr_enabled,\n    ISNULL(ag.name, 'N/A') AS availability_group,\n    ISNULL(ars.role_desc, 'STANDALONE') AS replica_role,\n    ISNULL(ars.synchronization_health_desc, 'N/A') AS sync_health,\n    ISNULL(ar.secondary_role_allow_connections_desc, 'N/A') AS read_replica_allowed,\n    CASE\n        WHEN ars.role_desc = 'SECONDARY' AND ar.secondary_role_allow_connections_desc IN ('READ_ONLY', 'ALL') THEN 'YES'\n        WHEN ars.role_desc = 'SECONDARY' THEN 'NO'\n        ELSE 'N/A'\n    END AS is_read_replica\nFROM (SELECT 1 AS dummy) d\nLEFT JOIN sys.dm_hadr_availability_replica_states ars ON ars.is_local = 1\nLEFT JOIN sys.availability_replicas ar ON ar.replica_id = ars.replica_id\nLEFT JOIN sys.availability_groups ag ON ag.group_id = ar.group_id;",
-          "refId": "A"
-        }
-      ],
-      "title": "AG & Replica Detail",
-      "type": "table"
-    },
-    {
-      "datasource": {
-        "type": "mssql",
-        "uid": "${instance}"
-      },
-      "description": "Per-database synchronization state for this instance's AG replica. Empty on standalone instances (no AG configured) — that itself confirms the instance is not part of any Availability Group.",
-      "fieldConfig": {
-        "defaults": {
-          "custom": {
-            "align": "left",
-            "cellOptions": {
-              "type": "auto"
-            },
-            "filterable": false
-          },
-          "mappings": []
-        },
-        "overrides": [
-          {
-            "matcher": {
-              "id": "byName",
-              "options": "sync_health"
-            },
-            "properties": [
-              {
-                "id": "mappings",
-                "value": [
-                  {
-                    "type": "value",
-                    "options": {
-                      "HEALTHY": {
-                        "color": "green",
-                        "index": 0
-                      },
-                      "NOT_HEALTHY": {
-                        "color": "red",
-                        "index": 1
-                      }
-                    }
-                  }
-                ]
-              },
-              {
-                "id": "custom.cellOptions",
-                "value": {
-                  "type": "color-background"
-                }
-              }
-            ]
-          }
-        ]
-      },
-      "gridPos": {
-        "h": 6,
-        "w": 12,
-        "x": 12,
-        "y": 5
-      },
-      "id": 4,
-      "options": {
-        "cellHeight": "sm",
-        "footer": {
-          "countRows": false,
-          "fields": "",
-          "reducer": [
-            "sum"
-          ],
-          "show": false
-        },
-        "showHeader": true
-      },
-      "pluginVersion": "12.2.0",
-      "repeat": "instance",
-      "repeatDirection": "h",
-      "targets": [
-        {
-          "datasource": {
-            "type": "mssql",
-            "uid": "${instance}"
-          },
-          "editorMode": "code",
-          "format": "table",
-          "rawQuery": true,
-          "rawSql": "SELECT\n    DB_NAME(drs.database_id) AS database_name,\n    ar.replica_server_name AS replica,\n    drs.synchronization_state_desc AS sync_state,\n    drs.synchronization_health_desc AS sync_health,\n    drs.is_primary_replica,\n    drs.log_send_queue_size AS log_send_queue_kb,\n    drs.redo_queue_size AS redo_queue_kb\nFROM sys.dm_hadr_database_replica_states drs\nJOIN sys.availability_replicas ar ON ar.replica_id = drs.replica_id\nWHERE drs.is_local = 1\nORDER BY database_name;",
-          "refId": "A"
-        }
-      ],
-      "title": "Per-Database Sync State (AG members)",
-      "type": "table"
-    }
-  ],
-  "preload": false,
-  "refresh": "30s",
-  "schemaVersion": 42,
+  "uid": "fleet-overview",
+  "title": "Fleet Overview - All Instances",
   "tags": [
     "data-eyes",
-    "fleet",
-    "availability-group"
+    "sql-server"
   ],
-  "templating": {
-    "list": [
-      {
-        "current": {},
-        "hide": 0,
-        "includeAll": true,
-        "label": "Instance",
-        "multi": true,
-        "name": "instance",
-        "options": [],
-        "query": "mssql",
-        "refresh": 1,
-        "regex": "/^SQL Server - .*/",
-        "type": "datasource"
-      }
-    ]
-  },
+  "editable": true,
+  "schemaVersion": 39,
+  "version": 1,
+  "timezone": "browser",
+  "graphTooltip": 1,
+  "refresh": "30s",
   "time": {
     "from": "now-6h",
     "to": "now"
   },
-  "timepicker": {},
-  "timezone": "",
-  "title": "Fleet Overview - All Instances",
-  "uid": "fleet-overview",
-  "version": 1
+  "timepicker": {
+    "refresh_intervals": [
+      "30s",
+      "1m",
+      "5m"
+    ],
+    "time_options": [
+      "1h",
+      "6h",
+      "24h",
+      "7d",
+      "30d"
+    ]
+  },
+  "templating": {
+    "list": [
+      {
+        "name": "environment",
+        "label": "Environment",
+        "type": "query",
+        "datasource": {
+          "type": "prometheus",
+          "uid": "dataeyes_prometheus"
+        },
+        "query": {
+          "query": "label_values(data_eyes_instance_info, environment)",
+          "refId": "environment"
+        },
+        "definition": "label_values(data_eyes_instance_info, environment)",
+        "refresh": 1,
+        "sort": 1,
+        "multi": true,
+        "includeAll": true,
+        "options": [],
+        "allValue": ".*",
+        "current": {
+          "text": "All",
+          "value": "$__all"
+        }
+      }
+    ]
+  },
+  "panels": [
+    {
+      "id": 1,
+      "title": "Monitoring visibility",
+      "type": "stat",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "dataeyes_prometheus"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 0,
+        "w": 24,
+        "h": 4
+      },
+      "description": "Inventory is exported for every configured instance, even when SQL is unreachable. If the collector or Prometheus is unavailable, fleet visibility is incomplete; counts are not proof of a healthy fleet.",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "noValue": "Unavailable",
+          "color": {
+            "mode": "fixed",
+            "fixedColor": "blue"
+          },
+          "mappings": [
+            {
+              "type": "special",
+              "options": {
+                "match": "nan",
+                "result": {
+                  "text": "Unavailable",
+                  "color": "gray"
+                }
+              }
+            },
+            {
+              "type": "value",
+              "options": {
+                "0": {
+                  "text": "Collector unavailable - fleet visibility incomplete",
+                  "color": "red"
+                },
+                "1": {
+                  "text": "Collector online",
+                  "color": "green"
+                }
+              }
+            }
+          ]
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "dataeyes_prometheus"
+          },
+          "expr": "max(up{job=\"data-eyes\"}) or vector(0)",
+          "legendFormat": "{{sql_instance}} / {{environment}}",
+          "instant": true,
+          "range": false,
+          "format": "time_series"
+        }
+      ],
+      "options": {
+        "reduceOptions": {
+          "values": false,
+          "calcs": [
+            "last"
+          ],
+          "fields": ""
+        },
+        "orientation": "horizontal",
+        "displayMode": "basic",
+        "valueMode": "text",
+        "namePlacement": "left",
+        "sizing": "manual",
+        "minVizHeight": 28,
+        "minVizWidth": 0,
+        "showUnfilled": true,
+        "colorMode": "value",
+        "graphMode": "none",
+        "textMode": "auto"
+      }
+    },
+    {
+      "id": 2,
+      "type": "row",
+      "title": "Fleet health",
+      "collapsed": false,
+      "panels": [],
+      "gridPos": {
+        "x": 0,
+        "y": 4,
+        "w": 24,
+        "h": 1
+      }
+    },
+    {
+      "id": 3,
+      "title": "Configured servers",
+      "type": "stat",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "dataeyes_prometheus"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 5,
+        "w": 4,
+        "h": 4
+      },
+      "description": "",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "noValue": "Unavailable",
+          "color": {
+            "mode": "fixed",
+            "fixedColor": "blue"
+          },
+          "mappings": [
+            {
+              "type": "special",
+              "options": {
+                "match": "nan",
+                "result": {
+                  "text": "Unavailable",
+                  "color": "gray"
+                }
+              }
+            }
+          ]
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "dataeyes_prometheus"
+          },
+          "expr": "(count(max by (environment,sql_instance) (data_eyes_instance_info{environment=~\"${environment:regex}\"}))) and on() (max(up{job=\"data-eyes\"}) == 1)",
+          "legendFormat": "{{sql_instance}} / {{environment}}",
+          "instant": true,
+          "range": false,
+          "format": "time_series"
+        }
+      ],
+      "options": {
+        "reduceOptions": {
+          "values": false,
+          "calcs": [
+            "last"
+          ],
+          "fields": ""
+        },
+        "orientation": "horizontal",
+        "displayMode": "basic",
+        "valueMode": "text",
+        "namePlacement": "left",
+        "sizing": "manual",
+        "minVizHeight": 28,
+        "minVizWidth": 0,
+        "showUnfilled": true,
+        "colorMode": "value",
+        "graphMode": "none",
+        "textMode": "auto"
+      }
+    },
+    {
+      "id": 4,
+      "title": "Healthy",
+      "type": "stat",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "dataeyes_prometheus"
+      },
+      "gridPos": {
+        "x": 4,
+        "y": 5,
+        "w": 4,
+        "h": 4
+      },
+      "description": "",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "noValue": "Unavailable",
+          "color": {
+            "mode": "fixed",
+            "fixedColor": "green"
+          },
+          "mappings": [
+            {
+              "type": "special",
+              "options": {
+                "match": "nan",
+                "result": {
+                  "text": "Unavailable",
+                  "color": "gray"
+                }
+              }
+            }
+          ]
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "dataeyes_prometheus"
+          },
+          "expr": "(count(((max by (environment,sql_instance) (data_eyes_overall_severity{environment=~\"${environment:regex}\"})) and on(environment,sql_instance) (max by (environment,sql_instance) (data_eyes_sqlserver_reachable{environment=~\"${environment:regex}\"}) == 1)) == 0) or (count(max by (environment,sql_instance) (data_eyes_instance_info{environment=~\"${environment:regex}\"})) * 0)) and on() (max(up{job=\"data-eyes\"}) == 1)",
+          "legendFormat": "{{sql_instance}} / {{environment}}",
+          "instant": true,
+          "range": false,
+          "format": "time_series"
+        }
+      ],
+      "options": {
+        "reduceOptions": {
+          "values": false,
+          "calcs": [
+            "last"
+          ],
+          "fields": ""
+        },
+        "orientation": "horizontal",
+        "displayMode": "basic",
+        "valueMode": "text",
+        "namePlacement": "left",
+        "sizing": "manual",
+        "minVizHeight": 28,
+        "minVizWidth": 0,
+        "showUnfilled": true,
+        "colorMode": "value",
+        "graphMode": "none",
+        "textMode": "auto"
+      }
+    },
+    {
+      "id": 5,
+      "title": "Warning",
+      "type": "stat",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "dataeyes_prometheus"
+      },
+      "gridPos": {
+        "x": 8,
+        "y": 5,
+        "w": 4,
+        "h": 4
+      },
+      "description": "",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "noValue": "Unavailable",
+          "color": {
+            "mode": "fixed",
+            "fixedColor": "orange"
+          },
+          "mappings": [
+            {
+              "type": "special",
+              "options": {
+                "match": "nan",
+                "result": {
+                  "text": "Unavailable",
+                  "color": "gray"
+                }
+              }
+            }
+          ]
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "dataeyes_prometheus"
+          },
+          "expr": "(count(((max by (environment,sql_instance) (data_eyes_overall_severity{environment=~\"${environment:regex}\"})) and on(environment,sql_instance) (max by (environment,sql_instance) (data_eyes_sqlserver_reachable{environment=~\"${environment:regex}\"}) == 1)) == 2) or (count(max by (environment,sql_instance) (data_eyes_instance_info{environment=~\"${environment:regex}\"})) * 0)) and on() (max(up{job=\"data-eyes\"}) == 1)",
+          "legendFormat": "{{sql_instance}} / {{environment}}",
+          "instant": true,
+          "range": false,
+          "format": "time_series"
+        }
+      ],
+      "options": {
+        "reduceOptions": {
+          "values": false,
+          "calcs": [
+            "last"
+          ],
+          "fields": ""
+        },
+        "orientation": "horizontal",
+        "displayMode": "basic",
+        "valueMode": "text",
+        "namePlacement": "left",
+        "sizing": "manual",
+        "minVizHeight": 28,
+        "minVizWidth": 0,
+        "showUnfilled": true,
+        "colorMode": "value",
+        "graphMode": "none",
+        "textMode": "auto"
+      }
+    },
+    {
+      "id": 6,
+      "title": "Critical",
+      "type": "stat",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "dataeyes_prometheus"
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 5,
+        "w": 4,
+        "h": 4
+      },
+      "description": "",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "noValue": "Unavailable",
+          "color": {
+            "mode": "fixed",
+            "fixedColor": "red"
+          },
+          "mappings": [
+            {
+              "type": "special",
+              "options": {
+                "match": "nan",
+                "result": {
+                  "text": "Unavailable",
+                  "color": "gray"
+                }
+              }
+            }
+          ]
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "dataeyes_prometheus"
+          },
+          "expr": "(count(((max by (environment,sql_instance) (data_eyes_overall_severity{environment=~\"${environment:regex}\"})) and on(environment,sql_instance) (max by (environment,sql_instance) (data_eyes_sqlserver_reachable{environment=~\"${environment:regex}\"}) == 1)) == 3) or (count(max by (environment,sql_instance) (data_eyes_instance_info{environment=~\"${environment:regex}\"})) * 0)) and on() (max(up{job=\"data-eyes\"}) == 1)",
+          "legendFormat": "{{sql_instance}} / {{environment}}",
+          "instant": true,
+          "range": false,
+          "format": "time_series"
+        }
+      ],
+      "options": {
+        "reduceOptions": {
+          "values": false,
+          "calcs": [
+            "last"
+          ],
+          "fields": ""
+        },
+        "orientation": "horizontal",
+        "displayMode": "basic",
+        "valueMode": "text",
+        "namePlacement": "left",
+        "sizing": "manual",
+        "minVizHeight": 28,
+        "minVizWidth": 0,
+        "showUnfilled": true,
+        "colorMode": "value",
+        "graphMode": "none",
+        "textMode": "auto"
+      }
+    },
+    {
+      "id": 7,
+      "title": "Unreachable",
+      "type": "stat",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "dataeyes_prometheus"
+      },
+      "gridPos": {
+        "x": 16,
+        "y": 5,
+        "w": 4,
+        "h": 4
+      },
+      "description": "",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "noValue": "Unavailable",
+          "color": {
+            "mode": "fixed",
+            "fixedColor": "blue"
+          },
+          "mappings": [
+            {
+              "type": "special",
+              "options": {
+                "match": "nan",
+                "result": {
+                  "text": "Unavailable",
+                  "color": "gray"
+                }
+              }
+            }
+          ]
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "dataeyes_prometheus"
+          },
+          "expr": "(count((max by (environment,sql_instance) (data_eyes_sqlserver_reachable{environment=~\"${environment:regex}\"}) == 0) and on(environment,sql_instance) (max by (environment,sql_instance) (data_eyes_collection_fresh{environment=~\"${environment:regex}\",collector=\"connection\"}) == 1)) or (count(max by (environment,sql_instance) (data_eyes_instance_info{environment=~\"${environment:regex}\"})) * 0)) and on() (max(up{job=\"data-eyes\"}) == 1)",
+          "legendFormat": "{{sql_instance}} / {{environment}}",
+          "instant": true,
+          "range": false,
+          "format": "time_series"
+        }
+      ],
+      "options": {
+        "reduceOptions": {
+          "values": false,
+          "calcs": [
+            "last"
+          ],
+          "fields": ""
+        },
+        "orientation": "horizontal",
+        "displayMode": "basic",
+        "valueMode": "text",
+        "namePlacement": "left",
+        "sizing": "manual",
+        "minVizHeight": 28,
+        "minVizWidth": 0,
+        "showUnfilled": true,
+        "colorMode": "value",
+        "graphMode": "none",
+        "textMode": "auto"
+      }
+    },
+    {
+      "id": 8,
+      "title": "Unknown",
+      "type": "stat",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "dataeyes_prometheus"
+      },
+      "gridPos": {
+        "x": 20,
+        "y": 5,
+        "w": 4,
+        "h": 4
+      },
+      "description": "",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "noValue": "Unavailable",
+          "color": {
+            "mode": "fixed",
+            "fixedColor": "blue"
+          },
+          "mappings": [
+            {
+              "type": "special",
+              "options": {
+                "match": "nan",
+                "result": {
+                  "text": "Unavailable",
+                  "color": "gray"
+                }
+              }
+            }
+          ]
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "dataeyes_prometheus"
+          },
+          "expr": "(count((max by (environment,sql_instance) (data_eyes_instance_info{environment=~\"${environment:regex}\"})) unless on(environment,sql_instance) (((max by (environment,sql_instance) (data_eyes_overall_severity{environment=~\"${environment:regex}\"})) and on(environment,sql_instance) (max by (environment,sql_instance) (data_eyes_sqlserver_reachable{environment=~\"${environment:regex}\"}) == 1) != 1) or ((max by (environment,sql_instance) (data_eyes_sqlserver_reachable{environment=~\"${environment:regex}\"}) == 0) and on(environment,sql_instance) (max by (environment,sql_instance) (data_eyes_collection_fresh{environment=~\"${environment:regex}\",collector=\"connection\"}) == 1)))) or (count(max by (environment,sql_instance) (data_eyes_instance_info{environment=~\"${environment:regex}\"})) * 0)) and on() (max(up{job=\"data-eyes\"}) == 1)",
+          "legendFormat": "{{sql_instance}} / {{environment}}",
+          "instant": true,
+          "range": false,
+          "format": "time_series"
+        }
+      ],
+      "options": {
+        "reduceOptions": {
+          "values": false,
+          "calcs": [
+            "last"
+          ],
+          "fields": ""
+        },
+        "orientation": "horizontal",
+        "displayMode": "basic",
+        "valueMode": "text",
+        "namePlacement": "left",
+        "sizing": "manual",
+        "minVizHeight": 28,
+        "minVizWidth": 0,
+        "showUnfilled": true,
+        "colorMode": "value",
+        "graphMode": "none",
+        "textMode": "auto"
+      }
+    },
+    {
+      "id": 9,
+      "type": "row",
+      "title": "Health checks by server",
+      "collapsed": false,
+      "panels": [],
+      "gridPos": {
+        "x": 0,
+        "y": 9,
+        "w": 24,
+        "h": 1
+      }
+    },
+    {
+      "id": 10,
+      "title": "Warning / critical checks",
+      "type": "bargauge",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "dataeyes_prometheus"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 10,
+        "w": 12,
+        "h": 9
+      },
+      "description": "Per-server check severities; thresholds come from collector configuration, not dashboard constants.",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "noValue": "Unavailable",
+          "color": {
+            "mode": "fixed",
+            "fixedColor": "blue"
+          },
+          "mappings": [
+            {
+              "type": "special",
+              "options": {
+                "match": "nan",
+                "result": {
+                  "text": "Unavailable",
+                  "color": "gray"
+                }
+              }
+            }
+          ],
+          "links": [
+            {
+              "title": "Open server Deep Dive",
+              "url": "/d/server-deep-dive/server-deep-dive?var-environment=${__field.labels.environment}&var-instance=${__field.labels.sql_instance}&from=${__from}&to=${__to}",
+              "targetBlank": false
+            }
+          ]
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "dataeyes_prometheus"
+          },
+          "expr": "sort_desc(((count by (environment,sql_instance) (data_eyes_health_severity{environment=~\"${environment:regex}\"} >= 2) or on(environment,sql_instance) (max by (environment,sql_instance) (data_eyes_instance_info{environment=~\"${environment:regex}\"}) * 0)) and on() (max(up{job=\"data-eyes\"}) == 1)) or on(environment,sql_instance) (max by (environment,sql_instance) (data_eyes_instance_info{environment=~\"${environment:regex}\"}) * (0/0)))",
+          "legendFormat": "{{sql_instance}} / {{environment}}",
+          "instant": true,
+          "range": false,
+          "format": "time_series"
+        }
+      ],
+      "options": {
+        "reduceOptions": {
+          "values": false,
+          "calcs": [
+            "last"
+          ],
+          "fields": ""
+        },
+        "orientation": "horizontal",
+        "displayMode": "basic",
+        "valueMode": "text",
+        "namePlacement": "left",
+        "sizing": "manual",
+        "minVizHeight": 28,
+        "minVizWidth": 0,
+        "showUnfilled": true,
+        "colorMode": "value",
+        "graphMode": "none",
+        "textMode": "auto"
+      }
+    },
+    {
+      "id": 11,
+      "title": "Unknown checks",
+      "type": "bargauge",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "dataeyes_prometheus"
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 10,
+        "w": 12,
+        "h": 9
+      },
+      "description": "Per-server check severities; thresholds come from collector configuration, not dashboard constants.",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "noValue": "Unavailable",
+          "color": {
+            "mode": "fixed",
+            "fixedColor": "blue"
+          },
+          "mappings": [
+            {
+              "type": "special",
+              "options": {
+                "match": "nan",
+                "result": {
+                  "text": "Unavailable",
+                  "color": "gray"
+                }
+              }
+            }
+          ],
+          "links": [
+            {
+              "title": "Open server Deep Dive",
+              "url": "/d/server-deep-dive/server-deep-dive?var-environment=${__field.labels.environment}&var-instance=${__field.labels.sql_instance}&from=${__from}&to=${__to}",
+              "targetBlank": false
+            }
+          ]
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "dataeyes_prometheus"
+          },
+          "expr": "sort_desc(((count by (environment,sql_instance) (data_eyes_health_severity{environment=~\"${environment:regex}\"} == 1) or on(environment,sql_instance) (max by (environment,sql_instance) (data_eyes_instance_info{environment=~\"${environment:regex}\"}) * 0)) and on() (max(up{job=\"data-eyes\"}) == 1)) or on(environment,sql_instance) (max by (environment,sql_instance) (data_eyes_instance_info{environment=~\"${environment:regex}\"}) * (0/0)))",
+          "legendFormat": "{{sql_instance}} / {{environment}}",
+          "instant": true,
+          "range": false,
+          "format": "time_series"
+        }
+      ],
+      "options": {
+        "reduceOptions": {
+          "values": false,
+          "calcs": [
+            "last"
+          ],
+          "fields": ""
+        },
+        "orientation": "horizontal",
+        "displayMode": "basic",
+        "valueMode": "text",
+        "namePlacement": "left",
+        "sizing": "manual",
+        "minVizHeight": 28,
+        "minVizWidth": 0,
+        "showUnfilled": true,
+        "colorMode": "value",
+        "graphMode": "none",
+        "textMode": "auto"
+      }
+    },
+    {
+      "id": 12,
+      "type": "row",
+      "title": "CPU and memory",
+      "collapsed": false,
+      "panels": [],
+      "gridPos": {
+        "x": 0,
+        "y": 19,
+        "w": 24,
+        "h": 1
+      }
+    },
+    {
+      "id": 13,
+      "title": "SQL CPU",
+      "type": "bargauge",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "dataeyes_prometheus"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 20,
+        "w": 12,
+        "h": 9
+      },
+      "description": "",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "noValue": "Unavailable",
+          "color": {
+            "mode": "fixed",
+            "fixedColor": "blue"
+          },
+          "mappings": [
+            {
+              "type": "special",
+              "options": {
+                "match": "nan",
+                "result": {
+                  "text": "Unavailable",
+                  "color": "gray"
+                }
+              }
+            }
+          ],
+          "min": 0,
+          "max": 100,
+          "links": [
+            {
+              "title": "Open server Deep Dive",
+              "url": "/d/server-deep-dive/server-deep-dive?var-environment=${__field.labels.environment}&var-instance=${__field.labels.sql_instance}&from=${__from}&to=${__to}",
+              "targetBlank": false
+            }
+          ]
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "dataeyes_prometheus"
+          },
+          "expr": "sort_desc((((max by (environment,sql_instance) (data_eyes_sql_cpu_pct{environment=~\"${environment:regex}\"})) and on(environment,sql_instance) (max by (environment,sql_instance) (data_eyes_collection_success{environment=~\"${environment:regex}\",collector=\"resources\"}) == 1) and on(environment,sql_instance) (max by (environment,sql_instance) (data_eyes_sqlserver_reachable{environment=~\"${environment:regex}\"}) == 1)) and on() (max(up{job=\"data-eyes\"}) == 1)) or on(environment,sql_instance) (max by (environment,sql_instance) (data_eyes_instance_info{environment=~\"${environment:regex}\"}) * (0/0)))",
+          "legendFormat": "{{sql_instance}} / {{environment}}",
+          "instant": true,
+          "range": false,
+          "format": "time_series"
+        }
+      ],
+      "options": {
+        "reduceOptions": {
+          "values": false,
+          "calcs": [
+            "last"
+          ],
+          "fields": ""
+        },
+        "orientation": "horizontal",
+        "displayMode": "basic",
+        "valueMode": "text",
+        "namePlacement": "left",
+        "sizing": "manual",
+        "minVizHeight": 28,
+        "minVizWidth": 0,
+        "showUnfilled": true,
+        "colorMode": "value",
+        "graphMode": "none",
+        "textMode": "auto"
+      }
+    },
+    {
+      "id": 14,
+      "title": "Host CPU",
+      "type": "bargauge",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "dataeyes_prometheus"
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 20,
+        "w": 12,
+        "h": 9
+      },
+      "description": "",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "noValue": "Unavailable",
+          "color": {
+            "mode": "fixed",
+            "fixedColor": "blue"
+          },
+          "mappings": [
+            {
+              "type": "special",
+              "options": {
+                "match": "nan",
+                "result": {
+                  "text": "Unavailable",
+                  "color": "gray"
+                }
+              }
+            }
+          ],
+          "min": 0,
+          "max": 100,
+          "links": [
+            {
+              "title": "Open server Deep Dive",
+              "url": "/d/server-deep-dive/server-deep-dive?var-environment=${__field.labels.environment}&var-instance=${__field.labels.sql_instance}&from=${__from}&to=${__to}",
+              "targetBlank": false
+            }
+          ]
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "dataeyes_prometheus"
+          },
+          "expr": "sort_desc((((max by (environment,sql_instance) (data_eyes_os_cpu_pct{environment=~\"${environment:regex}\"})) and on(environment,sql_instance) (max by (environment,sql_instance) (data_eyes_collection_success{environment=~\"${environment:regex}\",collector=\"resources\"}) == 1) and on(environment,sql_instance) (max by (environment,sql_instance) (data_eyes_sqlserver_reachable{environment=~\"${environment:regex}\"}) == 1)) and on() (max(up{job=\"data-eyes\"}) == 1)) or on(environment,sql_instance) (max by (environment,sql_instance) (data_eyes_instance_info{environment=~\"${environment:regex}\"}) * (0/0)))",
+          "legendFormat": "{{sql_instance}} / {{environment}}",
+          "instant": true,
+          "range": false,
+          "format": "time_series"
+        }
+      ],
+      "options": {
+        "reduceOptions": {
+          "values": false,
+          "calcs": [
+            "last"
+          ],
+          "fields": ""
+        },
+        "orientation": "horizontal",
+        "displayMode": "basic",
+        "valueMode": "text",
+        "namePlacement": "left",
+        "sizing": "manual",
+        "minVizHeight": 28,
+        "minVizWidth": 0,
+        "showUnfilled": true,
+        "colorMode": "value",
+        "graphMode": "none",
+        "textMode": "auto"
+      }
+    },
+    {
+      "id": 15,
+      "title": "Available host memory",
+      "type": "bargauge",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "dataeyes_prometheus"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 29,
+        "w": 12,
+        "h": 9
+      },
+      "description": "",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "bytes",
+          "noValue": "Unavailable",
+          "color": {
+            "mode": "fixed",
+            "fixedColor": "blue"
+          },
+          "mappings": [
+            {
+              "type": "special",
+              "options": {
+                "match": "nan",
+                "result": {
+                  "text": "Unavailable",
+                  "color": "gray"
+                }
+              }
+            }
+          ],
+          "links": [
+            {
+              "title": "Open server Deep Dive",
+              "url": "/d/server-deep-dive/server-deep-dive?var-environment=${__field.labels.environment}&var-instance=${__field.labels.sql_instance}&from=${__from}&to=${__to}",
+              "targetBlank": false
+            }
+          ]
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "dataeyes_prometheus"
+          },
+          "expr": "sort_desc((((max by (environment,sql_instance) (data_eyes_available_memory_bytes{environment=~\"${environment:regex}\"})) and on(environment,sql_instance) (max by (environment,sql_instance) (data_eyes_collection_success{environment=~\"${environment:regex}\",collector=\"memory\"}) == 1) and on(environment,sql_instance) (max by (environment,sql_instance) (data_eyes_sqlserver_reachable{environment=~\"${environment:regex}\"}) == 1)) and on() (max(up{job=\"data-eyes\"}) == 1)) or on(environment,sql_instance) (max by (environment,sql_instance) (data_eyes_instance_info{environment=~\"${environment:regex}\"}) * (0/0)))",
+          "legendFormat": "{{sql_instance}} / {{environment}}",
+          "instant": true,
+          "range": false,
+          "format": "time_series"
+        }
+      ],
+      "options": {
+        "reduceOptions": {
+          "values": false,
+          "calcs": [
+            "last"
+          ],
+          "fields": ""
+        },
+        "orientation": "horizontal",
+        "displayMode": "basic",
+        "valueMode": "text",
+        "namePlacement": "left",
+        "sizing": "manual",
+        "minVizHeight": 28,
+        "minVizWidth": 0,
+        "showUnfilled": true,
+        "colorMode": "value",
+        "graphMode": "none",
+        "textMode": "auto"
+      }
+    },
+    {
+      "id": 16,
+      "title": "SQL process memory / target",
+      "type": "bargauge",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "dataeyes_prometheus"
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 29,
+        "w": 12,
+        "h": 9
+      },
+      "description": "Process memory and SQL target measure different scopes; this ratio can exceed 100%.",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "noValue": "Unavailable",
+          "color": {
+            "mode": "fixed",
+            "fixedColor": "blue"
+          },
+          "mappings": [
+            {
+              "type": "special",
+              "options": {
+                "match": "nan",
+                "result": {
+                  "text": "Unavailable",
+                  "color": "gray"
+                }
+              }
+            }
+          ],
+          "links": [
+            {
+              "title": "Open server Deep Dive",
+              "url": "/d/server-deep-dive/server-deep-dive?var-environment=${__field.labels.environment}&var-instance=${__field.labels.sql_instance}&from=${__from}&to=${__to}",
+              "targetBlank": false
+            }
+          ]
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "dataeyes_prometheus"
+          },
+          "expr": "sort_desc((((100 * max by (environment,sql_instance) (data_eyes_sql_memory_bytes{environment=~\"${environment:regex}\"}) / (max by (environment,sql_instance) (data_eyes_target_memory_bytes{environment=~\"${environment:regex}\"}) > 0)) and on(environment,sql_instance) (max by (environment,sql_instance) (data_eyes_collection_success{environment=~\"${environment:regex}\",collector=\"memory\"}) == 1) and on(environment,sql_instance) (max by (environment,sql_instance) (data_eyes_sqlserver_reachable{environment=~\"${environment:regex}\"}) == 1)) and on() (max(up{job=\"data-eyes\"}) == 1)) or on(environment,sql_instance) (max by (environment,sql_instance) (data_eyes_instance_info{environment=~\"${environment:regex}\"}) * (0/0)))",
+          "legendFormat": "{{sql_instance}} / {{environment}}",
+          "instant": true,
+          "range": false,
+          "format": "time_series"
+        }
+      ],
+      "options": {
+        "reduceOptions": {
+          "values": false,
+          "calcs": [
+            "last"
+          ],
+          "fields": ""
+        },
+        "orientation": "horizontal",
+        "displayMode": "basic",
+        "valueMode": "text",
+        "namePlacement": "left",
+        "sizing": "manual",
+        "minVizHeight": 28,
+        "minVizWidth": 0,
+        "showUnfilled": true,
+        "colorMode": "value",
+        "graphMode": "none",
+        "textMode": "auto"
+      }
+    },
+    {
+      "id": 17,
+      "type": "row",
+      "title": "Capacity and workload",
+      "collapsed": false,
+      "panels": [],
+      "gridPos": {
+        "x": 0,
+        "y": 38,
+        "w": 24,
+        "h": 1
+      }
+    },
+    {
+      "id": 18,
+      "title": "Lowest volume free space",
+      "type": "bargauge",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "dataeyes_prometheus"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 39,
+        "w": 12,
+        "h": 9
+      },
+      "description": "",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "noValue": "Unavailable",
+          "color": {
+            "mode": "fixed",
+            "fixedColor": "blue"
+          },
+          "mappings": [
+            {
+              "type": "special",
+              "options": {
+                "match": "nan",
+                "result": {
+                  "text": "Unavailable",
+                  "color": "gray"
+                }
+              }
+            }
+          ],
+          "min": 0,
+          "max": 100,
+          "links": [
+            {
+              "title": "Open server Deep Dive",
+              "url": "/d/server-deep-dive/server-deep-dive?var-environment=${__field.labels.environment}&var-instance=${__field.labels.sql_instance}&from=${__from}&to=${__to}",
+              "targetBlank": false
+            }
+          ]
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "dataeyes_prometheus"
+          },
+          "expr": "sort_desc((((min by (environment,sql_instance) (100 * max by (environment,sql_instance,drive) (data_eyes_volume_free_bytes{environment=~\"${environment:regex}\"}) / (max by (environment,sql_instance,drive) (data_eyes_volume_size_bytes{environment=~\"${environment:regex}\"}) > 0))) and on(environment,sql_instance) (max by (environment,sql_instance) (data_eyes_collection_success{environment=~\"${environment:regex}\",collector=\"databases\"}) == 1) and on(environment,sql_instance) (max by (environment,sql_instance) (data_eyes_sqlserver_reachable{environment=~\"${environment:regex}\"}) == 1)) and on() (max(up{job=\"data-eyes\"}) == 1)) or on(environment,sql_instance) (max by (environment,sql_instance) (data_eyes_instance_info{environment=~\"${environment:regex}\"}) * (0/0)))",
+          "legendFormat": "{{sql_instance}} / {{environment}}",
+          "instant": true,
+          "range": false,
+          "format": "time_series"
+        }
+      ],
+      "options": {
+        "reduceOptions": {
+          "values": false,
+          "calcs": [
+            "last"
+          ],
+          "fields": ""
+        },
+        "orientation": "horizontal",
+        "displayMode": "basic",
+        "valueMode": "text",
+        "namePlacement": "left",
+        "sizing": "manual",
+        "minVizHeight": 28,
+        "minVizWidth": 0,
+        "showUnfilled": true,
+        "colorMode": "value",
+        "graphMode": "none",
+        "textMode": "auto"
+      }
+    },
+    {
+      "id": 19,
+      "title": "Total database size",
+      "type": "bargauge",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "dataeyes_prometheus"
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 39,
+        "w": 12,
+        "h": 9
+      },
+      "description": "",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "bytes",
+          "noValue": "Unavailable",
+          "color": {
+            "mode": "fixed",
+            "fixedColor": "blue"
+          },
+          "mappings": [
+            {
+              "type": "special",
+              "options": {
+                "match": "nan",
+                "result": {
+                  "text": "Unavailable",
+                  "color": "gray"
+                }
+              }
+            }
+          ],
+          "links": [
+            {
+              "title": "Open server Deep Dive",
+              "url": "/d/server-deep-dive/server-deep-dive?var-environment=${__field.labels.environment}&var-instance=${__field.labels.sql_instance}&from=${__from}&to=${__to}",
+              "targetBlank": false
+            }
+          ]
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "dataeyes_prometheus"
+          },
+          "expr": "sort_desc((((sum by (environment,sql_instance) (data_eyes_database_size_bytes{environment=~\"${environment:regex}\"})) and on(environment,sql_instance) (max by (environment,sql_instance) (data_eyes_collection_success{environment=~\"${environment:regex}\",collector=\"databases\"}) == 1) and on(environment,sql_instance) (max by (environment,sql_instance) (data_eyes_sqlserver_reachable{environment=~\"${environment:regex}\"}) == 1)) and on() (max(up{job=\"data-eyes\"}) == 1)) or on(environment,sql_instance) (max by (environment,sql_instance) (data_eyes_instance_info{environment=~\"${environment:regex}\"}) * (0/0)))",
+          "legendFormat": "{{sql_instance}} / {{environment}}",
+          "instant": true,
+          "range": false,
+          "format": "time_series"
+        }
+      ],
+      "options": {
+        "reduceOptions": {
+          "values": false,
+          "calcs": [
+            "last"
+          ],
+          "fields": ""
+        },
+        "orientation": "horizontal",
+        "displayMode": "basic",
+        "valueMode": "text",
+        "namePlacement": "left",
+        "sizing": "manual",
+        "minVizHeight": 28,
+        "minVizWidth": 0,
+        "showUnfilled": true,
+        "colorMode": "value",
+        "graphMode": "none",
+        "textMode": "auto"
+      }
+    },
+    {
+      "id": 20,
+      "title": "Batch requests / second",
+      "type": "bargauge",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "dataeyes_prometheus"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 48,
+        "w": 12,
+        "h": 9
+      },
+      "description": "",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "reqps",
+          "noValue": "Unavailable",
+          "color": {
+            "mode": "fixed",
+            "fixedColor": "blue"
+          },
+          "mappings": [
+            {
+              "type": "special",
+              "options": {
+                "match": "nan",
+                "result": {
+                  "text": "Unavailable",
+                  "color": "gray"
+                }
+              }
+            }
+          ],
+          "links": [
+            {
+              "title": "Open server Deep Dive",
+              "url": "/d/server-deep-dive/server-deep-dive?var-environment=${__field.labels.environment}&var-instance=${__field.labels.sql_instance}&from=${__from}&to=${__to}",
+              "targetBlank": false
+            }
+          ]
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "dataeyes_prometheus"
+          },
+          "expr": "sort_desc((((sum by (environment,sql_instance) (rate(data_eyes_batch_requests_total{environment=~\"${environment:regex}\"}[$__rate_interval]))) and on(environment,sql_instance) (max by (environment,sql_instance) (data_eyes_collection_success{environment=~\"${environment:regex}\",collector=\"resources\"}) == 1) and on(environment,sql_instance) (max by (environment,sql_instance) (data_eyes_sqlserver_reachable{environment=~\"${environment:regex}\"}) == 1)) and on() (max(up{job=\"data-eyes\"}) == 1)) or on(environment,sql_instance) (max by (environment,sql_instance) (data_eyes_instance_info{environment=~\"${environment:regex}\"}) * (0/0)))",
+          "legendFormat": "{{sql_instance}} / {{environment}}",
+          "instant": true,
+          "range": false,
+          "format": "time_series"
+        }
+      ],
+      "options": {
+        "reduceOptions": {
+          "values": false,
+          "calcs": [
+            "last"
+          ],
+          "fields": ""
+        },
+        "orientation": "horizontal",
+        "displayMode": "basic",
+        "valueMode": "text",
+        "namePlacement": "left",
+        "sizing": "manual",
+        "minVizHeight": 28,
+        "minVizWidth": 0,
+        "showUnfilled": true,
+        "colorMode": "value",
+        "graphMode": "none",
+        "textMode": "auto"
+      }
+    },
+    {
+      "id": 21,
+      "title": "Active requests",
+      "type": "bargauge",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "dataeyes_prometheus"
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 48,
+        "w": 12,
+        "h": 9
+      },
+      "description": "",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "noValue": "Unavailable",
+          "color": {
+            "mode": "fixed",
+            "fixedColor": "blue"
+          },
+          "mappings": [
+            {
+              "type": "special",
+              "options": {
+                "match": "nan",
+                "result": {
+                  "text": "Unavailable",
+                  "color": "gray"
+                }
+              }
+            }
+          ],
+          "links": [
+            {
+              "title": "Open server Deep Dive",
+              "url": "/d/server-deep-dive/server-deep-dive?var-environment=${__field.labels.environment}&var-instance=${__field.labels.sql_instance}&from=${__from}&to=${__to}",
+              "targetBlank": false
+            }
+          ]
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "dataeyes_prometheus"
+          },
+          "expr": "sort_desc((((sum by (environment,sql_instance) (data_eyes_active_requests{environment=~\"${environment:regex}\"}) or on(environment,sql_instance) (max by (environment,sql_instance) (data_eyes_blocked_sessions{environment=~\"${environment:regex}\"}) * 0)) and on(environment,sql_instance) (max by (environment,sql_instance) (data_eyes_collection_success{environment=~\"${environment:regex}\",collector=\"activity\"}) == 1) and on(environment,sql_instance) (max by (environment,sql_instance) (data_eyes_sqlserver_reachable{environment=~\"${environment:regex}\"}) == 1)) and on() (max(up{job=\"data-eyes\"}) == 1)) or on(environment,sql_instance) (max by (environment,sql_instance) (data_eyes_instance_info{environment=~\"${environment:regex}\"}) * (0/0)))",
+          "legendFormat": "{{sql_instance}} / {{environment}}",
+          "instant": true,
+          "range": false,
+          "format": "time_series"
+        }
+      ],
+      "options": {
+        "reduceOptions": {
+          "values": false,
+          "calcs": [
+            "last"
+          ],
+          "fields": ""
+        },
+        "orientation": "horizontal",
+        "displayMode": "basic",
+        "valueMode": "text",
+        "namePlacement": "left",
+        "sizing": "manual",
+        "minVizHeight": 28,
+        "minVizWidth": 0,
+        "showUnfilled": true,
+        "colorMode": "value",
+        "graphMode": "none",
+        "textMode": "auto"
+      }
+    },
+    {
+      "id": 22,
+      "title": "Blocked sessions",
+      "type": "bargauge",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "dataeyes_prometheus"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 57,
+        "w": 12,
+        "h": 9
+      },
+      "description": "",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "noValue": "Unavailable",
+          "color": {
+            "mode": "fixed",
+            "fixedColor": "blue"
+          },
+          "mappings": [
+            {
+              "type": "special",
+              "options": {
+                "match": "nan",
+                "result": {
+                  "text": "Unavailable",
+                  "color": "gray"
+                }
+              }
+            }
+          ],
+          "links": [
+            {
+              "title": "Open server Deep Dive",
+              "url": "/d/server-deep-dive/server-deep-dive?var-environment=${__field.labels.environment}&var-instance=${__field.labels.sql_instance}&from=${__from}&to=${__to}",
+              "targetBlank": false
+            }
+          ]
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "dataeyes_prometheus"
+          },
+          "expr": "sort_desc((((max by (environment,sql_instance) (data_eyes_blocked_sessions{environment=~\"${environment:regex}\"})) and on(environment,sql_instance) (max by (environment,sql_instance) (data_eyes_collection_success{environment=~\"${environment:regex}\",collector=\"activity\"}) == 1) and on(environment,sql_instance) (max by (environment,sql_instance) (data_eyes_sqlserver_reachable{environment=~\"${environment:regex}\"}) == 1)) and on() (max(up{job=\"data-eyes\"}) == 1)) or on(environment,sql_instance) (max by (environment,sql_instance) (data_eyes_instance_info{environment=~\"${environment:regex}\"}) * (0/0)))",
+          "legendFormat": "{{sql_instance}} / {{environment}}",
+          "instant": true,
+          "range": false,
+          "format": "time_series"
+        }
+      ],
+      "options": {
+        "reduceOptions": {
+          "values": false,
+          "calcs": [
+            "last"
+          ],
+          "fields": ""
+        },
+        "orientation": "horizontal",
+        "displayMode": "basic",
+        "valueMode": "text",
+        "namePlacement": "left",
+        "sizing": "manual",
+        "minVizHeight": 28,
+        "minVizWidth": 0,
+        "showUnfilled": true,
+        "colorMode": "value",
+        "graphMode": "none",
+        "textMode": "auto"
+      }
+    },
+    {
+      "id": 23,
+      "title": "Created workers / maximum",
+      "type": "bargauge",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "dataeyes_prometheus"
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 57,
+        "w": 12,
+        "h": 9
+      },
+      "description": "",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "noValue": "Unavailable",
+          "color": {
+            "mode": "fixed",
+            "fixedColor": "blue"
+          },
+          "mappings": [
+            {
+              "type": "special",
+              "options": {
+                "match": "nan",
+                "result": {
+                  "text": "Unavailable",
+                  "color": "gray"
+                }
+              }
+            }
+          ],
+          "min": 0,
+          "max": 100,
+          "links": [
+            {
+              "title": "Open server Deep Dive",
+              "url": "/d/server-deep-dive/server-deep-dive?var-environment=${__field.labels.environment}&var-instance=${__field.labels.sql_instance}&from=${__from}&to=${__to}",
+              "targetBlank": false
+            }
+          ]
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "dataeyes_prometheus"
+          },
+          "expr": "sort_desc((((100 * max by (environment,sql_instance) (data_eyes_workers_created{environment=~\"${environment:regex}\"}) / (max by (environment,sql_instance) (data_eyes_workers_max{environment=~\"${environment:regex}\"}) > 0)) and on(environment,sql_instance) (max by (environment,sql_instance) (data_eyes_collection_success{environment=~\"${environment:regex}\",collector=\"resources\"}) == 1) and on(environment,sql_instance) (max by (environment,sql_instance) (data_eyes_sqlserver_reachable{environment=~\"${environment:regex}\"}) == 1)) and on() (max(up{job=\"data-eyes\"}) == 1)) or on(environment,sql_instance) (max by (environment,sql_instance) (data_eyes_instance_info{environment=~\"${environment:regex}\"}) * (0/0)))",
+          "legendFormat": "{{sql_instance}} / {{environment}}",
+          "instant": true,
+          "range": false,
+          "format": "time_series"
+        }
+      ],
+      "options": {
+        "reduceOptions": {
+          "values": false,
+          "calcs": [
+            "last"
+          ],
+          "fields": ""
+        },
+        "orientation": "horizontal",
+        "displayMode": "basic",
+        "valueMode": "text",
+        "namePlacement": "left",
+        "sizing": "manual",
+        "minVizHeight": 28,
+        "minVizWidth": 0,
+        "showUnfilled": true,
+        "colorMode": "value",
+        "graphMode": "none",
+        "textMode": "auto"
+      }
+    },
+    {
+      "id": 24,
+      "type": "row",
+      "title": "I/O, waits and events",
+      "collapsed": false,
+      "panels": [],
+      "gridPos": {
+        "x": 0,
+        "y": 66,
+        "w": 24,
+        "h": 1
+      }
+    },
+    {
+      "id": 25,
+      "title": "I/O throughput (read + write)",
+      "type": "bargauge",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "dataeyes_prometheus"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 67,
+        "w": 12,
+        "h": 9
+      },
+      "description": "",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "Bps",
+          "noValue": "Unavailable",
+          "color": {
+            "mode": "fixed",
+            "fixedColor": "blue"
+          },
+          "mappings": [
+            {
+              "type": "special",
+              "options": {
+                "match": "nan",
+                "result": {
+                  "text": "Unavailable",
+                  "color": "gray"
+                }
+              }
+            }
+          ],
+          "links": [
+            {
+              "title": "Open server Deep Dive",
+              "url": "/d/server-deep-dive/server-deep-dive?var-environment=${__field.labels.environment}&var-instance=${__field.labels.sql_instance}&from=${__from}&to=${__to}",
+              "targetBlank": false
+            }
+          ]
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "dataeyes_prometheus"
+          },
+          "expr": "sort_desc((((sum by (environment,sql_instance) (rate(data_eyes_io_bytes_total{environment=~\"${environment:regex}\"}[$__rate_interval]))) and on(environment,sql_instance) (max by (environment,sql_instance) (data_eyes_collection_success{environment=~\"${environment:regex}\",collector=\"io\"}) == 1) and on(environment,sql_instance) (max by (environment,sql_instance) (data_eyes_sqlserver_reachable{environment=~\"${environment:regex}\"}) == 1)) and on() (max(up{job=\"data-eyes\"}) == 1)) or on(environment,sql_instance) (max by (environment,sql_instance) (data_eyes_instance_info{environment=~\"${environment:regex}\"}) * (0/0)))",
+          "legendFormat": "{{sql_instance}} / {{environment}}",
+          "instant": true,
+          "range": false,
+          "format": "time_series"
+        }
+      ],
+      "options": {
+        "reduceOptions": {
+          "values": false,
+          "calcs": [
+            "last"
+          ],
+          "fields": ""
+        },
+        "orientation": "horizontal",
+        "displayMode": "basic",
+        "valueMode": "text",
+        "namePlacement": "left",
+        "sizing": "manual",
+        "minVizHeight": 28,
+        "minVizWidth": 0,
+        "showUnfilled": true,
+        "colorMode": "value",
+        "graphMode": "none",
+        "textMode": "auto"
+      }
+    },
+    {
+      "id": 26,
+      "title": "Weighted I/O latency",
+      "type": "bargauge",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "dataeyes_prometheus"
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 67,
+        "w": 12,
+        "h": 9
+      },
+      "description": "Total stall seconds / total operations. Idle disks have no measured latency, not zero latency.",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "noValue": "Unavailable",
+          "color": {
+            "mode": "fixed",
+            "fixedColor": "blue"
+          },
+          "mappings": [
+            {
+              "type": "special",
+              "options": {
+                "match": "nan",
+                "result": {
+                  "text": "Unavailable",
+                  "color": "gray"
+                }
+              }
+            }
+          ],
+          "links": [
+            {
+              "title": "Open server Deep Dive",
+              "url": "/d/server-deep-dive/server-deep-dive?var-environment=${__field.labels.environment}&var-instance=${__field.labels.sql_instance}&from=${__from}&to=${__to}",
+              "targetBlank": false
+            }
+          ]
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "dataeyes_prometheus"
+          },
+          "expr": "sort_desc((((sum by (environment,sql_instance) (rate(data_eyes_io_stall_seconds_total{environment=~\"${environment:regex}\"}[$__rate_interval])) / (sum by (environment,sql_instance) (rate(data_eyes_io_operations_total{environment=~\"${environment:regex}\"}[$__rate_interval])) > 0)) and on(environment,sql_instance) (max by (environment,sql_instance) (data_eyes_collection_success{environment=~\"${environment:regex}\",collector=\"io\"}) == 1) and on(environment,sql_instance) (max by (environment,sql_instance) (data_eyes_sqlserver_reachable{environment=~\"${environment:regex}\"}) == 1)) and on() (max(up{job=\"data-eyes\"}) == 1)) or on(environment,sql_instance) (max by (environment,sql_instance) (data_eyes_instance_info{environment=~\"${environment:regex}\"}) * (0/0)))",
+          "legendFormat": "{{sql_instance}} / {{environment}}",
+          "instant": true,
+          "range": false,
+          "format": "time_series"
+        }
+      ],
+      "options": {
+        "reduceOptions": {
+          "values": false,
+          "calcs": [
+            "last"
+          ],
+          "fields": ""
+        },
+        "orientation": "horizontal",
+        "displayMode": "basic",
+        "valueMode": "text",
+        "namePlacement": "left",
+        "sizing": "manual",
+        "minVizHeight": 28,
+        "minVizWidth": 0,
+        "showUnfilled": true,
+        "colorMode": "value",
+        "graphMode": "none",
+        "textMode": "auto"
+      }
+    },
+    {
+      "id": 27,
+      "title": "Wait seconds / second",
+      "type": "bargauge",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "dataeyes_prometheus"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 76,
+        "w": 12,
+        "h": 9
+      },
+      "description": "Concurrent waits may exceed one second per second.",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "noValue": "Unavailable",
+          "color": {
+            "mode": "fixed",
+            "fixedColor": "blue"
+          },
+          "mappings": [
+            {
+              "type": "special",
+              "options": {
+                "match": "nan",
+                "result": {
+                  "text": "Unavailable",
+                  "color": "gray"
+                }
+              }
+            }
+          ],
+          "links": [
+            {
+              "title": "Open server Deep Dive",
+              "url": "/d/server-deep-dive/server-deep-dive?var-environment=${__field.labels.environment}&var-instance=${__field.labels.sql_instance}&from=${__from}&to=${__to}",
+              "targetBlank": false
+            }
+          ]
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "dataeyes_prometheus"
+          },
+          "expr": "sort_desc((((sum by (environment,sql_instance) (rate(data_eyes_wait_seconds_total{environment=~\"${environment:regex}\"}[$__rate_interval]))) and on(environment,sql_instance) (max by (environment,sql_instance) (data_eyes_collection_success{environment=~\"${environment:regex}\",collector=\"waits\"}) == 1) and on(environment,sql_instance) (max by (environment,sql_instance) (data_eyes_sqlserver_reachable{environment=~\"${environment:regex}\"}) == 1)) and on() (max(up{job=\"data-eyes\"}) == 1)) or on(environment,sql_instance) (max by (environment,sql_instance) (data_eyes_instance_info{environment=~\"${environment:regex}\"}) * (0/0)))",
+          "legendFormat": "{{sql_instance}} / {{environment}}",
+          "instant": true,
+          "range": false,
+          "format": "time_series"
+        }
+      ],
+      "options": {
+        "reduceOptions": {
+          "values": false,
+          "calcs": [
+            "last"
+          ],
+          "fields": ""
+        },
+        "orientation": "horizontal",
+        "displayMode": "basic",
+        "valueMode": "text",
+        "namePlacement": "left",
+        "sizing": "manual",
+        "minVizHeight": 28,
+        "minVizWidth": 0,
+        "showUnfilled": true,
+        "colorMode": "value",
+        "graphMode": "none",
+        "textMode": "auto"
+      }
+    },
+    {
+      "id": 28,
+      "title": "Events in selected time range",
+      "type": "bargauge",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "dataeyes_prometheus"
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 76,
+        "w": 12,
+        "h": 9
+      },
+      "description": "Counter increases over the selected window; extrapolation can produce fractional counts. Missing event history remains unavailable.",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "noValue": "Unavailable",
+          "color": {
+            "mode": "fixed",
+            "fixedColor": "blue"
+          },
+          "mappings": [
+            {
+              "type": "special",
+              "options": {
+                "match": "nan",
+                "result": {
+                  "text": "Unavailable",
+                  "color": "gray"
+                }
+              }
+            }
+          ],
+          "links": [
+            {
+              "title": "Open server Deep Dive",
+              "url": "/d/server-deep-dive/server-deep-dive?var-environment=${__field.labels.environment}&var-instance=${__field.labels.sql_instance}&from=${__from}&to=${__to}",
+              "targetBlank": false
+            }
+          ]
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "dataeyes_prometheus"
+          },
+          "expr": "sort_desc(((sum by (environment,sql_instance) (increase(data_eyes_check_events_total{environment=~\"${environment:regex}\"}[$__range]))) and on() (max(up{job=\"data-eyes\"}) == 1)) or on(environment,sql_instance) (max by (environment,sql_instance) (data_eyes_instance_info{environment=~\"${environment:regex}\"}) * (0/0)))",
+          "legendFormat": "{{sql_instance}} / {{environment}}",
+          "instant": true,
+          "range": false,
+          "format": "time_series"
+        }
+      ],
+      "options": {
+        "reduceOptions": {
+          "values": false,
+          "calcs": [
+            "last"
+          ],
+          "fields": ""
+        },
+        "orientation": "horizontal",
+        "displayMode": "basic",
+        "valueMode": "text",
+        "namePlacement": "left",
+        "sizing": "manual",
+        "minVizHeight": 28,
+        "minVizWidth": 0,
+        "showUnfilled": true,
+        "colorMode": "value",
+        "graphMode": "none",
+        "textMode": "auto"
+      }
+    },
+    {
+      "id": 29,
+      "type": "row",
+      "title": "Collection reliability",
+      "collapsed": false,
+      "panels": [],
+      "gridPos": {
+        "x": 0,
+        "y": 85,
+        "w": 24,
+        "h": 1
+      }
+    },
+    {
+      "id": 30,
+      "title": "Successful collection groups",
+      "type": "bargauge",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "dataeyes_prometheus"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 86,
+        "w": 12,
+        "h": 9
+      },
+      "description": "Includes metric groups, connection and enabled health checks. Check count varies with configuration.",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "noValue": "Unavailable",
+          "color": {
+            "mode": "fixed",
+            "fixedColor": "blue"
+          },
+          "mappings": [
+            {
+              "type": "special",
+              "options": {
+                "match": "nan",
+                "result": {
+                  "text": "Unavailable",
+                  "color": "gray"
+                }
+              }
+            }
+          ],
+          "links": [
+            {
+              "title": "Open server Deep Dive",
+              "url": "/d/server-deep-dive/server-deep-dive?var-environment=${__field.labels.environment}&var-instance=${__field.labels.sql_instance}&from=${__from}&to=${__to}",
+              "targetBlank": false
+            }
+          ]
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "dataeyes_prometheus"
+          },
+          "expr": "sort_desc(((sum by (environment,sql_instance) (data_eyes_collection_success{environment=~\"${environment:regex}\"})) and on() (max(up{job=\"data-eyes\"}) == 1)) or on(environment,sql_instance) (max by (environment,sql_instance) (data_eyes_instance_info{environment=~\"${environment:regex}\"}) * (0/0)))",
+          "legendFormat": "{{sql_instance}} / {{environment}}",
+          "instant": true,
+          "range": false,
+          "format": "time_series"
+        }
+      ],
+      "options": {
+        "reduceOptions": {
+          "values": false,
+          "calcs": [
+            "last"
+          ],
+          "fields": ""
+        },
+        "orientation": "horizontal",
+        "displayMode": "basic",
+        "valueMode": "text",
+        "namePlacement": "left",
+        "sizing": "manual",
+        "minVizHeight": 28,
+        "minVizWidth": 0,
+        "showUnfilled": true,
+        "colorMode": "value",
+        "graphMode": "none",
+        "textMode": "auto"
+      }
+    },
+    {
+      "id": 31,
+      "title": "Oldest successful collection age",
+      "type": "bargauge",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "dataeyes_prometheus"
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 86,
+        "w": 12,
+        "h": 9
+      },
+      "description": "Includes checks scheduled hourly/daily; age alone is not a failure. Use Deep Dive freshness and success indicators.",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "noValue": "Unavailable",
+          "color": {
+            "mode": "fixed",
+            "fixedColor": "blue"
+          },
+          "mappings": [
+            {
+              "type": "special",
+              "options": {
+                "match": "nan",
+                "result": {
+                  "text": "Unavailable",
+                  "color": "gray"
+                }
+              }
+            }
+          ],
+          "links": [
+            {
+              "title": "Open server Deep Dive",
+              "url": "/d/server-deep-dive/server-deep-dive?var-environment=${__field.labels.environment}&var-instance=${__field.labels.sql_instance}&from=${__from}&to=${__to}",
+              "targetBlank": false
+            }
+          ]
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "dataeyes_prometheus"
+          },
+          "expr": "sort_desc(((max by (environment,sql_instance) (time() - data_eyes_collection_last_success_timestamp_seconds{environment=~\"${environment:regex}\"})) and on() (max(up{job=\"data-eyes\"}) == 1)) or on(environment,sql_instance) (max by (environment,sql_instance) (data_eyes_instance_info{environment=~\"${environment:regex}\"}) * (0/0)))",
+          "legendFormat": "{{sql_instance}} / {{environment}}",
+          "instant": true,
+          "range": false,
+          "format": "time_series"
+        }
+      ],
+      "options": {
+        "reduceOptions": {
+          "values": false,
+          "calcs": [
+            "last"
+          ],
+          "fields": ""
+        },
+        "orientation": "horizontal",
+        "displayMode": "basic",
+        "valueMode": "text",
+        "namePlacement": "left",
+        "sizing": "manual",
+        "minVizHeight": 28,
+        "minVizWidth": 0,
+        "showUnfilled": true,
+        "colorMode": "value",
+        "graphMode": "none",
+        "textMode": "auto"
+      }
+    }
+  ],
+  "links": [
+    {
+      "title": "Fleet Overview",
+      "type": "link",
+      "url": "/d/fleet-overview",
+      "keepTime": true
+    },
+    {
+      "title": "Ask the fleet",
+      "type": "link",
+      "url": "/d/ask-the-fleet/ask-the-fleet"
+    }
+  ],
+  "description": "All configured servers, cards and bar graphs. Missing measurements remain unavailable. Click a server bar for Deep Dive."
 }

@@ -2,7 +2,9 @@
 name: sql-server-dba
 description: >
   SQL Server DBA specialist for troubleshooting, performance tuning, and operational tasks.
-  Uses the Data Eyes toolkit (monitor/, performance/, maintenance/, sql-scripts/) as ground truth.
+  Uses the Data Eyes toolkit (data-eyes-mcp monitoring tools, .claude/resources/performance/,
+  .claude/resources/maintenance/, .claude/resources/sql-scripts/) as ground truth — prefers a live
+  MCP tool call over reading a script as text whenever an MCP server is reachable.
   Use PROACTIVELY when diagnosing SQL Server issues, tuning queries, or managing maintenance.
 
   Example 1:
@@ -32,9 +34,9 @@ stop_conditions:
   - "Credentials or passwords visible in output"
   - "DROP/TRUNCATE on HIGH/CRITICAL table without DBA sign-off"
 escalation_rules:
-  - trigger: "Grafana dashboard or monitoring stack issue"
-    target: "grafana-monitor"
-    reason: "Monitoring stack configuration is a separate domain"
+  - trigger: "Collector, Prometheus, Grafana, or deployment issue"
+    target: "dashboard-app"
+    reason: "Monitoring stack and MCP deployment configuration is a separate domain"
   - trigger: "SQL PR review or code review request"
     target: "/sql-pr-review command"
     reason: "PR review requires KB-driven risk scoring"
@@ -50,10 +52,11 @@ escalation_rules:
 
 ### Resolution Order
 
-1. **Data Eyes scripts** — read from `performance/`, `maintenance/`, `sql-scripts/` directories first
-2. **Knowledge Base** — check `.claude/knowledge-base/<database>.md` for table volumes and index data
-3. **SQL Server documentation** — DMV references, sys.* catalog views
-4. **Codebase context** — existing scripts, configurations, naming conventions
+1. **Collected MCP monitoring tools** — call fleet_overview, instance_checks, query_metric, metric_history and get_severity_trend. Check freshness. MCP reads Prometheus only; query text, plans, sessions and table data are unavailable. MCP uses mcp-access.yaml; SQL credentials belong exclusively to the collector.
+2. **Data Eyes scripts** — `.claude/resources/performance/`, `.claude/resources/maintenance/diagnostics/`, `.claude/resources/sql-scripts/` are the reference/copy-paste source and the fallback for any environment without live MCP connectivity (e.g. a customer's own SSMS session)
+3. **Knowledge Base** — check `.claude/knowledge-base/<database>.md` for table volumes and index data
+4. **SQL Server documentation** — DMV references, sys.* catalog views
+5. **Codebase context** — existing scripts, configurations, naming conventions
 
 ### When to Use Which Data Eyes Component
 
@@ -72,10 +75,10 @@ escalation_rules:
 **When:** User reports slow queries, high CPU, blocking, memory pressure, or general performance issues.
 
 **Process:**
-1. Read `performance/additional_queries/` scripts and `performance/additional_queries/docs/` documentation
+1. Use MCP fleet_overview, instance_checks, query_metric and metric_history for collected monitoring evidence. Live SQL, query text and sessions are unavailable through MCP; explain this limitation. Manual SQL resources are reference material, not service query paths.
 2. Map symptom to methodology step (see `/performance` command)
-3. Present the diagnostic SQL as copy-paste blocks
-4. Interpret results using threshold guidance from the performance command
+3. Present results (live tool output, or the diagnostic SQL as copy-paste blocks)
+4. Interpret results using threshold guidance from `.claude/knowledge-base/_static/thresholds.yaml` / the performance command
 5. Recommend next step — always one change at a time
 
 **Output:** Diagnosis with SQL scripts, threshold interpretation, and next-step recommendation.
@@ -85,7 +88,7 @@ escalation_rules:
 **When:** User needs backup, integrity, index, or statistics automation.
 
 **Process:**
-1. Read `maintenance/playbook.sql` and relevant `maintenance/use_cases/*.sql`
+1. Read `.claude/resources/maintenance/playbook.sql` and relevant `.claude/resources/maintenance/use_cases/*.sql`
 2. Map need to Ola Hallengren parameters
 3. Adapt parameters to user's environment
 4. Present adapted SQL with parameter explanations

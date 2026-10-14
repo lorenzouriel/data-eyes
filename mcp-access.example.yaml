@@ -1,0 +1,42 @@
+# Credential-free MCP policy. Copy to mcp-access.yaml and configure token hashes.
+instances:
+- name: prod
+  label: Prod SQL Server
+  environment: production
+- name: staging
+  label: Staging SQL Server
+  environment: staging
+- name: dev
+  label: Dev SQL Server
+  environment: development
+mcp_security:
+  principals:
+    development-agent:
+      tools: &id001
+      - list_configured_instances
+      - fleet_overview
+      - instance_checks
+      - list_metrics
+      - query_metric
+      - metric_history
+      - get_latest_snapshot
+      - get_severity_trend
+      - list_databases
+      instances:
+      - dev
+      token_sha256: ''
+    staging-agent:
+      tools: *id001
+      instances:
+      - staging
+      token_sha256: ''
+    production-agent:
+      tools: *id001
+      instances:
+      - prod
+      token_sha256: ''
+    ui-agent:
+      tools: *id001
+      instances:
+      - '*'
+      token_sha256: ''

@@ -1,0 +1,183 @@
+apiVersion: 1
+
+# Data Eyes alert rules, evaluated by Grafana against the Data Eyes Prometheus.
+# Each query returns 1 for a firing series and 0 otherwise; condition C fires
+# when the value is above 0.
+# Delivery: contact point and policy in contact-points.yml.
+# Thresholds for individual checks live in monitor/collector/checks.yaml; these
+# rules only forward the severities the collector computes.
+
+groups:
+  - orgId: 1
+    name: data-eyes
+    folder: Data Eyes
+    interval: 1m
+    rules:
+      - uid: data-eyes-exporter-unavailable
+        title: DataEyesExporterUnavailable
+        condition: C
+        data:
+          - refId: A
+            relativeTimeRange: { from: 600, to: 0 }
+            datasourceUid: dataeyes_prometheus
+            model:
+              refId: A
+              instant: true
+              expr: 1 - (max(up{job="data-eyes"}) or vector(0))
+          - refId: C
+            datasourceUid: __expr__
+            model:
+              refId: C
+              type: threshold
+              expression: A
+              conditions:
+                - evaluator: { type: gt, params: [0] }
+        noDataState: Alerting
+        execErrState: Error
+        for: 2m
+        labels:
+          service: data-eyes
+          severity: critical
+        annotations:
+          summary: Data Eyes collector is not being scraped
+          description: Prometheus cannot reach the collector, so every SQL Server in the fleet is unmonitored.
+
+      - uid: data-eyes-sqlserver-unavailable
+        title: SqlServerUnavailable
+        condition: C
+        data:
+          - refId: A
+            relativeTimeRange: { from: 600, to: 0 }
+            datasourceUid: dataeyes_prometheus
+            model:
+              refId: A
+              instant: true
+              expr: 1 - max by (sql_instance, environment) (data_eyes_sqlserver_reachable)
+          - refId: C
+            datasourceUid: __expr__
+            model:
+              refId: C
+              type: threshold
+              expression: A
+              conditions:
+                - evaluator: { type: gt, params: [0] }
+        noDataState: OK
+        execErrState: Error
+        for: 1m
+        labels:
+          service: data-eyes
+          severity: critical
+        annotations:
+          summary: 'SQL Server {{ $labels.sql_instance }} ({{ $labels.environment }}) is unreachable'
+
+      - uid: data-eyes-diagnostic-failing
+        title: DataEyesDiagnosticFailing
+        condition: C
+        data:
+          - refId: A
+            relativeTimeRange: { from: 600, to: 0 }
+            datasourceUid: dataeyes_prometheus
+            model:
+              refId: A
+              instant: true
+              expr: 1 - max by (sql_instance, environment, collector) (data_eyes_collection_success)
+          - refId: C
+            datasourceUid: __expr__
+            model:
+              refId: C
+              type: threshold
+              expression: A
+              conditions:
+                - evaluator: { type: gt, params: [0] }
+        noDataState: OK
+        execErrState: Error
+        for: 2m
+        labels:
+          service: data-eyes
+          severity: warning
+        annotations:
+          summary: 'Diagnostic {{ $labels.collector }} on {{ $labels.sql_instance }} ({{ $labels.environment }}) is failing or stale'
+
+      - uid: data-eyes-sqlserver-warning
+        title: SqlServerWarning
+        condition: C
+        data:
+          - refId: A
+            relativeTimeRange: { from: 600, to: 0 }
+            datasourceUid: dataeyes_prometheus
+            model:
+              refId: A
+              instant: true
+              expr: max by (sql_instance, environment, category) (data_eyes_health_severity{category!="alert.sql_server_connection"}) == bool 2
+          - refId: C
+            datasourceUid: __expr__
+            model:
+              refId: C
+              type: threshold
+              expression: A
+              conditions:
+                - evaluator: { type: gt, params: [0] }
+        noDataState: OK
+        execErrState: Error
+        for: 0s
+        labels:
+          service: data-eyes
+          severity: warning
+        annotations:
+          summary: 'WARNING {{ $labels.category }} on {{ $labels.sql_instance }} ({{ $labels.environment }})'
+
+      - uid: data-eyes-sqlserver-critical
+        title: SqlServerCritical
+        condition: C
+        data:
+          - refId: A
+            relativeTimeRange: { from: 600, to: 0 }
+            datasourceUid: dataeyes_prometheus
+            model:
+              refId: A
+              instant: true
+              expr: max by (sql_instance, environment, category) (data_eyes_health_severity{category!="alert.sql_server_connection"}) == bool 3
+          - refId: C
+            datasourceUid: __expr__
+            model:
+              refId: C
+              type: threshold
+              expression: A
+              conditions:
+                - evaluator: { type: gt, params: [0] }
+        noDataState: OK
+        execErrState: Error
+        for: 0s
+        labels:
+          service: data-eyes
+          severity: critical
+        annotations:
+          summary: 'CRITICAL {{ $labels.category }} on {{ $labels.sql_instance }} ({{ $labels.environment }})'
+
+      - uid: data-eyes-sqlserver-events
+        title: SqlServerEvents
+        condition: C
+        data:
+          - refId: A
+            relativeTimeRange: { from: 600, to: 0 }
+            datasourceUid: dataeyes_prometheus
+            model:
+              refId: A
+              instant: true
+              expr: sum by (sql_instance, environment, check) (increase(data_eyes_check_events_total[5m]))
+          - refId: C
+            datasourceUid: __expr__
+            model:
+              refId: C
+              type: threshold
+              expression: A
+              conditions:
+                - evaluator: { type: gt, params: [0] }
+        noDataState: OK
+        execErrState: Error
+        for: 0s
+        labels:
+          service: data-eyes
+          severity: warning
+        annotations:
+          summary: 'New {{ $labels.check }} events on {{ $labels.sql_instance }} ({{ $labels.environment }})'

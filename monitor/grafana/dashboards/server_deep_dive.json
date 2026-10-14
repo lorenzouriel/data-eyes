@@ -1,0 +1,5015 @@
+{
+  "uid": "server-deep-dive",
+  "title": "Server Deep Dive",
+  "tags": [
+    "data-eyes",
+    "sql-server"
+  ],
+  "editable": true,
+  "schemaVersion": 39,
+  "version": 1,
+  "timezone": "browser",
+  "graphTooltip": 1,
+  "refresh": "30s",
+  "time": {
+    "from": "now-6h",
+    "to": "now"
+  },
+  "timepicker": {
+    "refresh_intervals": [
+      "30s",
+      "1m",
+      "5m"
+    ],
+    "time_options": [
+      "1h",
+      "6h",
+      "24h",
+      "7d",
+      "30d"
+    ]
+  },
+  "templating": {
+    "list": [
+      {
+        "name": "environment",
+        "label": "Environment",
+        "type": "query",
+        "datasource": {
+          "type": "prometheus",
+          "uid": "dataeyes_prometheus"
+        },
+        "query": {
+          "query": "label_values(data_eyes_instance_info, environment)",
+          "refId": "environment"
+        },
+        "definition": "label_values(data_eyes_instance_info, environment)",
+        "refresh": 1,
+        "sort": 1,
+        "multi": false,
+        "includeAll": false,
+        "options": []
+      },
+      {
+        "name": "instance",
+        "label": "Instance",
+        "type": "query",
+        "datasource": {
+          "type": "prometheus",
+          "uid": "dataeyes_prometheus"
+        },
+        "query": {
+          "query": "label_values(data_eyes_instance_info{environment=~\"${environment:regex}\"}, sql_instance)",
+          "refId": "instance"
+        },
+        "definition": "label_values(data_eyes_instance_info{environment=~\"${environment:regex}\"}, sql_instance)",
+        "refresh": 1,
+        "sort": 1,
+        "multi": false,
+        "includeAll": false,
+        "options": []
+      },
+      {
+        "name": "database",
+        "label": "Database",
+        "type": "query",
+        "datasource": {
+          "type": "prometheus",
+          "uid": "dataeyes_prometheus"
+        },
+        "query": {
+          "query": "label_values(data_eyes_database_info{environment=~\"${environment:regex}\",sql_instance=~\"${instance:regex}\"}, database)",
+          "refId": "database"
+        },
+        "definition": "label_values(data_eyes_database_info{environment=~\"${environment:regex}\",sql_instance=~\"${instance:regex}\"}, database)",
+        "refresh": 1,
+        "sort": 1,
+        "multi": true,
+        "includeAll": true,
+        "options": [],
+        "allValue": ".*",
+        "current": {
+          "text": "All",
+          "value": "$__all"
+        }
+      },
+      {
+        "name": "drive",
+        "label": "Drive",
+        "type": "query",
+        "datasource": {
+          "type": "prometheus",
+          "uid": "dataeyes_prometheus"
+        },
+        "query": {
+          "query": "label_values(data_eyes_volume_size_bytes{environment=~\"${environment:regex}\",sql_instance=~\"${instance:regex}\"}, drive)",
+          "refId": "drive"
+        },
+        "definition": "label_values(data_eyes_volume_size_bytes{environment=~\"${environment:regex}\",sql_instance=~\"${instance:regex}\"}, drive)",
+        "refresh": 1,
+        "sort": 1,
+        "multi": true,
+        "includeAll": true,
+        "options": [],
+        "allValue": ".*",
+        "current": {
+          "text": "All",
+          "value": "$__all"
+        }
+      },
+      {
+        "name": "check",
+        "label": "Check",
+        "type": "query",
+        "datasource": {
+          "type": "prometheus",
+          "uid": "dataeyes_prometheus"
+        },
+        "query": {
+          "query": "label_values(data_eyes_check_info, check)",
+          "refId": "check"
+        },
+        "definition": "label_values(data_eyes_check_info, check)",
+        "refresh": 1,
+        "sort": 1,
+        "multi": false,
+        "includeAll": false,
+        "options": []
+      }
+    ]
+  },
+  "panels": [
+    {
+      "id": 1,
+      "type": "row",
+      "title": "Server overview",
+      "collapsed": false,
+      "panels": [],
+      "gridPos": {
+        "x": 0,
+        "y": 0,
+        "w": 24,
+        "h": 1
+      }
+    },
+    {
+      "id": 2,
+      "title": "Collector availability",
+      "type": "stat",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "dataeyes_prometheus"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 1,
+        "w": 8,
+        "h": 4
+      },
+      "description": "",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "noValue": "Unavailable",
+          "color": {
+            "mode": "fixed",
+            "fixedColor": "blue"
+          },
+          "mappings": [
+            {
+              "type": "special",
+              "options": {
+                "match": "nan",
+                "result": {
+                  "text": "Unavailable",
+                  "color": "gray"
+                }
+              }
+            },
+            {
+              "type": "value",
+              "options": {
+                "0": {
+                  "text": "Unavailable",
+                  "color": "red"
+                },
+                "1": {
+                  "text": "Online",
+                  "color": "green"
+                }
+              }
+            }
+          ]
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "dataeyes_prometheus"
+          },
+          "expr": "max(up{job=\"data-eyes\"}) or vector(0)",
+          "legendFormat": "{{sql_instance}} / {{environment}}",
+          "instant": true,
+          "range": false,
+          "format": "time_series"
+        }
+      ],
+      "options": {
+        "reduceOptions": {
+          "values": false,
+          "calcs": [
+            "last"
+          ],
+          "fields": ""
+        },
+        "orientation": "horizontal",
+        "displayMode": "basic",
+        "valueMode": "text",
+        "namePlacement": "left",
+        "sizing": "manual",
+        "minVizHeight": 28,
+        "minVizWidth": 0,
+        "showUnfilled": true,
+        "colorMode": "value",
+        "graphMode": "none",
+        "textMode": "auto"
+      }
+    },
+    {
+      "id": 3,
+      "title": "SQL reachability",
+      "type": "stat",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "dataeyes_prometheus"
+      },
+      "gridPos": {
+        "x": 8,
+        "y": 1,
+        "w": 8,
+        "h": 4
+      },
+      "description": "",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "noValue": "Unavailable",
+          "color": {
+            "mode": "fixed",
+            "fixedColor": "blue"
+          },
+          "mappings": [
+            {
+              "type": "special",
+              "options": {
+                "match": "nan",
+                "result": {
+                  "text": "Unavailable",
+                  "color": "gray"
+                }
+              }
+            },
+            {
+              "type": "value",
+              "options": {
+                "0": {
+                  "text": "Unreachable",
+                  "color": "red"
+                },
+                "1": {
+                  "text": "Reachable",
+                  "color": "green"
+                }
+              }
+            }
+          ]
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "dataeyes_prometheus"
+          },
+          "expr": "((data_eyes_sqlserver_reachable{environment=~\"${environment:regex}\",sql_instance=~\"${instance:regex}\"}) and on() (max(up{job=\"data-eyes\"}) == 1)) and on() (max(up{job=\"data-eyes\"}) == 1)",
+          "legendFormat": "{{sql_instance}} / {{environment}}",
+          "instant": true,
+          "range": false,
+          "format": "time_series"
+        }
+      ],
+      "options": {
+        "reduceOptions": {
+          "values": false,
+          "calcs": [
+            "last"
+          ],
+          "fields": ""
+        },
+        "orientation": "horizontal",
+        "displayMode": "basic",
+        "valueMode": "text",
+        "namePlacement": "left",
+        "sizing": "manual",
+        "minVizHeight": 28,
+        "minVizWidth": 0,
+        "showUnfilled": true,
+        "colorMode": "value",
+        "graphMode": "none",
+        "textMode": "auto"
+      }
+    },
+    {
+      "id": 4,
+      "title": "Overall check severity",
+      "type": "stat",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "dataeyes_prometheus"
+      },
+      "gridPos": {
+        "x": 16,
+        "y": 1,
+        "w": 8,
+        "h": 4
+      },
+      "description": "",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "noValue": "Unavailable",
+          "color": {
+            "mode": "fixed",
+            "fixedColor": "blue"
+          },
+          "mappings": [
+            {
+              "type": "special",
+              "options": {
+                "match": "nan",
+                "result": {
+                  "text": "Unavailable",
+                  "color": "gray"
+                }
+              }
+            },
+            {
+              "type": "value",
+              "options": {
+                "0": {
+                  "text": "OK",
+                  "color": "green"
+                },
+                "1": {
+                  "text": "Unknown",
+                  "color": "gray"
+                },
+                "2": {
+                  "text": "Warning",
+                  "color": "orange"
+                },
+                "3": {
+                  "text": "Critical",
+                  "color": "red"
+                },
+                "-1": {
+                  "text": "Not collected / disabled",
+                  "color": "gray"
+                }
+              }
+            }
+          ]
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "dataeyes_prometheus"
+          },
+          "expr": "((data_eyes_overall_severity{environment=~\"${environment:regex}\",sql_instance=~\"${instance:regex}\"}) and on() (max(up{job=\"data-eyes\"}) == 1)) and on() (max(up{job=\"data-eyes\"}) == 1)",
+          "legendFormat": "{{sql_instance}} / {{environment}}",
+          "instant": true,
+          "range": false,
+          "format": "time_series"
+        }
+      ],
+      "options": {
+        "reduceOptions": {
+          "values": false,
+          "calcs": [
+            "last"
+          ],
+          "fields": ""
+        },
+        "orientation": "horizontal",
+        "displayMode": "basic",
+        "valueMode": "text",
+        "namePlacement": "left",
+        "sizing": "manual",
+        "minVizHeight": 28,
+        "minVizWidth": 0,
+        "showUnfilled": true,
+        "colorMode": "value",
+        "graphMode": "none",
+        "textMode": "auto"
+      }
+    },
+    {
+      "id": 5,
+      "title": "Server identity",
+      "type": "table",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "dataeyes_prometheus"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 5,
+        "w": 24,
+        "h": 9
+      },
+      "description": "Version, edition and machine. Last successful database inventory collection; inspect collection freshness below.",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "noValue": "Unavailable",
+          "color": {
+            "mode": "fixed",
+            "fixedColor": "blue"
+          },
+          "mappings": [
+            {
+              "type": "special",
+              "options": {
+                "match": "nan",
+                "result": {
+                  "text": "Unavailable",
+                  "color": "gray"
+                }
+              }
+            }
+          ]
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "dataeyes_prometheus"
+          },
+          "expr": "(data_eyes_server_info{environment=~\"${environment:regex}\",sql_instance=~\"${instance:regex}\"}) and on() (max(up{job=\"data-eyes\"}) == 1)",
+          "legendFormat": "{{sql_instance}} / {{environment}}",
+          "instant": true,
+          "range": false,
+          "format": "table"
+        }
+      ],
+      "options": {
+        "showHeader": true,
+        "cellHeight": "sm",
+        "footer": {
+          "show": false
+        }
+      },
+      "transformations": [
+        {
+          "id": "organize",
+          "options": {
+            "excludeByName": {
+              "Time": true,
+              "__name__": true,
+              "job": true,
+              "instance": true
+            },
+            "renameByName": {
+              "Value": "Value"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": 6,
+      "title": "CPU cores",
+      "type": "stat",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "dataeyes_prometheus"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 14,
+        "w": 12,
+        "h": 4
+      },
+      "description": "",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "noValue": "Unavailable",
+          "color": {
+            "mode": "fixed",
+            "fixedColor": "blue"
+          },
+          "mappings": [
+            {
+              "type": "special",
+              "options": {
+                "match": "nan",
+                "result": {
+                  "text": "Unavailable",
+                  "color": "gray"
+                }
+              }
+            }
+          ]
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "dataeyes_prometheus"
+          },
+          "expr": "(data_eyes_server_cores{environment=~\"${environment:regex}\",sql_instance=~\"${instance:regex}\"}) and on() (max(up{job=\"data-eyes\"}) == 1)",
+          "legendFormat": "server_cores",
+          "instant": true,
+          "range": false,
+          "format": "time_series"
+        }
+      ],
+      "options": {
+        "reduceOptions": {
+          "values": false,
+          "calcs": [
+            "last"
+          ],
+          "fields": ""
+        },
+        "orientation": "horizontal",
+        "displayMode": "basic",
+        "valueMode": "text",
+        "namePlacement": "left",
+        "sizing": "manual",
+        "minVizHeight": 28,
+        "minVizWidth": 0,
+        "showUnfilled": true,
+        "colorMode": "value",
+        "graphMode": "none",
+        "textMode": "auto"
+      }
+    },
+    {
+      "id": 7,
+      "title": "Host physical memory",
+      "type": "stat",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "dataeyes_prometheus"
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 14,
+        "w": 12,
+        "h": 4
+      },
+      "description": "",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "bytes",
+          "noValue": "Unavailable",
+          "color": {
+            "mode": "fixed",
+            "fixedColor": "blue"
+          },
+          "mappings": [
+            {
+              "type": "special",
+              "options": {
+                "match": "nan",
+                "result": {
+                  "text": "Unavailable",
+                  "color": "gray"
+                }
+              }
+            }
+          ]
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "dataeyes_prometheus"
+          },
+          "expr": "(data_eyes_server_memory_bytes{environment=~\"${environment:regex}\",sql_instance=~\"${instance:regex}\"}) and on() (max(up{job=\"data-eyes\"}) == 1)",
+          "legendFormat": "server_memory_bytes",
+          "instant": true,
+          "range": false,
+          "format": "time_series"
+        }
+      ],
+      "options": {
+        "reduceOptions": {
+          "values": false,
+          "calcs": [
+            "last"
+          ],
+          "fields": ""
+        },
+        "orientation": "horizontal",
+        "displayMode": "basic",
+        "valueMode": "text",
+        "namePlacement": "left",
+        "sizing": "manual",
+        "minVizHeight": 28,
+        "minVizWidth": 0,
+        "showUnfilled": true,
+        "colorMode": "value",
+        "graphMode": "none",
+        "textMode": "auto"
+      }
+    },
+    {
+      "id": 8,
+      "type": "row",
+      "title": "CPU, memory and workers",
+      "collapsed": true,
+      "panels": [
+        {
+          "id": 9,
+          "title": "CPU utilization",
+          "type": "timeseries",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "dataeyes_prometheus"
+          },
+          "gridPos": {
+            "x": 0,
+            "y": 19,
+            "w": 12,
+            "h": 9
+          },
+          "description": "",
+          "fieldConfig": {
+            "defaults": {
+              "unit": "percent",
+              "noValue": "Unavailable",
+              "color": {
+                "mode": "palette-classic"
+              },
+              "mappings": [
+                {
+                  "type": "special",
+                  "options": {
+                    "match": "nan",
+                    "result": {
+                      "text": "Unavailable",
+                      "color": "gray"
+                    }
+                  }
+                }
+              ]
+            },
+            "overrides": []
+          },
+          "targets": [
+            {
+              "refId": "A",
+              "datasource": {
+                "type": "prometheus",
+                "uid": "dataeyes_prometheus"
+              },
+              "expr": "(data_eyes_sql_cpu_pct{environment=~\"${environment:regex}\",sql_instance=~\"${instance:regex}\"}) and on() (max(up{job=\"data-eyes\"}) == 1)",
+              "legendFormat": "sql_cpu_pct",
+              "instant": false,
+              "range": true,
+              "format": "time_series"
+            },
+            {
+              "refId": "B",
+              "datasource": {
+                "type": "prometheus",
+                "uid": "dataeyes_prometheus"
+              },
+              "expr": "(data_eyes_os_cpu_pct{environment=~\"${environment:regex}\",sql_instance=~\"${instance:regex}\"}) and on() (max(up{job=\"data-eyes\"}) == 1)",
+              "legendFormat": "os_cpu_pct",
+              "instant": false,
+              "range": true,
+              "format": "time_series"
+            }
+          ],
+          "options": {
+            "legend": {
+              "displayMode": "table",
+              "placement": "bottom",
+              "calcs": [
+                "lastNotNull"
+              ]
+            },
+            "tooltip": {
+              "mode": "multi",
+              "sort": "desc"
+            }
+          }
+        },
+        {
+          "id": 10,
+          "title": "CPU sample age",
+          "type": "timeseries",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "dataeyes_prometheus"
+          },
+          "gridPos": {
+            "x": 12,
+            "y": 19,
+            "w": 12,
+            "h": 9
+          },
+          "description": "",
+          "fieldConfig": {
+            "defaults": {
+              "unit": "s",
+              "noValue": "Unavailable",
+              "color": {
+                "mode": "palette-classic"
+              },
+              "mappings": [
+                {
+                  "type": "special",
+                  "options": {
+                    "match": "nan",
+                    "result": {
+                      "text": "Unavailable",
+                      "color": "gray"
+                    }
+                  }
+                }
+              ]
+            },
+            "overrides": []
+          },
+          "targets": [
+            {
+              "refId": "A",
+              "datasource": {
+                "type": "prometheus",
+                "uid": "dataeyes_prometheus"
+              },
+              "expr": "(data_eyes_cpu_sample_age_seconds{environment=~\"${environment:regex}\",sql_instance=~\"${instance:regex}\"}) and on() (max(up{job=\"data-eyes\"}) == 1)",
+              "legendFormat": "cpu_sample_age_seconds",
+              "instant": false,
+              "range": true,
+              "format": "time_series"
+            }
+          ],
+          "options": {
+            "legend": {
+              "displayMode": "table",
+              "placement": "bottom",
+              "calcs": [
+                "lastNotNull"
+              ]
+            },
+            "tooltip": {
+              "mode": "multi",
+              "sort": "desc"
+            }
+          }
+        },
+        {
+          "id": 11,
+          "title": "Memory",
+          "type": "timeseries",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "dataeyes_prometheus"
+          },
+          "gridPos": {
+            "x": 0,
+            "y": 28,
+            "w": 12,
+            "h": 9
+          },
+          "description": "",
+          "fieldConfig": {
+            "defaults": {
+              "unit": "bytes",
+              "noValue": "Unavailable",
+              "color": {
+                "mode": "palette-classic"
+              },
+              "mappings": [
+                {
+                  "type": "special",
+                  "options": {
+                    "match": "nan",
+                    "result": {
+                      "text": "Unavailable",
+                      "color": "gray"
+                    }
+                  }
+                }
+              ]
+            },
+            "overrides": []
+          },
+          "targets": [
+            {
+              "refId": "A",
+              "datasource": {
+                "type": "prometheus",
+                "uid": "dataeyes_prometheus"
+              },
+              "expr": "(data_eyes_sql_memory_bytes{environment=~\"${environment:regex}\",sql_instance=~\"${instance:regex}\"}) and on() (max(up{job=\"data-eyes\"}) == 1)",
+              "legendFormat": "sql_memory_bytes",
+              "instant": false,
+              "range": true,
+              "format": "time_series"
+            },
+            {
+              "refId": "B",
+              "datasource": {
+                "type": "prometheus",
+                "uid": "dataeyes_prometheus"
+              },
+              "expr": "(data_eyes_target_memory_bytes{environment=~\"${environment:regex}\",sql_instance=~\"${instance:regex}\"}) and on() (max(up{job=\"data-eyes\"}) == 1)",
+              "legendFormat": "target_memory_bytes",
+              "instant": false,
+              "range": true,
+              "format": "time_series"
+            },
+            {
+              "refId": "C",
+              "datasource": {
+                "type": "prometheus",
+                "uid": "dataeyes_prometheus"
+              },
+              "expr": "(data_eyes_available_memory_bytes{environment=~\"${environment:regex}\",sql_instance=~\"${instance:regex}\"}) and on() (max(up{job=\"data-eyes\"}) == 1)",
+              "legendFormat": "available_memory_bytes",
+              "instant": false,
+              "range": true,
+              "format": "time_series"
+            }
+          ],
+          "options": {
+            "legend": {
+              "displayMode": "table",
+              "placement": "bottom",
+              "calcs": [
+                "lastNotNull"
+              ]
+            },
+            "tooltip": {
+              "mode": "multi",
+              "sort": "desc"
+            }
+          }
+        },
+        {
+          "id": 12,
+          "title": "Page faults / second",
+          "type": "timeseries",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "dataeyes_prometheus"
+          },
+          "gridPos": {
+            "x": 12,
+            "y": 28,
+            "w": 12,
+            "h": 9
+          },
+          "description": "",
+          "fieldConfig": {
+            "defaults": {
+              "unit": "ops",
+              "noValue": "Unavailable",
+              "color": {
+                "mode": "palette-classic"
+              },
+              "mappings": [
+                {
+                  "type": "special",
+                  "options": {
+                    "match": "nan",
+                    "result": {
+                      "text": "Unavailable",
+                      "color": "gray"
+                    }
+                  }
+                }
+              ]
+            },
+            "overrides": []
+          },
+          "targets": [
+            {
+              "refId": "A",
+              "datasource": {
+                "type": "prometheus",
+                "uid": "dataeyes_prometheus"
+              },
+              "expr": "(rate(data_eyes_page_faults_total{environment=~\"${environment:regex}\",sql_instance=~\"${instance:regex}\"}[$__rate_interval])) and on() (max(up{job=\"data-eyes\"}) == 1)",
+              "legendFormat": "{{sql_instance}} / {{environment}}",
+              "instant": false,
+              "range": true,
+              "format": "time_series"
+            }
+          ],
+          "options": {
+            "legend": {
+              "displayMode": "table",
+              "placement": "bottom",
+              "calcs": [
+                "lastNotNull"
+              ]
+            },
+            "tooltip": {
+              "mode": "multi",
+              "sort": "desc"
+            }
+          }
+        },
+        {
+          "id": 13,
+          "title": "Buffer cache hit",
+          "type": "timeseries",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "dataeyes_prometheus"
+          },
+          "gridPos": {
+            "x": 0,
+            "y": 37,
+            "w": 12,
+            "h": 9
+          },
+          "description": "",
+          "fieldConfig": {
+            "defaults": {
+              "unit": "percent",
+              "noValue": "Unavailable",
+              "color": {
+                "mode": "palette-classic"
+              },
+              "mappings": [
+                {
+                  "type": "special",
+                  "options": {
+                    "match": "nan",
+                    "result": {
+                      "text": "Unavailable",
+                      "color": "gray"
+                    }
+                  }
+                }
+              ]
+            },
+            "overrides": []
+          },
+          "targets": [
+            {
+              "refId": "A",
+              "datasource": {
+                "type": "prometheus",
+                "uid": "dataeyes_prometheus"
+              },
+              "expr": "(data_eyes_buffer_cache_hit_pct{environment=~\"${environment:regex}\",sql_instance=~\"${instance:regex}\"}) and on() (max(up{job=\"data-eyes\"}) == 1)",
+              "legendFormat": "buffer_cache_hit_pct",
+              "instant": false,
+              "range": true,
+              "format": "time_series"
+            }
+          ],
+          "options": {
+            "legend": {
+              "displayMode": "table",
+              "placement": "bottom",
+              "calcs": [
+                "lastNotNull"
+              ]
+            },
+            "tooltip": {
+              "mode": "multi",
+              "sort": "desc"
+            }
+          }
+        },
+        {
+          "id": 14,
+          "title": "Page life expectancy",
+          "type": "timeseries",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "dataeyes_prometheus"
+          },
+          "gridPos": {
+            "x": 12,
+            "y": 37,
+            "w": 12,
+            "h": 9
+          },
+          "description": "",
+          "fieldConfig": {
+            "defaults": {
+              "unit": "s",
+              "noValue": "Unavailable",
+              "color": {
+                "mode": "palette-classic"
+              },
+              "mappings": [
+                {
+                  "type": "special",
+                  "options": {
+                    "match": "nan",
+                    "result": {
+                      "text": "Unavailable",
+                      "color": "gray"
+                    }
+                  }
+                }
+              ]
+            },
+            "overrides": []
+          },
+          "targets": [
+            {
+              "refId": "A",
+              "datasource": {
+                "type": "prometheus",
+                "uid": "dataeyes_prometheus"
+              },
+              "expr": "(data_eyes_page_life_expectancy_seconds{environment=~\"${environment:regex}\",sql_instance=~\"${instance:regex}\"}) and on() (max(up{job=\"data-eyes\"}) == 1)",
+              "legendFormat": "page_life_expectancy_seconds",
+              "instant": false,
+              "range": true,
+              "format": "time_series"
+            }
+          ],
+          "options": {
+            "legend": {
+              "displayMode": "table",
+              "placement": "bottom",
+              "calcs": [
+                "lastNotNull"
+              ]
+            },
+            "tooltip": {
+              "mode": "multi",
+              "sort": "desc"
+            }
+          }
+        },
+        {
+          "id": 15,
+          "title": "Workers",
+          "type": "timeseries",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "dataeyes_prometheus"
+          },
+          "gridPos": {
+            "x": 0,
+            "y": 46,
+            "w": 12,
+            "h": 9
+          },
+          "description": "",
+          "fieldConfig": {
+            "defaults": {
+              "unit": "short",
+              "noValue": "Unavailable",
+              "color": {
+                "mode": "palette-classic"
+              },
+              "mappings": [
+                {
+                  "type": "special",
+                  "options": {
+                    "match": "nan",
+                    "result": {
+                      "text": "Unavailable",
+                      "color": "gray"
+                    }
+                  }
+                }
+              ]
+            },
+            "overrides": []
+          },
+          "targets": [
+            {
+              "refId": "A",
+              "datasource": {
+                "type": "prometheus",
+                "uid": "dataeyes_prometheus"
+              },
+              "expr": "(data_eyes_workers_max{environment=~\"${environment:regex}\",sql_instance=~\"${instance:regex}\"}) and on() (max(up{job=\"data-eyes\"}) == 1)",
+              "legendFormat": "workers_max",
+              "instant": false,
+              "range": true,
+              "format": "time_series"
+            },
+            {
+              "refId": "B",
+              "datasource": {
+                "type": "prometheus",
+                "uid": "dataeyes_prometheus"
+              },
+              "expr": "(data_eyes_workers_created{environment=~\"${environment:regex}\",sql_instance=~\"${instance:regex}\"}) and on() (max(up{job=\"data-eyes\"}) == 1)",
+              "legendFormat": "workers_created",
+              "instant": false,
+              "range": true,
+              "format": "time_series"
+            },
+            {
+              "refId": "C",
+              "datasource": {
+                "type": "prometheus",
+                "uid": "dataeyes_prometheus"
+              },
+              "expr": "(data_eyes_workers_idle{environment=~\"${environment:regex}\",sql_instance=~\"${instance:regex}\"}) and on() (max(up{job=\"data-eyes\"}) == 1)",
+              "legendFormat": "workers_idle",
+              "instant": false,
+              "range": true,
+              "format": "time_series"
+            }
+          ],
+          "options": {
+            "legend": {
+              "displayMode": "table",
+              "placement": "bottom",
+              "calcs": [
+                "lastNotNull"
+              ]
+            },
+            "tooltip": {
+              "mode": "multi",
+              "sort": "desc"
+            }
+          }
+        },
+        {
+          "id": 16,
+          "title": "Batch requests / second",
+          "type": "timeseries",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "dataeyes_prometheus"
+          },
+          "gridPos": {
+            "x": 12,
+            "y": 46,
+            "w": 12,
+            "h": 9
+          },
+          "description": "",
+          "fieldConfig": {
+            "defaults": {
+              "unit": "reqps",
+              "noValue": "Unavailable",
+              "color": {
+                "mode": "palette-classic"
+              },
+              "mappings": [
+                {
+                  "type": "special",
+                  "options": {
+                    "match": "nan",
+                    "result": {
+                      "text": "Unavailable",
+                      "color": "gray"
+                    }
+                  }
+                }
+              ]
+            },
+            "overrides": []
+          },
+          "targets": [
+            {
+              "refId": "A",
+              "datasource": {
+                "type": "prometheus",
+                "uid": "dataeyes_prometheus"
+              },
+              "expr": "(rate(data_eyes_batch_requests_total{environment=~\"${environment:regex}\",sql_instance=~\"${instance:regex}\"}[$__rate_interval])) and on() (max(up{job=\"data-eyes\"}) == 1)",
+              "legendFormat": "{{sql_instance}} / {{environment}}",
+              "instant": false,
+              "range": true,
+              "format": "time_series"
+            }
+          ],
+          "options": {
+            "legend": {
+              "displayMode": "table",
+              "placement": "bottom",
+              "calcs": [
+                "lastNotNull"
+              ]
+            },
+            "tooltip": {
+              "mode": "multi",
+              "sort": "desc"
+            }
+          }
+        }
+      ],
+      "gridPos": {
+        "x": 0,
+        "y": 18,
+        "w": 24,
+        "h": 1
+      }
+    },
+    {
+      "id": 17,
+      "type": "row",
+      "title": "Databases and storage",
+      "collapsed": true,
+      "panels": [
+        {
+          "id": 18,
+          "title": "Database sizes",
+          "type": "bargauge",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "dataeyes_prometheus"
+          },
+          "gridPos": {
+            "x": 0,
+            "y": 20,
+            "w": 12,
+            "h": 9
+          },
+          "description": "",
+          "fieldConfig": {
+            "defaults": {
+              "unit": "bytes",
+              "noValue": "Unavailable",
+              "color": {
+                "mode": "fixed",
+                "fixedColor": "blue"
+              },
+              "mappings": [
+                {
+                  "type": "special",
+                  "options": {
+                    "match": "nan",
+                    "result": {
+                      "text": "Unavailable",
+                      "color": "gray"
+                    }
+                  }
+                }
+              ]
+            },
+            "overrides": []
+          },
+          "targets": [
+            {
+              "refId": "A",
+              "datasource": {
+                "type": "prometheus",
+                "uid": "dataeyes_prometheus"
+              },
+              "expr": "(data_eyes_database_size_bytes{environment=~\"${environment:regex}\",sql_instance=~\"${instance:regex}\",database=~\"${database:regex}\"}) and on() (max(up{job=\"data-eyes\"}) == 1)",
+              "legendFormat": "{{database}}",
+              "instant": true,
+              "range": false,
+              "format": "time_series"
+            }
+          ],
+          "options": {
+            "reduceOptions": {
+              "values": false,
+              "calcs": [
+                "last"
+              ],
+              "fields": ""
+            },
+            "orientation": "horizontal",
+            "displayMode": "basic",
+            "valueMode": "text",
+            "namePlacement": "left",
+            "sizing": "manual",
+            "minVizHeight": 28,
+            "minVizWidth": 0,
+            "showUnfilled": true,
+            "colorMode": "value",
+            "graphMode": "none",
+            "textMode": "auto"
+          }
+        },
+        {
+          "id": 19,
+          "title": "Database states",
+          "type": "table",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "dataeyes_prometheus"
+          },
+          "gridPos": {
+            "x": 12,
+            "y": 20,
+            "w": 12,
+            "h": 9
+          },
+          "description": "",
+          "fieldConfig": {
+            "defaults": {
+              "unit": "short",
+              "noValue": "Unavailable",
+              "color": {
+                "mode": "fixed",
+                "fixedColor": "blue"
+              },
+              "mappings": [
+                {
+                  "type": "special",
+                  "options": {
+                    "match": "nan",
+                    "result": {
+                      "text": "Unavailable",
+                      "color": "gray"
+                    }
+                  }
+                },
+                {
+                  "type": "value",
+                  "options": {
+                    "0": {
+                      "text": "ONLINE"
+                    },
+                    "1": {
+                      "text": "RESTORING"
+                    },
+                    "2": {
+                      "text": "RECOVERING"
+                    },
+                    "3": {
+                      "text": "RECOVERY_PENDING"
+                    },
+                    "4": {
+                      "text": "SUSPECT"
+                    },
+                    "5": {
+                      "text": "EMERGENCY"
+                    },
+                    "6": {
+                      "text": "OFFLINE"
+                    },
+                    "7": {
+                      "text": "COPYING"
+                    },
+                    "10": {
+                      "text": "OFFLINE_SECONDARY"
+                    }
+                  }
+                }
+              ]
+            },
+            "overrides": []
+          },
+          "targets": [
+            {
+              "refId": "A",
+              "datasource": {
+                "type": "prometheus",
+                "uid": "dataeyes_prometheus"
+              },
+              "expr": "(data_eyes_database_state{environment=~\"${environment:regex}\",sql_instance=~\"${instance:regex}\",database=~\"${database:regex}\"}) and on() (max(up{job=\"data-eyes\"}) == 1)",
+              "legendFormat": "{{sql_instance}} / {{environment}}",
+              "instant": true,
+              "range": false,
+              "format": "table"
+            }
+          ],
+          "options": {
+            "showHeader": true,
+            "cellHeight": "sm",
+            "footer": {
+              "show": false
+            }
+          },
+          "transformations": [
+            {
+              "id": "organize",
+              "options": {
+                "excludeByName": {
+                  "Time": true,
+                  "__name__": true,
+                  "job": true,
+                  "instance": true
+                },
+                "renameByName": {
+                  "Value": "Value"
+                }
+              }
+            }
+          ]
+        },
+        {
+          "id": 20,
+          "title": "Database access and replica roles",
+          "type": "table",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "dataeyes_prometheus"
+          },
+          "gridPos": {
+            "x": 0,
+            "y": 29,
+            "w": 24,
+            "h": 9
+          },
+          "description": "",
+          "fieldConfig": {
+            "defaults": {
+              "unit": "short",
+              "noValue": "Unavailable",
+              "color": {
+                "mode": "fixed",
+                "fixedColor": "blue"
+              },
+              "mappings": [
+                {
+                  "type": "special",
+                  "options": {
+                    "match": "nan",
+                    "result": {
+                      "text": "Unavailable",
+                      "color": "gray"
+                    }
+                  }
+                }
+              ]
+            },
+            "overrides": []
+          },
+          "targets": [
+            {
+              "refId": "A",
+              "datasource": {
+                "type": "prometheus",
+                "uid": "dataeyes_prometheus"
+              },
+              "expr": "(data_eyes_database_info{environment=~\"${environment:regex}\",sql_instance=~\"${instance:regex}\",database=~\"${database:regex}\"}) and on() (max(up{job=\"data-eyes\"}) == 1)",
+              "legendFormat": "{{sql_instance}} / {{environment}}",
+              "instant": true,
+              "range": false,
+              "format": "table"
+            }
+          ],
+          "options": {
+            "showHeader": true,
+            "cellHeight": "sm",
+            "footer": {
+              "show": false
+            }
+          },
+          "transformations": [
+            {
+              "id": "organize",
+              "options": {
+                "excludeByName": {
+                  "Time": true,
+                  "__name__": true,
+                  "job": true,
+                  "instance": true
+                },
+                "renameByName": {
+                  "Value": "Value"
+                }
+              }
+            }
+          ]
+        },
+        {
+          "id": 21,
+          "title": "Volume free and total capacity",
+          "type": "timeseries",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "dataeyes_prometheus"
+          },
+          "gridPos": {
+            "x": 0,
+            "y": 38,
+            "w": 12,
+            "h": 9
+          },
+          "description": "",
+          "fieldConfig": {
+            "defaults": {
+              "unit": "bytes",
+              "noValue": "Unavailable",
+              "color": {
+                "mode": "palette-classic"
+              },
+              "mappings": [
+                {
+                  "type": "special",
+                  "options": {
+                    "match": "nan",
+                    "result": {
+                      "text": "Unavailable",
+                      "color": "gray"
+                    }
+                  }
+                }
+              ]
+            },
+            "overrides": []
+          },
+          "targets": [
+            {
+              "refId": "A",
+              "datasource": {
+                "type": "prometheus",
+                "uid": "dataeyes_prometheus"
+              },
+              "expr": "(max by (drive) (data_eyes_volume_free_bytes{environment=~\"${environment:regex}\",sql_instance=~\"${instance:regex}\",drive=~\"${drive:regex}\"})) and on() (max(up{job=\"data-eyes\"}) == 1)",
+              "legendFormat": "{{drive}} free",
+              "instant": false,
+              "range": true,
+              "format": "time_series"
+            },
+            {
+              "refId": "B",
+              "datasource": {
+                "type": "prometheus",
+                "uid": "dataeyes_prometheus"
+              },
+              "expr": "(max by (drive) (data_eyes_volume_size_bytes{environment=~\"${environment:regex}\",sql_instance=~\"${instance:regex}\",drive=~\"${drive:regex}\"})) and on() (max(up{job=\"data-eyes\"}) == 1)",
+              "legendFormat": "{{drive}} total",
+              "instant": false,
+              "range": true,
+              "format": "time_series"
+            }
+          ],
+          "options": {
+            "legend": {
+              "displayMode": "table",
+              "placement": "bottom",
+              "calcs": [
+                "lastNotNull"
+              ]
+            },
+            "tooltip": {
+              "mode": "multi",
+              "sort": "desc"
+            }
+          }
+        },
+        {
+          "id": 22,
+          "title": "Volume free space",
+          "type": "bargauge",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "dataeyes_prometheus"
+          },
+          "gridPos": {
+            "x": 12,
+            "y": 38,
+            "w": 12,
+            "h": 9
+          },
+          "description": "",
+          "fieldConfig": {
+            "defaults": {
+              "unit": "percent",
+              "noValue": "Unavailable",
+              "color": {
+                "mode": "fixed",
+                "fixedColor": "blue"
+              },
+              "mappings": [
+                {
+                  "type": "special",
+                  "options": {
+                    "match": "nan",
+                    "result": {
+                      "text": "Unavailable",
+                      "color": "gray"
+                    }
+                  }
+                }
+              ],
+              "min": 0,
+              "max": 100
+            },
+            "overrides": []
+          },
+          "targets": [
+            {
+              "refId": "A",
+              "datasource": {
+                "type": "prometheus",
+                "uid": "dataeyes_prometheus"
+              },
+              "expr": "(100 * max by (drive) (data_eyes_volume_free_bytes{environment=~\"${environment:regex}\",sql_instance=~\"${instance:regex}\",drive=~\"${drive:regex}\"}) / (max by (drive) (data_eyes_volume_size_bytes{environment=~\"${environment:regex}\",sql_instance=~\"${instance:regex}\",drive=~\"${drive:regex}\"}) > 0)) and on() (max(up{job=\"data-eyes\"}) == 1)",
+              "legendFormat": "{{drive}}",
+              "instant": true,
+              "range": false,
+              "format": "time_series"
+            }
+          ],
+          "options": {
+            "reduceOptions": {
+              "values": false,
+              "calcs": [
+                "last"
+              ],
+              "fields": ""
+            },
+            "orientation": "horizontal",
+            "displayMode": "basic",
+            "valueMode": "text",
+            "namePlacement": "left",
+            "sizing": "manual",
+            "minVizHeight": 28,
+            "minVizWidth": 0,
+            "showUnfilled": true,
+            "colorMode": "value",
+            "graphMode": "none",
+            "textMode": "auto"
+          }
+        }
+      ],
+      "gridPos": {
+        "x": 0,
+        "y": 19,
+        "w": 24,
+        "h": 1
+      }
+    },
+    {
+      "id": 23,
+      "type": "row",
+      "title": "I/O and wait analysis",
+      "collapsed": true,
+      "panels": [
+        {
+          "id": 24,
+          "title": "File I/O throughput",
+          "type": "timeseries",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "dataeyes_prometheus"
+          },
+          "gridPos": {
+            "x": 0,
+            "y": 21,
+            "w": 12,
+            "h": 9
+          },
+          "description": "",
+          "fieldConfig": {
+            "defaults": {
+              "unit": "Bps",
+              "noValue": "Unavailable",
+              "color": {
+                "mode": "palette-classic"
+              },
+              "mappings": [
+                {
+                  "type": "special",
+                  "options": {
+                    "match": "nan",
+                    "result": {
+                      "text": "Unavailable",
+                      "color": "gray"
+                    }
+                  }
+                }
+              ]
+            },
+            "overrides": []
+          },
+          "targets": [
+            {
+              "refId": "A",
+              "datasource": {
+                "type": "prometheus",
+                "uid": "dataeyes_prometheus"
+              },
+              "expr": "(rate(data_eyes_io_bytes_total{environment=~\"${environment:regex}\",sql_instance=~\"${instance:regex}\",database=~\"${database:regex}\",drive=~\"${drive:regex}\"}[$__rate_interval])) and on() (max(up{job=\"data-eyes\"}) == 1)",
+              "legendFormat": "{{database}} / {{file}} / {{drive}}",
+              "instant": false,
+              "range": true,
+              "format": "time_series"
+            }
+          ],
+          "options": {
+            "legend": {
+              "displayMode": "table",
+              "placement": "bottom",
+              "calcs": [
+                "lastNotNull"
+              ]
+            },
+            "tooltip": {
+              "mode": "multi",
+              "sort": "desc"
+            }
+          }
+        },
+        {
+          "id": 25,
+          "title": "File I/O operations",
+          "type": "timeseries",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "dataeyes_prometheus"
+          },
+          "gridPos": {
+            "x": 12,
+            "y": 21,
+            "w": 12,
+            "h": 9
+          },
+          "description": "",
+          "fieldConfig": {
+            "defaults": {
+              "unit": "iops",
+              "noValue": "Unavailable",
+              "color": {
+                "mode": "palette-classic"
+              },
+              "mappings": [
+                {
+                  "type": "special",
+                  "options": {
+                    "match": "nan",
+                    "result": {
+                      "text": "Unavailable",
+                      "color": "gray"
+                    }
+                  }
+                }
+              ]
+            },
+            "overrides": []
+          },
+          "targets": [
+            {
+              "refId": "A",
+              "datasource": {
+                "type": "prometheus",
+                "uid": "dataeyes_prometheus"
+              },
+              "expr": "(rate(data_eyes_io_operations_total{environment=~\"${environment:regex}\",sql_instance=~\"${instance:regex}\",database=~\"${database:regex}\",drive=~\"${drive:regex}\"}[$__rate_interval])) and on() (max(up{job=\"data-eyes\"}) == 1)",
+              "legendFormat": "{{database}} / {{file}} / {{drive}}",
+              "instant": false,
+              "range": true,
+              "format": "time_series"
+            }
+          ],
+          "options": {
+            "legend": {
+              "displayMode": "table",
+              "placement": "bottom",
+              "calcs": [
+                "lastNotNull"
+              ]
+            },
+            "tooltip": {
+              "mode": "multi",
+              "sort": "desc"
+            }
+          }
+        },
+        {
+          "id": 26,
+          "title": "File stall seconds / second",
+          "type": "timeseries",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "dataeyes_prometheus"
+          },
+          "gridPos": {
+            "x": 0,
+            "y": 30,
+            "w": 12,
+            "h": 9
+          },
+          "description": "",
+          "fieldConfig": {
+            "defaults": {
+              "unit": "s",
+              "noValue": "Unavailable",
+              "color": {
+                "mode": "palette-classic"
+              },
+              "mappings": [
+                {
+                  "type": "special",
+                  "options": {
+                    "match": "nan",
+                    "result": {
+                      "text": "Unavailable",
+                      "color": "gray"
+                    }
+                  }
+                }
+              ]
+            },
+            "overrides": []
+          },
+          "targets": [
+            {
+              "refId": "A",
+              "datasource": {
+                "type": "prometheus",
+                "uid": "dataeyes_prometheus"
+              },
+              "expr": "(rate(data_eyes_io_stall_seconds_total{environment=~\"${environment:regex}\",sql_instance=~\"${instance:regex}\",database=~\"${database:regex}\",drive=~\"${drive:regex}\"}[$__rate_interval])) and on() (max(up{job=\"data-eyes\"}) == 1)",
+              "legendFormat": "{{database}} / {{file}} / {{drive}}",
+              "instant": false,
+              "range": true,
+              "format": "time_series"
+            }
+          ],
+          "options": {
+            "legend": {
+              "displayMode": "table",
+              "placement": "bottom",
+              "calcs": [
+                "lastNotNull"
+              ]
+            },
+            "tooltip": {
+              "mode": "multi",
+              "sort": "desc"
+            }
+          }
+        },
+        {
+          "id": 27,
+          "title": "Weighted file I/O latency",
+          "type": "timeseries",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "dataeyes_prometheus"
+          },
+          "gridPos": {
+            "x": 12,
+            "y": 30,
+            "w": 12,
+            "h": 9
+          },
+          "description": "",
+          "fieldConfig": {
+            "defaults": {
+              "unit": "s",
+              "noValue": "Unavailable",
+              "color": {
+                "mode": "palette-classic"
+              },
+              "mappings": [
+                {
+                  "type": "special",
+                  "options": {
+                    "match": "nan",
+                    "result": {
+                      "text": "Unavailable",
+                      "color": "gray"
+                    }
+                  }
+                }
+              ]
+            },
+            "overrides": []
+          },
+          "targets": [
+            {
+              "refId": "A",
+              "datasource": {
+                "type": "prometheus",
+                "uid": "dataeyes_prometheus"
+              },
+              "expr": "(rate(data_eyes_io_stall_seconds_total{environment=~\"${environment:regex}\",sql_instance=~\"${instance:regex}\",database=~\"${database:regex}\",drive=~\"${drive:regex}\"}[$__rate_interval]) / (rate(data_eyes_io_operations_total{environment=~\"${environment:regex}\",sql_instance=~\"${instance:regex}\",database=~\"${database:regex}\",drive=~\"${drive:regex}\"}[$__rate_interval]) > 0)) and on() (max(up{job=\"data-eyes\"}) == 1)",
+              "legendFormat": "{{database}} / {{file}}",
+              "instant": false,
+              "range": true,
+              "format": "time_series"
+            }
+          ],
+          "options": {
+            "legend": {
+              "displayMode": "table",
+              "placement": "bottom",
+              "calcs": [
+                "lastNotNull"
+              ]
+            },
+            "tooltip": {
+              "mode": "multi",
+              "sort": "desc"
+            }
+          }
+        },
+        {
+          "id": 28,
+          "title": "Physical reads / second",
+          "type": "timeseries",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "dataeyes_prometheus"
+          },
+          "gridPos": {
+            "x": 0,
+            "y": 39,
+            "w": 12,
+            "h": 9
+          },
+          "description": "",
+          "fieldConfig": {
+            "defaults": {
+              "unit": "Bps",
+              "noValue": "Unavailable",
+              "color": {
+                "mode": "palette-classic"
+              },
+              "mappings": [
+                {
+                  "type": "special",
+                  "options": {
+                    "match": "nan",
+                    "result": {
+                      "text": "Unavailable",
+                      "color": "gray"
+                    }
+                  }
+                }
+              ]
+            },
+            "overrides": []
+          },
+          "targets": [
+            {
+              "refId": "A",
+              "datasource": {
+                "type": "prometheus",
+                "uid": "dataeyes_prometheus"
+              },
+              "expr": "(rate(data_eyes_disk_read_bytes_total{environment=~\"${environment:regex}\",sql_instance=~\"${instance:regex}\"}[$__rate_interval])) and on() (max(up{job=\"data-eyes\"}) == 1)",
+              "legendFormat": "{{sql_instance}} / {{environment}}",
+              "instant": false,
+              "range": true,
+              "format": "time_series"
+            }
+          ],
+          "options": {
+            "legend": {
+              "displayMode": "table",
+              "placement": "bottom",
+              "calcs": [
+                "lastNotNull"
+              ]
+            },
+            "tooltip": {
+              "mode": "multi",
+              "sort": "desc"
+            }
+          }
+        },
+        {
+          "id": 29,
+          "title": "Wait seconds / second by category",
+          "type": "timeseries",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "dataeyes_prometheus"
+          },
+          "gridPos": {
+            "x": 12,
+            "y": 39,
+            "w": 12,
+            "h": 9
+          },
+          "description": "",
+          "fieldConfig": {
+            "defaults": {
+              "unit": "s",
+              "noValue": "Unavailable",
+              "color": {
+                "mode": "palette-classic"
+              },
+              "mappings": [
+                {
+                  "type": "special",
+                  "options": {
+                    "match": "nan",
+                    "result": {
+                      "text": "Unavailable",
+                      "color": "gray"
+                    }
+                  }
+                }
+              ]
+            },
+            "overrides": []
+          },
+          "targets": [
+            {
+              "refId": "A",
+              "datasource": {
+                "type": "prometheus",
+                "uid": "dataeyes_prometheus"
+              },
+              "expr": "(rate(data_eyes_wait_seconds_total{environment=~\"${environment:regex}\",sql_instance=~\"${instance:regex}\"}[$__rate_interval])) and on() (max(up{job=\"data-eyes\"}) == 1)",
+              "legendFormat": "{{category}}",
+              "instant": false,
+              "range": true,
+              "format": "time_series"
+            }
+          ],
+          "options": {
+            "legend": {
+              "displayMode": "table",
+              "placement": "bottom",
+              "calcs": [
+                "lastNotNull"
+              ]
+            },
+            "tooltip": {
+              "mode": "multi",
+              "sort": "desc"
+            }
+          }
+        }
+      ],
+      "gridPos": {
+        "x": 0,
+        "y": 20,
+        "w": 24,
+        "h": 1
+      }
+    },
+    {
+      "id": 30,
+      "type": "row",
+      "title": "Activity and error counters",
+      "collapsed": true,
+      "panels": [
+        {
+          "id": 31,
+          "title": "Active requests by database",
+          "type": "timeseries",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "dataeyes_prometheus"
+          },
+          "gridPos": {
+            "x": 0,
+            "y": 22,
+            "w": 12,
+            "h": 9
+          },
+          "description": "No active-request series can mean no requests. This chart does not invent zeros when collection is missing.",
+          "fieldConfig": {
+            "defaults": {
+              "unit": "short",
+              "noValue": "Unavailable",
+              "color": {
+                "mode": "palette-classic"
+              },
+              "mappings": [
+                {
+                  "type": "special",
+                  "options": {
+                    "match": "nan",
+                    "result": {
+                      "text": "Unavailable",
+                      "color": "gray"
+                    }
+                  }
+                }
+              ]
+            },
+            "overrides": []
+          },
+          "targets": [
+            {
+              "refId": "A",
+              "datasource": {
+                "type": "prometheus",
+                "uid": "dataeyes_prometheus"
+              },
+              "expr": "(data_eyes_active_requests{environment=~\"${environment:regex}\",sql_instance=~\"${instance:regex}\",database=~\"${database:regex}\"}) and on() (max(up{job=\"data-eyes\"}) == 1)",
+              "legendFormat": "{{database}}",
+              "instant": false,
+              "range": true,
+              "format": "time_series"
+            }
+          ],
+          "options": {
+            "legend": {
+              "displayMode": "table",
+              "placement": "bottom",
+              "calcs": [
+                "lastNotNull"
+              ]
+            },
+            "tooltip": {
+              "mode": "multi",
+              "sort": "desc"
+            }
+          }
+        },
+        {
+          "id": 32,
+          "title": "Blocked sessions",
+          "type": "timeseries",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "dataeyes_prometheus"
+          },
+          "gridPos": {
+            "x": 12,
+            "y": 22,
+            "w": 12,
+            "h": 9
+          },
+          "description": "",
+          "fieldConfig": {
+            "defaults": {
+              "unit": "short",
+              "noValue": "Unavailable",
+              "color": {
+                "mode": "palette-classic"
+              },
+              "mappings": [
+                {
+                  "type": "special",
+                  "options": {
+                    "match": "nan",
+                    "result": {
+                      "text": "Unavailable",
+                      "color": "gray"
+                    }
+                  }
+                }
+              ]
+            },
+            "overrides": []
+          },
+          "targets": [
+            {
+              "refId": "A",
+              "datasource": {
+                "type": "prometheus",
+                "uid": "dataeyes_prometheus"
+              },
+              "expr": "(data_eyes_blocked_sessions{environment=~\"${environment:regex}\",sql_instance=~\"${instance:regex}\"}) and on() (max(up{job=\"data-eyes\"}) == 1)",
+              "legendFormat": "blocked_sessions",
+              "instant": false,
+              "range": true,
+              "format": "time_series"
+            }
+          ],
+          "options": {
+            "legend": {
+              "displayMode": "table",
+              "placement": "bottom",
+              "calcs": [
+                "lastNotNull"
+              ]
+            },
+            "tooltip": {
+              "mode": "multi",
+              "sort": "desc"
+            }
+          }
+        },
+        {
+          "id": 33,
+          "title": "Longest blocking wait",
+          "type": "timeseries",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "dataeyes_prometheus"
+          },
+          "gridPos": {
+            "x": 0,
+            "y": 31,
+            "w": 12,
+            "h": 9
+          },
+          "description": "",
+          "fieldConfig": {
+            "defaults": {
+              "unit": "s",
+              "noValue": "Unavailable",
+              "color": {
+                "mode": "palette-classic"
+              },
+              "mappings": [
+                {
+                  "type": "special",
+                  "options": {
+                    "match": "nan",
+                    "result": {
+                      "text": "Unavailable",
+                      "color": "gray"
+                    }
+                  }
+                }
+              ]
+            },
+            "overrides": []
+          },
+          "targets": [
+            {
+              "refId": "A",
+              "datasource": {
+                "type": "prometheus",
+                "uid": "dataeyes_prometheus"
+              },
+              "expr": "(data_eyes_blocking_max_wait_seconds{environment=~\"${environment:regex}\",sql_instance=~\"${instance:regex}\"}) and on() (max(up{job=\"data-eyes\"}) == 1)",
+              "legendFormat": "blocking_max_wait_seconds",
+              "instant": false,
+              "range": true,
+              "format": "time_series"
+            }
+          ],
+          "options": {
+            "legend": {
+              "displayMode": "table",
+              "placement": "bottom",
+              "calcs": [
+                "lastNotNull"
+              ]
+            },
+            "tooltip": {
+              "mode": "multi",
+              "sort": "desc"
+            }
+          }
+        },
+        {
+          "id": 34,
+          "title": "Deadlocks and SQL errors in selected range",
+          "type": "stat",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "dataeyes_prometheus"
+          },
+          "gridPos": {
+            "x": 12,
+            "y": 31,
+            "w": 12,
+            "h": 4
+          },
+          "description": "",
+          "fieldConfig": {
+            "defaults": {
+              "unit": "short",
+              "noValue": "Unavailable",
+              "color": {
+                "mode": "fixed",
+                "fixedColor": "blue"
+              },
+              "mappings": [
+                {
+                  "type": "special",
+                  "options": {
+                    "match": "nan",
+                    "result": {
+                      "text": "Unavailable",
+                      "color": "gray"
+                    }
+                  }
+                }
+              ]
+            },
+            "overrides": []
+          },
+          "targets": [
+            {
+              "refId": "A",
+              "datasource": {
+                "type": "prometheus",
+                "uid": "dataeyes_prometheus"
+              },
+              "expr": "(increase(data_eyes_deadlocks_total{environment=~\"${environment:regex}\",sql_instance=~\"${instance:regex}\"}[$__range])) and on() (max(up{job=\"data-eyes\"}) == 1)",
+              "legendFormat": "Deadlocks",
+              "instant": true,
+              "range": false,
+              "format": "time_series"
+            },
+            {
+              "refId": "B",
+              "datasource": {
+                "type": "prometheus",
+                "uid": "dataeyes_prometheus"
+              },
+              "expr": "(increase(data_eyes_sql_errors_total{environment=~\"${environment:regex}\",sql_instance=~\"${instance:regex}\"}[$__range])) and on() (max(up{job=\"data-eyes\"}) == 1)",
+              "legendFormat": "SQL errors",
+              "instant": true,
+              "range": false,
+              "format": "time_series"
+            }
+          ],
+          "options": {
+            "reduceOptions": {
+              "values": false,
+              "calcs": [
+                "last"
+              ],
+              "fields": ""
+            },
+            "orientation": "horizontal",
+            "displayMode": "basic",
+            "valueMode": "text",
+            "namePlacement": "left",
+            "sizing": "manual",
+            "minVizHeight": 28,
+            "minVizWidth": 0,
+            "showUnfilled": true,
+            "colorMode": "value",
+            "graphMode": "none",
+            "textMode": "auto"
+          }
+        }
+      ],
+      "gridPos": {
+        "x": 0,
+        "y": 21,
+        "w": 24,
+        "h": 1
+      }
+    },
+    {
+      "id": 35,
+      "type": "row",
+      "title": "Health check trends and database results",
+      "collapsed": true,
+      "panels": [
+        {
+          "id": 36,
+          "title": "Selected check metadata",
+          "type": "table",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "dataeyes_prometheus"
+          },
+          "gridPos": {
+            "x": 0,
+            "y": 23,
+            "w": 24,
+            "h": 9
+          },
+          "description": "The selected check's native unit, kind and threshold direction. Threshold values and enabled checks are configured in the collector.",
+          "fieldConfig": {
+            "defaults": {
+              "unit": "short",
+              "noValue": "Unavailable",
+              "color": {
+                "mode": "fixed",
+                "fixedColor": "blue"
+              },
+              "mappings": [
+                {
+                  "type": "special",
+                  "options": {
+                    "match": "nan",
+                    "result": {
+                      "text": "Unavailable",
+                      "color": "gray"
+                    }
+                  }
+                }
+              ]
+            },
+            "overrides": []
+          },
+          "targets": [
+            {
+              "refId": "A",
+              "datasource": {
+                "type": "prometheus",
+                "uid": "dataeyes_prometheus"
+              },
+              "expr": "data_eyes_check_info{check=~\"${check:regex}\"}",
+              "legendFormat": "{{sql_instance}} / {{environment}}",
+              "instant": true,
+              "range": false,
+              "format": "table"
+            }
+          ],
+          "options": {
+            "showHeader": true,
+            "cellHeight": "sm",
+            "footer": {
+              "show": false
+            }
+          },
+          "transformations": [
+            {
+              "id": "organize",
+              "options": {
+                "excludeByName": {
+                  "Time": true,
+                  "__name__": true,
+                  "job": true,
+                  "instance": true
+                },
+                "renameByName": {
+                  "Value": "Value"
+                }
+              }
+            }
+          ]
+        },
+        {
+          "id": 37,
+          "title": "Selected check severity",
+          "type": "timeseries",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "dataeyes_prometheus"
+          },
+          "gridPos": {
+            "x": 0,
+            "y": 32,
+            "w": 12,
+            "h": 9
+          },
+          "description": "",
+          "fieldConfig": {
+            "defaults": {
+              "unit": "short",
+              "noValue": "Unavailable",
+              "color": {
+                "mode": "palette-classic"
+              },
+              "mappings": [
+                {
+                  "type": "special",
+                  "options": {
+                    "match": "nan",
+                    "result": {
+                      "text": "Unavailable",
+                      "color": "gray"
+                    }
+                  }
+                },
+                {
+                  "type": "value",
+                  "options": {
+                    "0": {
+                      "text": "OK",
+                      "color": "green"
+                    },
+                    "1": {
+                      "text": "Unknown",
+                      "color": "gray"
+                    },
+                    "2": {
+                      "text": "Warning",
+                      "color": "orange"
+                    },
+                    "3": {
+                      "text": "Critical",
+                      "color": "red"
+                    },
+                    "-1": {
+                      "text": "Not collected / disabled",
+                      "color": "gray"
+                    }
+                  }
+                }
+              ]
+            },
+            "overrides": []
+          },
+          "targets": [
+            {
+              "refId": "A",
+              "datasource": {
+                "type": "prometheus",
+                "uid": "dataeyes_prometheus"
+              },
+              "expr": "(data_eyes_health_severity{environment=~\"${environment:regex}\",sql_instance=~\"${instance:regex}\",category=~\"alert[.]${check:regex}\"}) and on() (max(up{job=\"data-eyes\"}) == 1)",
+              "legendFormat": "{{category}}",
+              "instant": false,
+              "range": true,
+              "format": "time_series"
+            }
+          ],
+          "options": {
+            "legend": {
+              "displayMode": "table",
+              "placement": "bottom",
+              "calcs": [
+                "lastNotNull"
+              ]
+            },
+            "tooltip": {
+              "mode": "multi",
+              "sort": "desc"
+            }
+          }
+        },
+        {
+          "id": 38,
+          "title": "Selected check value",
+          "type": "timeseries",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "dataeyes_prometheus"
+          },
+          "gridPos": {
+            "x": 12,
+            "y": 32,
+            "w": 12,
+            "h": 9
+          },
+          "description": "Native units from the check catalog below. Some checks expose only severity or events.",
+          "fieldConfig": {
+            "defaults": {
+              "unit": "short",
+              "noValue": "Unavailable",
+              "color": {
+                "mode": "palette-classic"
+              },
+              "mappings": [
+                {
+                  "type": "special",
+                  "options": {
+                    "match": "nan",
+                    "result": {
+                      "text": "Unavailable",
+                      "color": "gray"
+                    }
+                  }
+                }
+              ]
+            },
+            "overrides": []
+          },
+          "targets": [
+            {
+              "refId": "A",
+              "datasource": {
+                "type": "prometheus",
+                "uid": "dataeyes_prometheus"
+              },
+              "expr": "(data_eyes_check_value{environment=~\"${environment:regex}\",sql_instance=~\"${instance:regex}\",check=~\"${check:regex}\"}) and on() (max(up{job=\"data-eyes\"}) == 1)",
+              "legendFormat": "{{check}}",
+              "instant": false,
+              "range": true,
+              "format": "time_series"
+            }
+          ],
+          "options": {
+            "legend": {
+              "displayMode": "table",
+              "placement": "bottom",
+              "calcs": [
+                "lastNotNull"
+              ]
+            },
+            "tooltip": {
+              "mode": "multi",
+              "sort": "desc"
+            }
+          }
+        },
+        {
+          "id": 39,
+          "title": "Selected check events in range",
+          "type": "stat",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "dataeyes_prometheus"
+          },
+          "gridPos": {
+            "x": 0,
+            "y": 41,
+            "w": 12,
+            "h": 4
+          },
+          "description": "Event count increase across the selected range, not the current severity.",
+          "fieldConfig": {
+            "defaults": {
+              "unit": "short",
+              "noValue": "Unavailable",
+              "color": {
+                "mode": "fixed",
+                "fixedColor": "blue"
+              },
+              "mappings": [
+                {
+                  "type": "special",
+                  "options": {
+                    "match": "nan",
+                    "result": {
+                      "text": "Unavailable",
+                      "color": "gray"
+                    }
+                  }
+                }
+              ]
+            },
+            "overrides": []
+          },
+          "targets": [
+            {
+              "refId": "A",
+              "datasource": {
+                "type": "prometheus",
+                "uid": "dataeyes_prometheus"
+              },
+              "expr": "(increase(data_eyes_check_events_total{environment=~\"${environment:regex}\",sql_instance=~\"${instance:regex}\",check=~\"${check:regex}\"}[$__range])) and on() (max(up{job=\"data-eyes\"}) == 1)",
+              "legendFormat": "{{sql_instance}} / {{environment}}",
+              "instant": true,
+              "range": false,
+              "format": "time_series"
+            }
+          ],
+          "options": {
+            "reduceOptions": {
+              "values": false,
+              "calcs": [
+                "last"
+              ],
+              "fields": ""
+            },
+            "orientation": "horizontal",
+            "displayMode": "basic",
+            "valueMode": "text",
+            "namePlacement": "left",
+            "sizing": "manual",
+            "minVizHeight": 28,
+            "minVizWidth": 0,
+            "showUnfilled": true,
+            "colorMode": "value",
+            "graphMode": "none",
+            "textMode": "auto"
+          }
+        },
+        {
+          "id": 40,
+          "title": "Selected database check values",
+          "type": "timeseries",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "dataeyes_prometheus"
+          },
+          "gridPos": {
+            "x": 12,
+            "y": 41,
+            "w": 12,
+            "h": 9
+          },
+          "description": "Native units are shown in the check catalog.",
+          "fieldConfig": {
+            "defaults": {
+              "unit": "short",
+              "noValue": "Unavailable",
+              "color": {
+                "mode": "palette-classic"
+              },
+              "mappings": [
+                {
+                  "type": "special",
+                  "options": {
+                    "match": "nan",
+                    "result": {
+                      "text": "Unavailable",
+                      "color": "gray"
+                    }
+                  }
+                }
+              ]
+            },
+            "overrides": []
+          },
+          "targets": [
+            {
+              "refId": "A",
+              "datasource": {
+                "type": "prometheus",
+                "uid": "dataeyes_prometheus"
+              },
+              "expr": "(data_eyes_database_check_value{environment=~\"${environment:regex}\",sql_instance=~\"${instance:regex}\",database=~\"${database:regex}\",check=~\"${check:regex}\"}) and on() (max(up{job=\"data-eyes\"}) == 1)",
+              "legendFormat": "{{database}}",
+              "instant": false,
+              "range": true,
+              "format": "time_series"
+            }
+          ],
+          "options": {
+            "legend": {
+              "displayMode": "table",
+              "placement": "bottom",
+              "calcs": [
+                "lastNotNull"
+              ]
+            },
+            "tooltip": {
+              "mode": "multi",
+              "sort": "desc"
+            }
+          }
+        },
+        {
+          "id": 41,
+          "title": "Database check severities",
+          "type": "table",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "dataeyes_prometheus"
+          },
+          "gridPos": {
+            "x": 0,
+            "y": 50,
+            "w": 12,
+            "h": 9
+          },
+          "description": "",
+          "fieldConfig": {
+            "defaults": {
+              "unit": "short",
+              "noValue": "Unavailable",
+              "color": {
+                "mode": "fixed",
+                "fixedColor": "blue"
+              },
+              "mappings": [
+                {
+                  "type": "special",
+                  "options": {
+                    "match": "nan",
+                    "result": {
+                      "text": "Unavailable",
+                      "color": "gray"
+                    }
+                  }
+                },
+                {
+                  "type": "value",
+                  "options": {
+                    "0": {
+                      "text": "OK",
+                      "color": "green"
+                    },
+                    "1": {
+                      "text": "Unknown",
+                      "color": "gray"
+                    },
+                    "2": {
+                      "text": "Warning",
+                      "color": "orange"
+                    },
+                    "3": {
+                      "text": "Critical",
+                      "color": "red"
+                    },
+                    "-1": {
+                      "text": "Not collected / disabled",
+                      "color": "gray"
+                    }
+                  }
+                }
+              ]
+            },
+            "overrides": []
+          },
+          "targets": [
+            {
+              "refId": "A",
+              "datasource": {
+                "type": "prometheus",
+                "uid": "dataeyes_prometheus"
+              },
+              "expr": "(data_eyes_database_check_severity{environment=~\"${environment:regex}\",sql_instance=~\"${instance:regex}\",database=~\"${database:regex}\"}) and on() (max(up{job=\"data-eyes\"}) == 1)",
+              "legendFormat": "{{sql_instance}} / {{environment}}",
+              "instant": true,
+              "range": false,
+              "format": "table"
+            }
+          ],
+          "options": {
+            "showHeader": true,
+            "cellHeight": "sm",
+            "footer": {
+              "show": false
+            }
+          },
+          "transformations": [
+            {
+              "id": "organize",
+              "options": {
+                "excludeByName": {
+                  "Time": true,
+                  "__name__": true,
+                  "job": true,
+                  "instance": true
+                },
+                "renameByName": {
+                  "Value": "Value"
+                }
+              }
+            }
+          ]
+        }
+      ],
+      "gridPos": {
+        "x": 0,
+        "y": 22,
+        "w": 24,
+        "h": 1
+      }
+    },
+    {
+      "id": 42,
+      "type": "row",
+      "title": "Availability checks",
+      "collapsed": true,
+      "panels": [
+        {
+          "id": 43,
+          "title": "Check status and catalog",
+          "type": "table",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "dataeyes_prometheus"
+          },
+          "gridPos": {
+            "x": 0,
+            "y": 24,
+            "w": 24,
+            "h": 9
+          },
+          "description": "All catalog checks in this group. Not collected / disabled also covers collector outages or checks not yet evaluated. Unknown is an evaluated check with unavailable results. Numeric values use native catalog units; event-only checks have no state value.",
+          "fieldConfig": {
+            "defaults": {
+              "unit": "short",
+              "noValue": "Unavailable",
+              "color": {
+                "mode": "fixed",
+                "fixedColor": "blue"
+              },
+              "mappings": [
+                {
+                  "type": "special",
+                  "options": {
+                    "match": "nan",
+                    "result": {
+                      "text": "Unavailable",
+                      "color": "gray"
+                    }
+                  }
+                },
+                {
+                  "type": "value",
+                  "options": {
+                    "0": {
+                      "text": "OK",
+                      "color": "green"
+                    },
+                    "1": {
+                      "text": "Unknown",
+                      "color": "gray"
+                    },
+                    "2": {
+                      "text": "Warning",
+                      "color": "orange"
+                    },
+                    "3": {
+                      "text": "Critical",
+                      "color": "red"
+                    },
+                    "-1": {
+                      "text": "Not collected / disabled",
+                      "color": "gray"
+                    }
+                  }
+                }
+              ]
+            },
+            "overrides": []
+          },
+          "targets": [
+            {
+              "refId": "A",
+              "datasource": {
+                "type": "prometheus",
+                "uid": "dataeyes_prometheus"
+              },
+              "expr": "((max by (check) (label_replace((data_eyes_health_severity{environment=~\"${environment:regex}\",sql_instance=~\"${instance:regex}\"}) and on() (max(up{job=\"data-eyes\"}) == 1), \"check\", \"$1\", \"category\", \"alert\\\\.(.+)\"))) or on(check) (data_eyes_check_info{group=\"Availability\"} * 0 - 1)) * on(check) group_left(name,kind,unit,direction) data_eyes_check_info{group=\"Availability\"}",
+              "legendFormat": "{{sql_instance}} / {{environment}}",
+              "instant": true,
+              "range": false,
+              "format": "table"
+            }
+          ],
+          "options": {
+            "showHeader": true,
+            "cellHeight": "sm",
+            "footer": {
+              "show": false
+            }
+          },
+          "transformations": [
+            {
+              "id": "organize",
+              "options": {
+                "excludeByName": {
+                  "Time": true,
+                  "__name__": true,
+                  "job": true,
+                  "instance": true
+                },
+                "renameByName": {
+                  "Value": "Value"
+                }
+              }
+            }
+          ]
+        },
+        {
+          "id": 44,
+          "title": "Current state values",
+          "type": "table",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "dataeyes_prometheus"
+          },
+          "gridPos": {
+            "x": 0,
+            "y": 33,
+            "w": 12,
+            "h": 9
+          },
+          "description": "",
+          "fieldConfig": {
+            "defaults": {
+              "unit": "short",
+              "noValue": "Unavailable",
+              "color": {
+                "mode": "fixed",
+                "fixedColor": "blue"
+              },
+              "mappings": [
+                {
+                  "type": "special",
+                  "options": {
+                    "match": "nan",
+                    "result": {
+                      "text": "Unavailable",
+                      "color": "gray"
+                    }
+                  }
+                }
+              ]
+            },
+            "overrides": []
+          },
+          "targets": [
+            {
+              "refId": "A",
+              "datasource": {
+                "type": "prometheus",
+                "uid": "dataeyes_prometheus"
+              },
+              "expr": "(data_eyes_check_value{environment=~\"${environment:regex}\",sql_instance=~\"${instance:regex}\"} * on(check) group_left(name,unit) data_eyes_check_info{group=\"Availability\"}) and on() (max(up{job=\"data-eyes\"}) == 1)",
+              "legendFormat": "{{sql_instance}} / {{environment}}",
+              "instant": true,
+              "range": false,
+              "format": "table"
+            }
+          ],
+          "options": {
+            "showHeader": true,
+            "cellHeight": "sm",
+            "footer": {
+              "show": false
+            }
+          },
+          "transformations": [
+            {
+              "id": "organize",
+              "options": {
+                "excludeByName": {
+                  "Time": true,
+                  "__name__": true,
+                  "job": true,
+                  "instance": true
+                },
+                "renameByName": {
+                  "Value": "Value"
+                }
+              }
+            }
+          ]
+        },
+        {
+          "id": 45,
+          "title": "Events in selected range",
+          "type": "table",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "dataeyes_prometheus"
+          },
+          "gridPos": {
+            "x": 12,
+            "y": 33,
+            "w": 12,
+            "h": 9
+          },
+          "description": "",
+          "fieldConfig": {
+            "defaults": {
+              "unit": "short",
+              "noValue": "Unavailable",
+              "color": {
+                "mode": "fixed",
+                "fixedColor": "blue"
+              },
+              "mappings": [
+                {
+                  "type": "special",
+                  "options": {
+                    "match": "nan",
+                    "result": {
+                      "text": "Unavailable",
+                      "color": "gray"
+                    }
+                  }
+                }
+              ]
+            },
+            "overrides": []
+          },
+          "targets": [
+            {
+              "refId": "A",
+              "datasource": {
+                "type": "prometheus",
+                "uid": "dataeyes_prometheus"
+              },
+              "expr": "(increase(data_eyes_check_events_total{environment=~\"${environment:regex}\",sql_instance=~\"${instance:regex}\"}[$__range]) * on(check) group_left(name) data_eyes_check_info{group=\"Availability\"}) and on() (max(up{job=\"data-eyes\"}) == 1)",
+              "legendFormat": "{{sql_instance}} / {{environment}}",
+              "instant": true,
+              "range": false,
+              "format": "table"
+            }
+          ],
+          "options": {
+            "showHeader": true,
+            "cellHeight": "sm",
+            "footer": {
+              "show": false
+            }
+          },
+          "transformations": [
+            {
+              "id": "organize",
+              "options": {
+                "excludeByName": {
+                  "Time": true,
+                  "__name__": true,
+                  "job": true,
+                  "instance": true
+                },
+                "renameByName": {
+                  "Value": "Value"
+                }
+              }
+            }
+          ]
+        }
+      ],
+      "gridPos": {
+        "x": 0,
+        "y": 23,
+        "w": 24,
+        "h": 1
+      }
+    },
+    {
+      "id": 46,
+      "type": "row",
+      "title": "Backup & integrity checks",
+      "collapsed": true,
+      "panels": [
+        {
+          "id": 47,
+          "title": "Check status and catalog",
+          "type": "table",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "dataeyes_prometheus"
+          },
+          "gridPos": {
+            "x": 0,
+            "y": 25,
+            "w": 24,
+            "h": 9
+          },
+          "description": "All catalog checks in this group. Not collected / disabled also covers collector outages or checks not yet evaluated. Unknown is an evaluated check with unavailable results. Numeric values use native catalog units; event-only checks have no state value.",
+          "fieldConfig": {
+            "defaults": {
+              "unit": "short",
+              "noValue": "Unavailable",
+              "color": {
+                "mode": "fixed",
+                "fixedColor": "blue"
+              },
+              "mappings": [
+                {
+                  "type": "special",
+                  "options": {
+                    "match": "nan",
+                    "result": {
+                      "text": "Unavailable",
+                      "color": "gray"
+                    }
+                  }
+                },
+                {
+                  "type": "value",
+                  "options": {
+                    "0": {
+                      "text": "OK",
+                      "color": "green"
+                    },
+                    "1": {
+                      "text": "Unknown",
+                      "color": "gray"
+                    },
+                    "2": {
+                      "text": "Warning",
+                      "color": "orange"
+                    },
+                    "3": {
+                      "text": "Critical",
+                      "color": "red"
+                    },
+                    "-1": {
+                      "text": "Not collected / disabled",
+                      "color": "gray"
+                    }
+                  }
+                }
+              ]
+            },
+            "overrides": []
+          },
+          "targets": [
+            {
+              "refId": "A",
+              "datasource": {
+                "type": "prometheus",
+                "uid": "dataeyes_prometheus"
+              },
+              "expr": "((max by (check) (label_replace((data_eyes_health_severity{environment=~\"${environment:regex}\",sql_instance=~\"${instance:regex}\"}) and on() (max(up{job=\"data-eyes\"}) == 1), \"check\", \"$1\", \"category\", \"alert\\\\.(.+)\"))) or on(check) (data_eyes_check_info{group=\"Backup & integrity\"} * 0 - 1)) * on(check) group_left(name,kind,unit,direction) data_eyes_check_info{group=\"Backup & integrity\"}",
+              "legendFormat": "{{sql_instance}} / {{environment}}",
+              "instant": true,
+              "range": false,
+              "format": "table"
+            }
+          ],
+          "options": {
+            "showHeader": true,
+            "cellHeight": "sm",
+            "footer": {
+              "show": false
+            }
+          },
+          "transformations": [
+            {
+              "id": "organize",
+              "options": {
+                "excludeByName": {
+                  "Time": true,
+                  "__name__": true,
+                  "job": true,
+                  "instance": true
+                },
+                "renameByName": {
+                  "Value": "Value"
+                }
+              }
+            }
+          ]
+        },
+        {
+          "id": 48,
+          "title": "Current state values",
+          "type": "table",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "dataeyes_prometheus"
+          },
+          "gridPos": {
+            "x": 0,
+            "y": 34,
+            "w": 12,
+            "h": 9
+          },
+          "description": "",
+          "fieldConfig": {
+            "defaults": {
+              "unit": "short",
+              "noValue": "Unavailable",
+              "color": {
+                "mode": "fixed",
+                "fixedColor": "blue"
+              },
+              "mappings": [
+                {
+                  "type": "special",
+                  "options": {
+                    "match": "nan",
+                    "result": {
+                      "text": "Unavailable",
+                      "color": "gray"
+                    }
+                  }
+                }
+              ]
+            },
+            "overrides": []
+          },
+          "targets": [
+            {
+              "refId": "A",
+              "datasource": {
+                "type": "prometheus",
+                "uid": "dataeyes_prometheus"
+              },
+              "expr": "(data_eyes_check_value{environment=~\"${environment:regex}\",sql_instance=~\"${instance:regex}\"} * on(check) group_left(name,unit) data_eyes_check_info{group=\"Backup & integrity\"}) and on() (max(up{job=\"data-eyes\"}) == 1)",
+              "legendFormat": "{{sql_instance}} / {{environment}}",
+              "instant": true,
+              "range": false,
+              "format": "table"
+            }
+          ],
+          "options": {
+            "showHeader": true,
+            "cellHeight": "sm",
+            "footer": {
+              "show": false
+            }
+          },
+          "transformations": [
+            {
+              "id": "organize",
+              "options": {
+                "excludeByName": {
+                  "Time": true,
+                  "__name__": true,
+                  "job": true,
+                  "instance": true
+                },
+                "renameByName": {
+                  "Value": "Value"
+                }
+              }
+            }
+          ]
+        },
+        {
+          "id": 49,
+          "title": "Events in selected range",
+          "type": "table",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "dataeyes_prometheus"
+          },
+          "gridPos": {
+            "x": 12,
+            "y": 34,
+            "w": 12,
+            "h": 9
+          },
+          "description": "",
+          "fieldConfig": {
+            "defaults": {
+              "unit": "short",
+              "noValue": "Unavailable",
+              "color": {
+                "mode": "fixed",
+                "fixedColor": "blue"
+              },
+              "mappings": [
+                {
+                  "type": "special",
+                  "options": {
+                    "match": "nan",
+                    "result": {
+                      "text": "Unavailable",
+                      "color": "gray"
+                    }
+                  }
+                }
+              ]
+            },
+            "overrides": []
+          },
+          "targets": [
+            {
+              "refId": "A",
+              "datasource": {
+                "type": "prometheus",
+                "uid": "dataeyes_prometheus"
+              },
+              "expr": "(increase(data_eyes_check_events_total{environment=~\"${environment:regex}\",sql_instance=~\"${instance:regex}\"}[$__range]) * on(check) group_left(name) data_eyes_check_info{group=\"Backup & integrity\"}) and on() (max(up{job=\"data-eyes\"}) == 1)",
+              "legendFormat": "{{sql_instance}} / {{environment}}",
+              "instant": true,
+              "range": false,
+              "format": "table"
+            }
+          ],
+          "options": {
+            "showHeader": true,
+            "cellHeight": "sm",
+            "footer": {
+              "show": false
+            }
+          },
+          "transformations": [
+            {
+              "id": "organize",
+              "options": {
+                "excludeByName": {
+                  "Time": true,
+                  "__name__": true,
+                  "job": true,
+                  "instance": true
+                },
+                "renameByName": {
+                  "Value": "Value"
+                }
+              }
+            }
+          ]
+        }
+      ],
+      "gridPos": {
+        "x": 0,
+        "y": 24,
+        "w": 24,
+        "h": 1
+      }
+    },
+    {
+      "id": 50,
+      "type": "row",
+      "title": "Storage checks",
+      "collapsed": true,
+      "panels": [
+        {
+          "id": 51,
+          "title": "Check status and catalog",
+          "type": "table",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "dataeyes_prometheus"
+          },
+          "gridPos": {
+            "x": 0,
+            "y": 26,
+            "w": 24,
+            "h": 9
+          },
+          "description": "All catalog checks in this group. Not collected / disabled also covers collector outages or checks not yet evaluated. Unknown is an evaluated check with unavailable results. Numeric values use native catalog units; event-only checks have no state value.",
+          "fieldConfig": {
+            "defaults": {
+              "unit": "short",
+              "noValue": "Unavailable",
+              "color": {
+                "mode": "fixed",
+                "fixedColor": "blue"
+              },
+              "mappings": [
+                {
+                  "type": "special",
+                  "options": {
+                    "match": "nan",
+                    "result": {
+                      "text": "Unavailable",
+                      "color": "gray"
+                    }
+                  }
+                },
+                {
+                  "type": "value",
+                  "options": {
+                    "0": {
+                      "text": "OK",
+                      "color": "green"
+                    },
+                    "1": {
+                      "text": "Unknown",
+                      "color": "gray"
+                    },
+                    "2": {
+                      "text": "Warning",
+                      "color": "orange"
+                    },
+                    "3": {
+                      "text": "Critical",
+                      "color": "red"
+                    },
+                    "-1": {
+                      "text": "Not collected / disabled",
+                      "color": "gray"
+                    }
+                  }
+                }
+              ]
+            },
+            "overrides": []
+          },
+          "targets": [
+            {
+              "refId": "A",
+              "datasource": {
+                "type": "prometheus",
+                "uid": "dataeyes_prometheus"
+              },
+              "expr": "((max by (check) (label_replace((data_eyes_health_severity{environment=~\"${environment:regex}\",sql_instance=~\"${instance:regex}\"}) and on() (max(up{job=\"data-eyes\"}) == 1), \"check\", \"$1\", \"category\", \"alert\\\\.(.+)\"))) or on(check) (data_eyes_check_info{group=\"Storage\"} * 0 - 1)) * on(check) group_left(name,kind,unit,direction) data_eyes_check_info{group=\"Storage\"}",
+              "legendFormat": "{{sql_instance}} / {{environment}}",
+              "instant": true,
+              "range": false,
+              "format": "table"
+            }
+          ],
+          "options": {
+            "showHeader": true,
+            "cellHeight": "sm",
+            "footer": {
+              "show": false
+            }
+          },
+          "transformations": [
+            {
+              "id": "organize",
+              "options": {
+                "excludeByName": {
+                  "Time": true,
+                  "__name__": true,
+                  "job": true,
+                  "instance": true
+                },
+                "renameByName": {
+                  "Value": "Value"
+                }
+              }
+            }
+          ]
+        },
+        {
+          "id": 52,
+          "title": "Current state values",
+          "type": "table",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "dataeyes_prometheus"
+          },
+          "gridPos": {
+            "x": 0,
+            "y": 35,
+            "w": 12,
+            "h": 9
+          },
+          "description": "",
+          "fieldConfig": {
+            "defaults": {
+              "unit": "short",
+              "noValue": "Unavailable",
+              "color": {
+                "mode": "fixed",
+                "fixedColor": "blue"
+              },
+              "mappings": [
+                {
+                  "type": "special",
+                  "options": {
+                    "match": "nan",
+                    "result": {
+                      "text": "Unavailable",
+                      "color": "gray"
+                    }
+                  }
+                }
+              ]
+            },
+            "overrides": []
+          },
+          "targets": [
+            {
+              "refId": "A",
+              "datasource": {
+                "type": "prometheus",
+                "uid": "dataeyes_prometheus"
+              },
+              "expr": "(data_eyes_check_value{environment=~\"${environment:regex}\",sql_instance=~\"${instance:regex}\"} * on(check) group_left(name,unit) data_eyes_check_info{group=\"Storage\"}) and on() (max(up{job=\"data-eyes\"}) == 1)",
+              "legendFormat": "{{sql_instance}} / {{environment}}",
+              "instant": true,
+              "range": false,
+              "format": "table"
+            }
+          ],
+          "options": {
+            "showHeader": true,
+            "cellHeight": "sm",
+            "footer": {
+              "show": false
+            }
+          },
+          "transformations": [
+            {
+              "id": "organize",
+              "options": {
+                "excludeByName": {
+                  "Time": true,
+                  "__name__": true,
+                  "job": true,
+                  "instance": true
+                },
+                "renameByName": {
+                  "Value": "Value"
+                }
+              }
+            }
+          ]
+        },
+        {
+          "id": 53,
+          "title": "Events in selected range",
+          "type": "table",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "dataeyes_prometheus"
+          },
+          "gridPos": {
+            "x": 12,
+            "y": 35,
+            "w": 12,
+            "h": 9
+          },
+          "description": "",
+          "fieldConfig": {
+            "defaults": {
+              "unit": "short",
+              "noValue": "Unavailable",
+              "color": {
+                "mode": "fixed",
+                "fixedColor": "blue"
+              },
+              "mappings": [
+                {
+                  "type": "special",
+                  "options": {
+                    "match": "nan",
+                    "result": {
+                      "text": "Unavailable",
+                      "color": "gray"
+                    }
+                  }
+                }
+              ]
+            },
+            "overrides": []
+          },
+          "targets": [
+            {
+              "refId": "A",
+              "datasource": {
+                "type": "prometheus",
+                "uid": "dataeyes_prometheus"
+              },
+              "expr": "(increase(data_eyes_check_events_total{environment=~\"${environment:regex}\",sql_instance=~\"${instance:regex}\"}[$__range]) * on(check) group_left(name) data_eyes_check_info{group=\"Storage\"}) and on() (max(up{job=\"data-eyes\"}) == 1)",
+              "legendFormat": "{{sql_instance}} / {{environment}}",
+              "instant": true,
+              "range": false,
+              "format": "table"
+            }
+          ],
+          "options": {
+            "showHeader": true,
+            "cellHeight": "sm",
+            "footer": {
+              "show": false
+            }
+          },
+          "transformations": [
+            {
+              "id": "organize",
+              "options": {
+                "excludeByName": {
+                  "Time": true,
+                  "__name__": true,
+                  "job": true,
+                  "instance": true
+                },
+                "renameByName": {
+                  "Value": "Value"
+                }
+              }
+            }
+          ]
+        }
+      ],
+      "gridPos": {
+        "x": 0,
+        "y": 25,
+        "w": 24,
+        "h": 1
+      }
+    },
+    {
+      "id": 54,
+      "type": "row",
+      "title": "Tempdb checks",
+      "collapsed": true,
+      "panels": [
+        {
+          "id": 55,
+          "title": "Check status and catalog",
+          "type": "table",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "dataeyes_prometheus"
+          },
+          "gridPos": {
+            "x": 0,
+            "y": 27,
+            "w": 24,
+            "h": 9
+          },
+          "description": "All catalog checks in this group. Not collected / disabled also covers collector outages or checks not yet evaluated. Unknown is an evaluated check with unavailable results. Numeric values use native catalog units; event-only checks have no state value.",
+          "fieldConfig": {
+            "defaults": {
+              "unit": "short",
+              "noValue": "Unavailable",
+              "color": {
+                "mode": "fixed",
+                "fixedColor": "blue"
+              },
+              "mappings": [
+                {
+                  "type": "special",
+                  "options": {
+                    "match": "nan",
+                    "result": {
+                      "text": "Unavailable",
+                      "color": "gray"
+                    }
+                  }
+                },
+                {
+                  "type": "value",
+                  "options": {
+                    "0": {
+                      "text": "OK",
+                      "color": "green"
+                    },
+                    "1": {
+                      "text": "Unknown",
+                      "color": "gray"
+                    },
+                    "2": {
+                      "text": "Warning",
+                      "color": "orange"
+                    },
+                    "3": {
+                      "text": "Critical",
+                      "color": "red"
+                    },
+                    "-1": {
+                      "text": "Not collected / disabled",
+                      "color": "gray"
+                    }
+                  }
+                }
+              ]
+            },
+            "overrides": []
+          },
+          "targets": [
+            {
+              "refId": "A",
+              "datasource": {
+                "type": "prometheus",
+                "uid": "dataeyes_prometheus"
+              },
+              "expr": "((max by (check) (label_replace((data_eyes_health_severity{environment=~\"${environment:regex}\",sql_instance=~\"${instance:regex}\"}) and on() (max(up{job=\"data-eyes\"}) == 1), \"check\", \"$1\", \"category\", \"alert\\\\.(.+)\"))) or on(check) (data_eyes_check_info{group=\"Tempdb\"} * 0 - 1)) * on(check) group_left(name,kind,unit,direction) data_eyes_check_info{group=\"Tempdb\"}",
+              "legendFormat": "{{sql_instance}} / {{environment}}",
+              "instant": true,
+              "range": false,
+              "format": "table"
+            }
+          ],
+          "options": {
+            "showHeader": true,
+            "cellHeight": "sm",
+            "footer": {
+              "show": false
+            }
+          },
+          "transformations": [
+            {
+              "id": "organize",
+              "options": {
+                "excludeByName": {
+                  "Time": true,
+                  "__name__": true,
+                  "job": true,
+                  "instance": true
+                },
+                "renameByName": {
+                  "Value": "Value"
+                }
+              }
+            }
+          ]
+        },
+        {
+          "id": 56,
+          "title": "Current state values",
+          "type": "table",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "dataeyes_prometheus"
+          },
+          "gridPos": {
+            "x": 0,
+            "y": 36,
+            "w": 12,
+            "h": 9
+          },
+          "description": "",
+          "fieldConfig": {
+            "defaults": {
+              "unit": "short",
+              "noValue": "Unavailable",
+              "color": {
+                "mode": "fixed",
+                "fixedColor": "blue"
+              },
+              "mappings": [
+                {
+                  "type": "special",
+                  "options": {
+                    "match": "nan",
+                    "result": {
+                      "text": "Unavailable",
+                      "color": "gray"
+                    }
+                  }
+                }
+              ]
+            },
+            "overrides": []
+          },
+          "targets": [
+            {
+              "refId": "A",
+              "datasource": {
+                "type": "prometheus",
+                "uid": "dataeyes_prometheus"
+              },
+              "expr": "(data_eyes_check_value{environment=~\"${environment:regex}\",sql_instance=~\"${instance:regex}\"} * on(check) group_left(name,unit) data_eyes_check_info{group=\"Tempdb\"}) and on() (max(up{job=\"data-eyes\"}) == 1)",
+              "legendFormat": "{{sql_instance}} / {{environment}}",
+              "instant": true,
+              "range": false,
+              "format": "table"
+            }
+          ],
+          "options": {
+            "showHeader": true,
+            "cellHeight": "sm",
+            "footer": {
+              "show": false
+            }
+          },
+          "transformations": [
+            {
+              "id": "organize",
+              "options": {
+                "excludeByName": {
+                  "Time": true,
+                  "__name__": true,
+                  "job": true,
+                  "instance": true
+                },
+                "renameByName": {
+                  "Value": "Value"
+                }
+              }
+            }
+          ]
+        },
+        {
+          "id": 57,
+          "title": "Events in selected range",
+          "type": "table",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "dataeyes_prometheus"
+          },
+          "gridPos": {
+            "x": 12,
+            "y": 36,
+            "w": 12,
+            "h": 9
+          },
+          "description": "",
+          "fieldConfig": {
+            "defaults": {
+              "unit": "short",
+              "noValue": "Unavailable",
+              "color": {
+                "mode": "fixed",
+                "fixedColor": "blue"
+              },
+              "mappings": [
+                {
+                  "type": "special",
+                  "options": {
+                    "match": "nan",
+                    "result": {
+                      "text": "Unavailable",
+                      "color": "gray"
+                    }
+                  }
+                }
+              ]
+            },
+            "overrides": []
+          },
+          "targets": [
+            {
+              "refId": "A",
+              "datasource": {
+                "type": "prometheus",
+                "uid": "dataeyes_prometheus"
+              },
+              "expr": "(increase(data_eyes_check_events_total{environment=~\"${environment:regex}\",sql_instance=~\"${instance:regex}\"}[$__range]) * on(check) group_left(name) data_eyes_check_info{group=\"Tempdb\"}) and on() (max(up{job=\"data-eyes\"}) == 1)",
+              "legendFormat": "{{sql_instance}} / {{environment}}",
+              "instant": true,
+              "range": false,
+              "format": "table"
+            }
+          ],
+          "options": {
+            "showHeader": true,
+            "cellHeight": "sm",
+            "footer": {
+              "show": false
+            }
+          },
+          "transformations": [
+            {
+              "id": "organize",
+              "options": {
+                "excludeByName": {
+                  "Time": true,
+                  "__name__": true,
+                  "job": true,
+                  "instance": true
+                },
+                "renameByName": {
+                  "Value": "Value"
+                }
+              }
+            }
+          ]
+        }
+      ],
+      "gridPos": {
+        "x": 0,
+        "y": 26,
+        "w": 24,
+        "h": 1
+      }
+    },
+    {
+      "id": 58,
+      "type": "row",
+      "title": "Performance checks",
+      "collapsed": true,
+      "panels": [
+        {
+          "id": 59,
+          "title": "Check status and catalog",
+          "type": "table",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "dataeyes_prometheus"
+          },
+          "gridPos": {
+            "x": 0,
+            "y": 28,
+            "w": 24,
+            "h": 9
+          },
+          "description": "All catalog checks in this group. Not collected / disabled also covers collector outages or checks not yet evaluated. Unknown is an evaluated check with unavailable results. Numeric values use native catalog units; event-only checks have no state value.",
+          "fieldConfig": {
+            "defaults": {
+              "unit": "short",
+              "noValue": "Unavailable",
+              "color": {
+                "mode": "fixed",
+                "fixedColor": "blue"
+              },
+              "mappings": [
+                {
+                  "type": "special",
+                  "options": {
+                    "match": "nan",
+                    "result": {
+                      "text": "Unavailable",
+                      "color": "gray"
+                    }
+                  }
+                },
+                {
+                  "type": "value",
+                  "options": {
+                    "0": {
+                      "text": "OK",
+                      "color": "green"
+                    },
+                    "1": {
+                      "text": "Unknown",
+                      "color": "gray"
+                    },
+                    "2": {
+                      "text": "Warning",
+                      "color": "orange"
+                    },
+                    "3": {
+                      "text": "Critical",
+                      "color": "red"
+                    },
+                    "-1": {
+                      "text": "Not collected / disabled",
+                      "color": "gray"
+                    }
+                  }
+                }
+              ]
+            },
+            "overrides": []
+          },
+          "targets": [
+            {
+              "refId": "A",
+              "datasource": {
+                "type": "prometheus",
+                "uid": "dataeyes_prometheus"
+              },
+              "expr": "((max by (check) (label_replace((data_eyes_health_severity{environment=~\"${environment:regex}\",sql_instance=~\"${instance:regex}\"}) and on() (max(up{job=\"data-eyes\"}) == 1), \"check\", \"$1\", \"category\", \"alert\\\\.(.+)\"))) or on(check) (data_eyes_check_info{group=\"Performance\"} * 0 - 1)) * on(check) group_left(name,kind,unit,direction) data_eyes_check_info{group=\"Performance\"}",
+              "legendFormat": "{{sql_instance}} / {{environment}}",
+              "instant": true,
+              "range": false,
+              "format": "table"
+            }
+          ],
+          "options": {
+            "showHeader": true,
+            "cellHeight": "sm",
+            "footer": {
+              "show": false
+            }
+          },
+          "transformations": [
+            {
+              "id": "organize",
+              "options": {
+                "excludeByName": {
+                  "Time": true,
+                  "__name__": true,
+                  "job": true,
+                  "instance": true
+                },
+                "renameByName": {
+                  "Value": "Value"
+                }
+              }
+            }
+          ]
+        },
+        {
+          "id": 60,
+          "title": "Current state values",
+          "type": "table",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "dataeyes_prometheus"
+          },
+          "gridPos": {
+            "x": 0,
+            "y": 37,
+            "w": 12,
+            "h": 9
+          },
+          "description": "",
+          "fieldConfig": {
+            "defaults": {
+              "unit": "short",
+              "noValue": "Unavailable",
+              "color": {
+                "mode": "fixed",
+                "fixedColor": "blue"
+              },
+              "mappings": [
+                {
+                  "type": "special",
+                  "options": {
+                    "match": "nan",
+                    "result": {
+                      "text": "Unavailable",
+                      "color": "gray"
+                    }
+                  }
+                }
+              ]
+            },
+            "overrides": []
+          },
+          "targets": [
+            {
+              "refId": "A",
+              "datasource": {
+                "type": "prometheus",
+                "uid": "dataeyes_prometheus"
+              },
+              "expr": "(data_eyes_check_value{environment=~\"${environment:regex}\",sql_instance=~\"${instance:regex}\"} * on(check) group_left(name,unit) data_eyes_check_info{group=\"Performance\"}) and on() (max(up{job=\"data-eyes\"}) == 1)",
+              "legendFormat": "{{sql_instance}} / {{environment}}",
+              "instant": true,
+              "range": false,
+              "format": "table"
+            }
+          ],
+          "options": {
+            "showHeader": true,
+            "cellHeight": "sm",
+            "footer": {
+              "show": false
+            }
+          },
+          "transformations": [
+            {
+              "id": "organize",
+              "options": {
+                "excludeByName": {
+                  "Time": true,
+                  "__name__": true,
+                  "job": true,
+                  "instance": true
+                },
+                "renameByName": {
+                  "Value": "Value"
+                }
+              }
+            }
+          ]
+        },
+        {
+          "id": 61,
+          "title": "Events in selected range",
+          "type": "table",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "dataeyes_prometheus"
+          },
+          "gridPos": {
+            "x": 12,
+            "y": 37,
+            "w": 12,
+            "h": 9
+          },
+          "description": "",
+          "fieldConfig": {
+            "defaults": {
+              "unit": "short",
+              "noValue": "Unavailable",
+              "color": {
+                "mode": "fixed",
+                "fixedColor": "blue"
+              },
+              "mappings": [
+                {
+                  "type": "special",
+                  "options": {
+                    "match": "nan",
+                    "result": {
+                      "text": "Unavailable",
+                      "color": "gray"
+                    }
+                  }
+                }
+              ]
+            },
+            "overrides": []
+          },
+          "targets": [
+            {
+              "refId": "A",
+              "datasource": {
+                "type": "prometheus",
+                "uid": "dataeyes_prometheus"
+              },
+              "expr": "(increase(data_eyes_check_events_total{environment=~\"${environment:regex}\",sql_instance=~\"${instance:regex}\"}[$__range]) * on(check) group_left(name) data_eyes_check_info{group=\"Performance\"}) and on() (max(up{job=\"data-eyes\"}) == 1)",
+              "legendFormat": "{{sql_instance}} / {{environment}}",
+              "instant": true,
+              "range": false,
+              "format": "table"
+            }
+          ],
+          "options": {
+            "showHeader": true,
+            "cellHeight": "sm",
+            "footer": {
+              "show": false
+            }
+          },
+          "transformations": [
+            {
+              "id": "organize",
+              "options": {
+                "excludeByName": {
+                  "Time": true,
+                  "__name__": true,
+                  "job": true,
+                  "instance": true
+                },
+                "renameByName": {
+                  "Value": "Value"
+                }
+              }
+            }
+          ]
+        }
+      ],
+      "gridPos": {
+        "x": 0,
+        "y": 27,
+        "w": 24,
+        "h": 1
+      }
+    },
+    {
+      "id": 62,
+      "type": "row",
+      "title": "Maintenance checks",
+      "collapsed": true,
+      "panels": [
+        {
+          "id": 63,
+          "title": "Check status and catalog",
+          "type": "table",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "dataeyes_prometheus"
+          },
+          "gridPos": {
+            "x": 0,
+            "y": 29,
+            "w": 24,
+            "h": 9
+          },
+          "description": "All catalog checks in this group. Not collected / disabled also covers collector outages or checks not yet evaluated. Unknown is an evaluated check with unavailable results. Numeric values use native catalog units; event-only checks have no state value.",
+          "fieldConfig": {
+            "defaults": {
+              "unit": "short",
+              "noValue": "Unavailable",
+              "color": {
+                "mode": "fixed",
+                "fixedColor": "blue"
+              },
+              "mappings": [
+                {
+                  "type": "special",
+                  "options": {
+                    "match": "nan",
+                    "result": {
+                      "text": "Unavailable",
+                      "color": "gray"
+                    }
+                  }
+                },
+                {
+                  "type": "value",
+                  "options": {
+                    "0": {
+                      "text": "OK",
+                      "color": "green"
+                    },
+                    "1": {
+                      "text": "Unknown",
+                      "color": "gray"
+                    },
+                    "2": {
+                      "text": "Warning",
+                      "color": "orange"
+                    },
+                    "3": {
+                      "text": "Critical",
+                      "color": "red"
+                    },
+                    "-1": {
+                      "text": "Not collected / disabled",
+                      "color": "gray"
+                    }
+                  }
+                }
+              ]
+            },
+            "overrides": []
+          },
+          "targets": [
+            {
+              "refId": "A",
+              "datasource": {
+                "type": "prometheus",
+                "uid": "dataeyes_prometheus"
+              },
+              "expr": "((max by (check) (label_replace((data_eyes_health_severity{environment=~\"${environment:regex}\",sql_instance=~\"${instance:regex}\"}) and on() (max(up{job=\"data-eyes\"}) == 1), \"check\", \"$1\", \"category\", \"alert\\\\.(.+)\"))) or on(check) (data_eyes_check_info{group=\"Maintenance\"} * 0 - 1)) * on(check) group_left(name,kind,unit,direction) data_eyes_check_info{group=\"Maintenance\"}",
+              "legendFormat": "{{sql_instance}} / {{environment}}",
+              "instant": true,
+              "range": false,
+              "format": "table"
+            }
+          ],
+          "options": {
+            "showHeader": true,
+            "cellHeight": "sm",
+            "footer": {
+              "show": false
+            }
+          },
+          "transformations": [
+            {
+              "id": "organize",
+              "options": {
+                "excludeByName": {
+                  "Time": true,
+                  "__name__": true,
+                  "job": true,
+                  "instance": true
+                },
+                "renameByName": {
+                  "Value": "Value"
+                }
+              }
+            }
+          ]
+        },
+        {
+          "id": 64,
+          "title": "Current state values",
+          "type": "table",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "dataeyes_prometheus"
+          },
+          "gridPos": {
+            "x": 0,
+            "y": 38,
+            "w": 12,
+            "h": 9
+          },
+          "description": "",
+          "fieldConfig": {
+            "defaults": {
+              "unit": "short",
+              "noValue": "Unavailable",
+              "color": {
+                "mode": "fixed",
+                "fixedColor": "blue"
+              },
+              "mappings": [
+                {
+                  "type": "special",
+                  "options": {
+                    "match": "nan",
+                    "result": {
+                      "text": "Unavailable",
+                      "color": "gray"
+                    }
+                  }
+                }
+              ]
+            },
+            "overrides": []
+          },
+          "targets": [
+            {
+              "refId": "A",
+              "datasource": {
+                "type": "prometheus",
+                "uid": "dataeyes_prometheus"
+              },
+              "expr": "(data_eyes_check_value{environment=~\"${environment:regex}\",sql_instance=~\"${instance:regex}\"} * on(check) group_left(name,unit) data_eyes_check_info{group=\"Maintenance\"}) and on() (max(up{job=\"data-eyes\"}) == 1)",
+              "legendFormat": "{{sql_instance}} / {{environment}}",
+              "instant": true,
+              "range": false,
+              "format": "table"
+            }
+          ],
+          "options": {
+            "showHeader": true,
+            "cellHeight": "sm",
+            "footer": {
+              "show": false
+            }
+          },
+          "transformations": [
+            {
+              "id": "organize",
+              "options": {
+                "excludeByName": {
+                  "Time": true,
+                  "__name__": true,
+                  "job": true,
+                  "instance": true
+                },
+                "renameByName": {
+                  "Value": "Value"
+                }
+              }
+            }
+          ]
+        },
+        {
+          "id": 65,
+          "title": "Events in selected range",
+          "type": "table",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "dataeyes_prometheus"
+          },
+          "gridPos": {
+            "x": 12,
+            "y": 38,
+            "w": 12,
+            "h": 9
+          },
+          "description": "",
+          "fieldConfig": {
+            "defaults": {
+              "unit": "short",
+              "noValue": "Unavailable",
+              "color": {
+                "mode": "fixed",
+                "fixedColor": "blue"
+              },
+              "mappings": [
+                {
+                  "type": "special",
+                  "options": {
+                    "match": "nan",
+                    "result": {
+                      "text": "Unavailable",
+                      "color": "gray"
+                    }
+                  }
+                }
+              ]
+            },
+            "overrides": []
+          },
+          "targets": [
+            {
+              "refId": "A",
+              "datasource": {
+                "type": "prometheus",
+                "uid": "dataeyes_prometheus"
+              },
+              "expr": "(increase(data_eyes_check_events_total{environment=~\"${environment:regex}\",sql_instance=~\"${instance:regex}\"}[$__range]) * on(check) group_left(name) data_eyes_check_info{group=\"Maintenance\"}) and on() (max(up{job=\"data-eyes\"}) == 1)",
+              "legendFormat": "{{sql_instance}} / {{environment}}",
+              "instant": true,
+              "range": false,
+              "format": "table"
+            }
+          ],
+          "options": {
+            "showHeader": true,
+            "cellHeight": "sm",
+            "footer": {
+              "show": false
+            }
+          },
+          "transformations": [
+            {
+              "id": "organize",
+              "options": {
+                "excludeByName": {
+                  "Time": true,
+                  "__name__": true,
+                  "job": true,
+                  "instance": true
+                },
+                "renameByName": {
+                  "Value": "Value"
+                }
+              }
+            }
+          ]
+        }
+      ],
+      "gridPos": {
+        "x": 0,
+        "y": 28,
+        "w": 24,
+        "h": 1
+      }
+    },
+    {
+      "id": 66,
+      "type": "row",
+      "title": "Configuration & security checks",
+      "collapsed": true,
+      "panels": [
+        {
+          "id": 67,
+          "title": "Check status and catalog",
+          "type": "table",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "dataeyes_prometheus"
+          },
+          "gridPos": {
+            "x": 0,
+            "y": 30,
+            "w": 24,
+            "h": 9
+          },
+          "description": "All catalog checks in this group. Not collected / disabled also covers collector outages or checks not yet evaluated. Unknown is an evaluated check with unavailable results. Numeric values use native catalog units; event-only checks have no state value.",
+          "fieldConfig": {
+            "defaults": {
+              "unit": "short",
+              "noValue": "Unavailable",
+              "color": {
+                "mode": "fixed",
+                "fixedColor": "blue"
+              },
+              "mappings": [
+                {
+                  "type": "special",
+                  "options": {
+                    "match": "nan",
+                    "result": {
+                      "text": "Unavailable",
+                      "color": "gray"
+                    }
+                  }
+                },
+                {
+                  "type": "value",
+                  "options": {
+                    "0": {
+                      "text": "OK",
+                      "color": "green"
+                    },
+                    "1": {
+                      "text": "Unknown",
+                      "color": "gray"
+                    },
+                    "2": {
+                      "text": "Warning",
+                      "color": "orange"
+                    },
+                    "3": {
+                      "text": "Critical",
+                      "color": "red"
+                    },
+                    "-1": {
+                      "text": "Not collected / disabled",
+                      "color": "gray"
+                    }
+                  }
+                }
+              ]
+            },
+            "overrides": []
+          },
+          "targets": [
+            {
+              "refId": "A",
+              "datasource": {
+                "type": "prometheus",
+                "uid": "dataeyes_prometheus"
+              },
+              "expr": "((max by (check) (label_replace((data_eyes_health_severity{environment=~\"${environment:regex}\",sql_instance=~\"${instance:regex}\"}) and on() (max(up{job=\"data-eyes\"}) == 1), \"check\", \"$1\", \"category\", \"alert\\\\.(.+)\"))) or on(check) (data_eyes_check_info{group=\"Configuration & security\"} * 0 - 1)) * on(check) group_left(name,kind,unit,direction) data_eyes_check_info{group=\"Configuration & security\"}",
+              "legendFormat": "{{sql_instance}} / {{environment}}",
+              "instant": true,
+              "range": false,
+              "format": "table"
+            }
+          ],
+          "options": {
+            "showHeader": true,
+            "cellHeight": "sm",
+            "footer": {
+              "show": false
+            }
+          },
+          "transformations": [
+            {
+              "id": "organize",
+              "options": {
+                "excludeByName": {
+                  "Time": true,
+                  "__name__": true,
+                  "job": true,
+                  "instance": true
+                },
+                "renameByName": {
+                  "Value": "Value"
+                }
+              }
+            }
+          ]
+        },
+        {
+          "id": 68,
+          "title": "Current state values",
+          "type": "table",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "dataeyes_prometheus"
+          },
+          "gridPos": {
+            "x": 0,
+            "y": 39,
+            "w": 12,
+            "h": 9
+          },
+          "description": "",
+          "fieldConfig": {
+            "defaults": {
+              "unit": "short",
+              "noValue": "Unavailable",
+              "color": {
+                "mode": "fixed",
+                "fixedColor": "blue"
+              },
+              "mappings": [
+                {
+                  "type": "special",
+                  "options": {
+                    "match": "nan",
+                    "result": {
+                      "text": "Unavailable",
+                      "color": "gray"
+                    }
+                  }
+                }
+              ]
+            },
+            "overrides": []
+          },
+          "targets": [
+            {
+              "refId": "A",
+              "datasource": {
+                "type": "prometheus",
+                "uid": "dataeyes_prometheus"
+              },
+              "expr": "(data_eyes_check_value{environment=~\"${environment:regex}\",sql_instance=~\"${instance:regex}\"} * on(check) group_left(name,unit) data_eyes_check_info{group=\"Configuration & security\"}) and on() (max(up{job=\"data-eyes\"}) == 1)",
+              "legendFormat": "{{sql_instance}} / {{environment}}",
+              "instant": true,
+              "range": false,
+              "format": "table"
+            }
+          ],
+          "options": {
+            "showHeader": true,
+            "cellHeight": "sm",
+            "footer": {
+              "show": false
+            }
+          },
+          "transformations": [
+            {
+              "id": "organize",
+              "options": {
+                "excludeByName": {
+                  "Time": true,
+                  "__name__": true,
+                  "job": true,
+                  "instance": true
+                },
+                "renameByName": {
+                  "Value": "Value"
+                }
+              }
+            }
+          ]
+        },
+        {
+          "id": 69,
+          "title": "Events in selected range",
+          "type": "table",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "dataeyes_prometheus"
+          },
+          "gridPos": {
+            "x": 12,
+            "y": 39,
+            "w": 12,
+            "h": 9
+          },
+          "description": "",
+          "fieldConfig": {
+            "defaults": {
+              "unit": "short",
+              "noValue": "Unavailable",
+              "color": {
+                "mode": "fixed",
+                "fixedColor": "blue"
+              },
+              "mappings": [
+                {
+                  "type": "special",
+                  "options": {
+                    "match": "nan",
+                    "result": {
+                      "text": "Unavailable",
+                      "color": "gray"
+                    }
+                  }
+                }
+              ]
+            },
+            "overrides": []
+          },
+          "targets": [
+            {
+              "refId": "A",
+              "datasource": {
+                "type": "prometheus",
+                "uid": "dataeyes_prometheus"
+              },
+              "expr": "(increase(data_eyes_check_events_total{environment=~\"${environment:regex}\",sql_instance=~\"${instance:regex}\"}[$__range]) * on(check) group_left(name) data_eyes_check_info{group=\"Configuration & security\"}) and on() (max(up{job=\"data-eyes\"}) == 1)",
+              "legendFormat": "{{sql_instance}} / {{environment}}",
+              "instant": true,
+              "range": false,
+              "format": "table"
+            }
+          ],
+          "options": {
+            "showHeader": true,
+            "cellHeight": "sm",
+            "footer": {
+              "show": false
+            }
+          },
+          "transformations": [
+            {
+              "id": "organize",
+              "options": {
+                "excludeByName": {
+                  "Time": true,
+                  "__name__": true,
+                  "job": true,
+                  "instance": true
+                },
+                "renameByName": {
+                  "Value": "Value"
+                }
+              }
+            }
+          ]
+        }
+      ],
+      "gridPos": {
+        "x": 0,
+        "y": 29,
+        "w": 24,
+        "h": 1
+      }
+    },
+    {
+      "id": 70,
+      "type": "row",
+      "title": "Collection diagnostics",
+      "collapsed": true,
+      "panels": [
+        {
+          "id": 71,
+          "title": "Collection success",
+          "type": "timeseries",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "dataeyes_prometheus"
+          },
+          "gridPos": {
+            "x": 0,
+            "y": 31,
+            "w": 12,
+            "h": 9
+          },
+          "description": "",
+          "fieldConfig": {
+            "defaults": {
+              "unit": "short",
+              "noValue": "Unavailable",
+              "color": {
+                "mode": "palette-classic"
+              },
+              "mappings": [
+                {
+                  "type": "special",
+                  "options": {
+                    "match": "nan",
+                    "result": {
+                      "text": "Unavailable",
+                      "color": "gray"
+                    }
+                  }
+                }
+              ]
+            },
+            "overrides": []
+          },
+          "targets": [
+            {
+              "refId": "A",
+              "datasource": {
+                "type": "prometheus",
+                "uid": "dataeyes_prometheus"
+              },
+              "expr": "(data_eyes_collection_success{environment=~\"${environment:regex}\",sql_instance=~\"${instance:regex}\"}) and on() (max(up{job=\"data-eyes\"}) == 1)",
+              "legendFormat": "{{collector}}",
+              "instant": false,
+              "range": true,
+              "format": "time_series"
+            }
+          ],
+          "options": {
+            "legend": {
+              "displayMode": "table",
+              "placement": "bottom",
+              "calcs": [
+                "lastNotNull"
+              ]
+            },
+            "tooltip": {
+              "mode": "multi",
+              "sort": "desc"
+            }
+          }
+        },
+        {
+          "id": 72,
+          "title": "Collection freshness",
+          "type": "timeseries",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "dataeyes_prometheus"
+          },
+          "gridPos": {
+            "x": 12,
+            "y": 31,
+            "w": 12,
+            "h": 9
+          },
+          "description": "",
+          "fieldConfig": {
+            "defaults": {
+              "unit": "short",
+              "noValue": "Unavailable",
+              "color": {
+                "mode": "palette-classic"
+              },
+              "mappings": [
+                {
+                  "type": "special",
+                  "options": {
+                    "match": "nan",
+                    "result": {
+                      "text": "Unavailable",
+                      "color": "gray"
+                    }
+                  }
+                }
+              ]
+            },
+            "overrides": []
+          },
+          "targets": [
+            {
+              "refId": "A",
+              "datasource": {
+                "type": "prometheus",
+                "uid": "dataeyes_prometheus"
+              },
+              "expr": "(data_eyes_collection_fresh{environment=~\"${environment:regex}\",sql_instance=~\"${instance:regex}\"}) and on() (max(up{job=\"data-eyes\"}) == 1)",
+              "legendFormat": "{{collector}}",
+              "instant": false,
+              "range": true,
+              "format": "time_series"
+            }
+          ],
+          "options": {
+            "legend": {
+              "displayMode": "table",
+              "placement": "bottom",
+              "calcs": [
+                "lastNotNull"
+              ]
+            },
+            "tooltip": {
+              "mode": "multi",
+              "sort": "desc"
+            }
+          }
+        },
+        {
+          "id": 73,
+          "title": "Collection duration",
+          "type": "timeseries",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "dataeyes_prometheus"
+          },
+          "gridPos": {
+            "x": 0,
+            "y": 40,
+            "w": 12,
+            "h": 9
+          },
+          "description": "",
+          "fieldConfig": {
+            "defaults": {
+              "unit": "s",
+              "noValue": "Unavailable",
+              "color": {
+                "mode": "palette-classic"
+              },
+              "mappings": [
+                {
+                  "type": "special",
+                  "options": {
+                    "match": "nan",
+                    "result": {
+                      "text": "Unavailable",
+                      "color": "gray"
+                    }
+                  }
+                }
+              ]
+            },
+            "overrides": []
+          },
+          "targets": [
+            {
+              "refId": "A",
+              "datasource": {
+                "type": "prometheus",
+                "uid": "dataeyes_prometheus"
+              },
+              "expr": "(data_eyes_collection_duration_seconds{environment=~\"${environment:regex}\",sql_instance=~\"${instance:regex}\"}) and on() (max(up{job=\"data-eyes\"}) == 1)",
+              "legendFormat": "{{collector}}",
+              "instant": false,
+              "range": true,
+              "format": "time_series"
+            }
+          ],
+          "options": {
+            "legend": {
+              "displayMode": "table",
+              "placement": "bottom",
+              "calcs": [
+                "lastNotNull"
+              ]
+            },
+            "tooltip": {
+              "mode": "multi",
+              "sort": "desc"
+            }
+          }
+        },
+        {
+          "id": 74,
+          "title": "Time since last successful collection",
+          "type": "table",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "dataeyes_prometheus"
+          },
+          "gridPos": {
+            "x": 12,
+            "y": 40,
+            "w": 12,
+            "h": 9
+          },
+          "description": "Schedule varies from seconds to daily. Freshness is the authoritative stale indicator; an old daily result is not automatically failing.",
+          "fieldConfig": {
+            "defaults": {
+              "unit": "s",
+              "noValue": "Unavailable",
+              "color": {
+                "mode": "fixed",
+                "fixedColor": "blue"
+              },
+              "mappings": [
+                {
+                  "type": "special",
+                  "options": {
+                    "match": "nan",
+                    "result": {
+                      "text": "Unavailable",
+                      "color": "gray"
+                    }
+                  }
+                }
+              ]
+            },
+            "overrides": []
+          },
+          "targets": [
+            {
+              "refId": "A",
+              "datasource": {
+                "type": "prometheus",
+                "uid": "dataeyes_prometheus"
+              },
+              "expr": "(time() - data_eyes_collection_last_success_timestamp_seconds{environment=~\"${environment:regex}\",sql_instance=~\"${instance:regex}\"}) and on() (max(up{job=\"data-eyes\"}) == 1)",
+              "legendFormat": "{{sql_instance}} / {{environment}}",
+              "instant": true,
+              "range": false,
+              "format": "table"
+            }
+          ],
+          "options": {
+            "showHeader": true,
+            "cellHeight": "sm",
+            "footer": {
+              "show": false
+            }
+          },
+          "transformations": [
+            {
+              "id": "organize",
+              "options": {
+                "excludeByName": {
+                  "Time": true,
+                  "__name__": true,
+                  "job": true,
+                  "instance": true
+                },
+                "renameByName": {
+                  "Value": "Value"
+                }
+              }
+            }
+          ]
+        }
+      ],
+      "gridPos": {
+        "x": 0,
+        "y": 30,
+        "w": 24,
+        "h": 1
+      }
+    }
+  ],
+  "links": [
+    {
+      "title": "Fleet Overview",
+      "type": "link",
+      "url": "/d/fleet-overview",
+      "keepTime": true
+    },
+    {
+      "title": "Ask the fleet",
+      "type": "link",
+      "url": "/d/ask-the-fleet/ask-the-fleet"
+    }
+  ],
+  "description": "One server at a time. Database/drive filters apply to labeled database and I/O panels; health and server totals remain server-wide. Missing values are unavailable, never healthy."
+}
