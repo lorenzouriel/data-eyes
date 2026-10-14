@@ -204,8 +204,33 @@ concurrency lanes; checks hitting limits back off up to an hour. Sessions identi
 as `Data Eyes Collector` unless the connection string overrides the application name.
 
 Prometheus recording rules derive batch request rate, I/O throughput, and latency.
-Grafana's Fleet Overview presents fleet status, resources, instance details, alerts,
-and collector health. Grafana evaluates six alert rules every minute for exporter
+Grafana provides two monitoring views, both refreshing every 30 seconds with a
+default six-hour range:
+
+- **Fleet Overview** is the home dashboard: status cards and horizontal bar graphs
+  compare every server configured in `instances.yaml`, across all environments by
+  default. Click a server bar to open its Deep Dive with the same time range.
+- **Server Deep Dive** uses a single server selector, with collapsible sections for
+  CPU, memory, workers, databases, storage, I/O, waits, activity, all seven health-check
+  groups, and collection diagnostics. Database, drive, and check selectors narrow
+  the relevant panels; server-wide totals and health summaries remain server-wide.
+
+Unreachable SQL servers stay in the configured inventory. Missing measurements
+display as unavailable; a collector outage explicitly marks fleet visibility as
+incomplete. Check colors use collector severities, including configured threshold
+overrides. I/O latency is weighted by operations, and event counts cover the selected
+time range. Checks with no current result appear as **Not collected / disabled**;
+some checks publish only severity or events, rather than a numeric measurement.
+The **Ask the fleet** dashboard remains available from both views.
+
+Dashboard JSON is provisioned from `monitor/grafana/dashboards/`. A running Grafana
+reloads these files automatically (normally within 10 seconds); after starting Docker
+Desktop, use `docker compose up -d` if the stack is stopped. Regenerate the monitoring
+dashboards with `python scripts/build_dashboards.py` (Python 3.10+) and validate their
+PromQL and exporter coverage with
+`uv run --no-project --with promql-parser python scripts/validate_dashboards.py`.
+
+Grafana evaluates six alert rules every minute for exporter
 availability, SQL availability, diagnostic failures, warnings, critical checks, and
 events. Notifications group by rule and instance and repeat every four hours.
 See [alert rules](monitor/grafana/provisioning/alerting/data-eyes-alerts.yml) and
